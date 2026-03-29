@@ -1,0 +1,160 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.env
+.pub-cache/
+.pub/
+/build/
+/build [0-9]*/
+/ios/build/
+/coverage/
+
+# Duplicate generated artifacts created by desktop sync/copy conflicts
+/ios/Pods [0-9]*/
+/ios/Podfile.lock [0-9]*
+/ios/.symlinks/plugins [0-9]*/
+/ios/Pods/**/* [0-9]*
+/ios/.symlinks/plugins/**/* [0-9]*
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# iOS/macOS specifics
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/ServiceDefinitions.json
+**/macos/Flutter/ephemeral
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Pods/
+
+# Xcode user settings - prevents conflicts in team collaboration
+**/ios/**/*.xcuserdatad/
+**/macos/**/*.xcuserdatad/
+**/ios/**/*.xcuserstate
+**/macos/**/*.xcuserstate
+**/ios/.DS_Store
+**/macos/.DS_Store
+
+# Android - Gradle & Build files
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/key.properties
+*.jks
+*.keystore
+
+# Linux & Windows Flutter
+**/linux/flutter/ephemeral
+**/windows/flutter/ephemeral
+
+# Firebase & API Security - CRITICAL: Never commit these files
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase_app_id_file.json
+**/firebase_options.dart
+.firebase/
+**/*api_key*.json
+**/*credentials*.json
+**/*secret*.json
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Flutter plugins
+.flutter-plugins
+
+# Package and dependency files
+pubspec.lock
+.packages
+.pub/
+
+# Node modules (if used)
+node_modules/
+
+# IDE specific
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Test and coverage
+test-results/
+test-reports/
+coverage/
+
+# Backup and temp files
+*.bak
+*.backup
+*~
+*.tmp
+*.temp
+
+# Log files
+*.log
+flutter_*.log
+
+# Environment variables - SECURITY CRITICAL
+.env*
+!.env.example
+*.env
+secrets/
+credentials/
+
+# Generated files that may be rebuilt
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+
+# Build outputs
+*.apk
+*.aab
+*.ipa
+*.dSYM.zip
+*.dSYM/
+*.app
