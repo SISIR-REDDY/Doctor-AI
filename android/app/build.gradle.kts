@@ -21,6 +21,11 @@ val hasValidKeystore = keystorePropertiesFile.exists() &&
     keystoreProperties.getProperty("storeFile").isNotEmpty() &&
     rootProject.file(keystoreProperties.getProperty("storeFile")).exists()
 
+// Detect explicit release builds so we fail fast instead of silently signing with debug.
+val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
+
 android {
     namespace = "com.sisir.docpilot"
     compileSdk = flutter.compileSdkVersion
@@ -56,10 +61,15 @@ android {
 
     buildTypes {
         release {
-            // Use release signing if available, otherwise use debug
             signingConfig = if (hasValidKeystore) {
                 signingConfigs.getByName("release")
             } else {
+                if (isReleaseBuildRequested) {
+                    throw GradleException(
+                        "Release signing is not configured. Set android/key.properties and a valid keystore before building release APK/AAB."
+                    )
+                }
+                // Keep IDE sync/debug scenarios working when release tasks are not requested.
                 signingConfigs.getByName("debug")
             }
             isMinifyEnabled = true

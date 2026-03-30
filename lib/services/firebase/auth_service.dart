@@ -15,10 +15,14 @@ import 'firestore_service.dart';
 class AuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   static Future<void>? _googleSignInInitialization;
+  static const String _androidServerClientId =
+      '424092846196-1noddfgpovnmrhv02ru0t5hb80qcsfi0.apps.googleusercontent.com';
 
   Future<void> _ensureGoogleSignInInitialized() {
     return _googleSignInInitialization ??= () async {
-      await _googleSignIn.initialize();
+      await _googleSignIn.initialize(
+        serverClientId: Platform.isAndroid ? _androidServerClientId : null,
+      );
     }();
   }
 
