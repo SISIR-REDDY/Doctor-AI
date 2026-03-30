@@ -83,6 +83,21 @@ class _SignInScreenState extends State<SignInScreen> {
                       height: 100,
                       width: 100,
                       fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          height: 100,
+                          width: 100,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.local_hospital,
+                            color: AppTheme.primaryColor,
+                            size: 48,
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: AppTheme.lg),
@@ -106,6 +121,13 @@ class _SignInScreenState extends State<SignInScreen> {
                       'assets/images/google_logo.png',
                       height: 24,
                       width: 24,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.g_mobiledata,
+                          size: 24,
+                          color: Colors.black54,
+                        );
+                      },
                     ),
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black87,
