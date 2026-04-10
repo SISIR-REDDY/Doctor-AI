@@ -145,6 +145,9 @@ flutter_*.log
 secrets/
 credentials/
 
+# Personal/private documents
+/Nellore Sisir Reddy.pdf
+
 # Generated files that may be rebuilt
 *.g.dart
 *.freezed.dart
