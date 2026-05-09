@@ -1,0 +1,20 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^flutter --version; flutter devices; gci -Recurse -Filter pubspec\\.yaml \\| Select-Object -First 1 \\| ForEach-Object \\{ \\$_\\.FullName \\}$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd \"c:\\\\Users\\\\suhas\\\\OneDrive\\\\Desktop\\\\docpilot\"; flutter run -d chrome 2>&1 \\| head -100$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git remote set-url origin https://github\\.com/SISIR-REDDY/Doctor-AI; git remote -v$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git add \\.; git status -sb$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
