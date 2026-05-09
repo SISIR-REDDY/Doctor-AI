@@ -2,11 +2,50 @@ name: docpilot
 description: DocPilot - Medical Documentation Assistant
 publish_to: 'none'
 version: 2.1.0+7
+
 environment:
   sdk: ^3.11.0
 
 dependencies:
   flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.9
+  flutter_screenutil: ^5.9.3
+  auto_size_text: ^3.0.0
+  flutter_markdown: ^0.7.7+1
+
+  # Firebase
+  firebase_core: ^4.6.0
+  firebase_auth: ^6.3.0
+  cloud_firestore: ^6.2.0
+  firebase_storage: ^13.2.0
+  firebase_messaging: ^16.1.3
+
+  # Authentication
+  google_sign_in: ^7.2.0
+  sign_in_with_apple: ^7.0.1
+
+  # State Management
+  provider: ^6.1.5+1
+
+  # Network & Storage
+  http: ^1.6.0
+  connectivity_plus: ^7.0.0
+  shared_preferences: ^2.5.5
+  path_provider: ^2.1.5
+  sqflite: ^2.4.2
+  path: ^1.9.1
+
+  # Utilities
+  flutter_dotenv: ^6.0.0
+  intl: ^0.20.2
+  uuid: ^4.5.3
+  crypto: ^3.0.7
+  image_picker: ^1.2.1
+  permission_handler: ^12.0.1
+  share_plus: ^12.0.1
 
   # Audio
   just_audio: ^0.10.5
@@ -25,47 +64,7 @@ flutter_launcher_icons:
   remove_alpha_ios: true
 
 flutter:
-<<<<<<< HEAD
   uses-material-design: true
-
   assets:
     - assets/images/
     - .env
-=======
-
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
-  uses-material-design: true
-
-  # To add assets to your application, add an assets section, like this:
-  assets:
-    - .env
-
-  # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/to/resolution-aware-images
-
-  # For details regarding adding assets from package dependencies, see
-  # https://flutter.dev/to/asset-from-package
-
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
-
->>>>>>> 659c3d7 (feat: harden recording and API config)

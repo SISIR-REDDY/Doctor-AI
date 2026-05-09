@@ -19,6 +19,10 @@
         "/^git add lib/features/transcription/presentation/transcription_screen\\.dart lib/screens/transcription_detail_screen\\.dart flutter_01\\.png flutter_02\\.png; git commit -m \"feat: redesign main screen UI\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^flutter run -d e30dd0a4$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }
