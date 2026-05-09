@@ -86,7 +86,6 @@ class TranscriptionDetailScreen extends StatelessWidget {
       final isPatient = line.startsWith('Patient:');
 
       if (isDoctor || isPatient) {
-        // Styled conversation bubble
         final text = line.substring(line.indexOf(':') + 1).trim();
         widgets.add(
           Container(
@@ -94,13 +93,13 @@ class TranscriptionDetailScreen extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: isDoctor
-                  ? Colors.deepPurple.withValues(alpha: 0.1)
-                  : Colors.teal.withValues(alpha: 0.1),
+                  ? Colors.deepPurple.withAlpha(26)
+                  : Colors.teal.withAlpha(26),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isDoctor
-                    ? Colors.deepPurple.withValues(alpha: 0.3)
-                    : Colors.teal.withValues(alpha: 0.3),
+                    ? Colors.deepPurple.withAlpha(77)
+                    : Colors.teal.withAlpha(77),
                 width: 1,
               ),
             ),
@@ -129,16 +128,15 @@ class TranscriptionDetailScreen extends StatelessWidget {
           ),
         );
       } else {
-        // Fallback for unformatted text (no speaker label)
         widgets.add(
           Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.grey.withValues(alpha: 0.1),
+              color: Colors.grey.withAlpha(26),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Colors.grey.withValues(alpha: 0.3),
+                color: Colors.grey.withAlpha(77),
                 width: 1,
               ),
             ),
@@ -161,7 +159,7 @@ class TranscriptionDetailScreen extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.withValues(alpha: 0.1),
+                color: Colors.grey.withAlpha(26),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
