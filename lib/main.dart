@@ -16,8 +16,8 @@ Future<void> main() async {
 
   try {
     await dotenv.load(fileName: '.env');
-  } catch (_) {
-    // Allow running without .env for local development.
+  } catch (e) {
+    debugPrint('Warning: .env file not found or failed to load: $e');
   }
 
   await FirebaseBootstrapService.initialize();
