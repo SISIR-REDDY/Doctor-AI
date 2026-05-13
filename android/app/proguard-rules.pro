@@ -22,7 +22,7 @@
 -keepnames class com.google.android.gms.auth.** { *; }
 
 # Keep all custom application classes (if using platform channels)
--keep class com.sisir.docpilot.** { *; }
+-keep class com.sisirlabs.clinixai.** { *; }
 
 # Preserve line numbers for crash reporting
 -keepattributes SourceFile,LineNumberTable

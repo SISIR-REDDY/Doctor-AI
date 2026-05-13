@@ -6,8 +6,8 @@
 	<array>
 		<string>be.tramckrijte.workmanagerExample.iOSBackgroundAppRefresh</string>
 		<string>be.tramckrijte.workmanagerExample.iOSBackgroundProcessingTask</string>
-		<string>com.sisir.docpilot.backgroundSync</string>
-		<string>com.sisir.docpilot.periodicSync</string>
+		<string>com.sisirlabs.clinixai.backgroundSync</string>
+		<string>com.sisirlabs.clinixai.periodicSync</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
@@ -36,14 +36,14 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.424092846196-on6s0hhbpbblh2s7st2obkbo2hv6v504</string>
+				<string>com.googleusercontent.apps.873559957687-emljucvb770bsvosgcbq81bajcbmfn7l</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>GIDClientID</key>
-	<string>424092846196-on6s0hhbpbblh2s7st2obkbo2hv6v504.apps.googleusercontent.com</string>
+	<string>873559957687-emljucvb770bsvosgcbq81bajcbmfn7l.apps.googleusercontent.com</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>

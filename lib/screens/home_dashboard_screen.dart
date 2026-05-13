@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../core/errors/app_error_handler.dart';
 import '../core/utils/logout_utils.dart';
 import '../services/firebase/auth_service.dart';
@@ -9,7 +10,8 @@ import 'medication_safety_screen.dart';
 import 'shift_handoff_screen.dart';
 import 'emergency_triage_screen.dart';
 import 'ward_rounds_screen.dart';
-import 'voice_assistant_screen.dart';
+import '../features/transcription/presentation/transcription_controller.dart';
+import '../features/transcription/presentation/transcription_screen.dart';
 import 'doctor_profile_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -248,7 +250,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                           color: Colors.blue,
                           title: 'Consultation AI',
                           description: 'Voice to text with Deepgram and AI summaries',
-                          onTap: () => _navigateTo(InteractiveVoiceAssistantScreen(patientId: 'new')),
+                          onTap: () => _navigateTo(
+                            ChangeNotifierProvider(
+                              create: (_) => TranscriptionController(),
+                              child: const TranscriptionScreen(),
+                            ),
+                          ),
                         ),
                         _WorkflowCard(
                           icon: Icons.local_pharmacy,

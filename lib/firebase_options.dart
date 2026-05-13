@@ -47,33 +47,33 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDvuqZR53caxlhm2rGUj0Z2K6zC_I4tYi8',
-    appId: '1:424092846196:android:47c401e2af11178b7ba921',
-    messagingSenderId: '424092846196',
-    projectId: 'docpilot-b93fb',
-    storageBucket: 'docpilot-b93fb.firebasestorage.app',
+    apiKey: 'AIzaSyDzOZ66ODewx9unRbkOpg3KBrpZZtg533s',
+    appId: '1:873559957687:android:9d8e2aa06628ea98fb2d32',
+    messagingSenderId: '873559957687',
+    projectId: 'clinixai-9bb6d',
+    storageBucket: 'clinixai-9bb6d.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDB_kHP9omacDeb7kXIuZ9OLFxWVtaNZVg',
-    appId: '1:424092846196:ios:16f0b368a68c09237ba921',
-    messagingSenderId: '424092846196',
-    projectId: 'docpilot-b93fb',
-    storageBucket: 'docpilot-b93fb.firebasestorage.app',
-    androidClientId: '424092846196-dv59nv3i5klnh3cqcvgkllatc30afs1k.apps.googleusercontent.com',
-    iosClientId: '424092846196-on6s0hhbpbblh2s7st2obkbo2hv6v504.apps.googleusercontent.com',
-    iosBundleId: 'com.sisir.docpilot',
+    apiKey: 'AIzaSyByXaqGVkXcviXFV9gCgLKJPlyNe571dJk',
+    appId: '1:873559957687:ios:30ad3e4a197c166afb2d32',
+    messagingSenderId: '873559957687',
+    projectId: 'clinixai-9bb6d',
+    storageBucket: 'clinixai-9bb6d.firebasestorage.app',
+    androidClientId: '873559957687-2lv7iopp6n2ll5alkmfo7qvrtr3ih62v.apps.googleusercontent.com',
+    iosClientId: '873559957687-emljucvb770bsvosgcbq81bajcbmfn7l.apps.googleusercontent.com',
+    iosBundleId: 'com.sisirlabs.clinixai',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDB_kHP9omacDeb7kXIuZ9OLFxWVtaNZVg',
-    appId: '1:424092846196:ios:16f0b368a68c09237ba921',
-    messagingSenderId: '424092846196',
-    projectId: 'docpilot-b93fb',
-    storageBucket: 'docpilot-b93fb.firebasestorage.app',
-    androidClientId: '424092846196-dv59nv3i5klnh3cqcvgkllatc30afs1k.apps.googleusercontent.com',
-    iosClientId: '424092846196-on6s0hhbpbblh2s7st2obkbo2hv6v504.apps.googleusercontent.com',
-    iosBundleId: 'com.sisir.docpilot',
+    apiKey: 'AIzaSyByXaqGVkXcviXFV9gCgLKJPlyNe571dJk',
+    appId: '1:873559957687:ios:30ad3e4a197c166afb2d32',
+    messagingSenderId: '873559957687',
+    projectId: 'clinixai-9bb6d',
+    storageBucket: 'clinixai-9bb6d.firebasestorage.app',
+    androidClientId: '873559957687-2lv7iopp6n2ll5alkmfo7qvrtr3ih62v.apps.googleusercontent.com',
+    iosClientId: '873559957687-emljucvb770bsvosgcbq81bajcbmfn7l.apps.googleusercontent.com',
+    iosBundleId: 'com.sisirlabs.clinixai',
   );
 
 }

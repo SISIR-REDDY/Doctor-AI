@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase/api_credentials_service.dart';
 
 class ChatbotService {
@@ -14,7 +13,7 @@ class ChatbotService {
   // Keep API-version fallback for compatibility, but keep a single model ID.
   static const List<String> _apiVersions = ['v1', 'v1beta'];
 
-  /// Get API key from Firebase or fallback to .env
+  /// Get API key from Firebase
   Future<String> _getGeminiApiKey() async {
     try {
       // Try Firebase first
@@ -27,14 +26,7 @@ class ChatbotService {
       debugPrint('[ChatbotService] ⚠️ Firebase API key failed: $e');
     }
 
-    // Fallback to .env file
-    final envKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-    if (envKey.isNotEmpty && !envKey.contains('your_')) {
-      debugPrint('[ChatbotService] ✅ Using Gemini API key from .env');
-      return envKey;
-    }
-
-    debugPrint('[ChatbotService] ❌ No valid Gemini API key found');
+    debugPrint('[ChatbotService] ❌ No valid Gemini API key found in Firebase');
     return '';
   }
 
@@ -147,7 +139,7 @@ class ChatbotService {
       final apiKey = await _getGeminiApiKey();
 
       if (apiKey.isEmpty) {
-        return "Error: Gemini API key not configured. Please add it to Firebase (app_runtime/api_keys) or update .env file.";
+        return "Error: Gemini API key not configured. Please add it to Firebase (app_runtime/api_keys).";
       }
 
       debugPrint('[ChatbotService] Calling Gemini API ($_modelId)...');
@@ -187,7 +179,7 @@ class ChatbotService {
       final apiKey = await _getGeminiApiKey();
 
       if (apiKey.isEmpty) {
-        return "Error: Gemini API key not configured. Please add it to Firebase (app_runtime/api_keys) or update .env file.";
+        return "Error: Gemini API key not configured. Please add it to Firebase (app_runtime/api_keys).";
       }
 
       final List<Map<String, dynamic>> parts = [

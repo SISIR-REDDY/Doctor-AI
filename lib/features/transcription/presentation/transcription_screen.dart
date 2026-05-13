@@ -1,6 +1,6 @@
-import 'package:doc_pilot_new_app_gradel_fix/screens/prescription_screen.dart';
-import 'package:doc_pilot_new_app_gradel_fix/screens/summary_screen.dart';
-import 'package:doc_pilot_new_app_gradel_fix/screens/transcription_detail_screen.dart';
+import 'package:docpilot/screens/prescription_screen.dart';
+import 'package:docpilot/screens/summary_screen.dart';
+import 'package:docpilot/screens/transcription_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'transcription_controller.dart';
@@ -289,6 +289,7 @@ class TranscriptionScreen extends StatelessWidget {
 
   Widget _buildWaveformCard(TranscriptionController controller) {
     const barCount = 24;
+    final isLive = controller.isRecording;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -309,37 +310,50 @@ class TranscriptionScreen extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                controller.isRecording ? 'Live' : 'Idle',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: controller.isRecording ? _mint : _muted),
+                isLive ? 'Live' : 'Idle',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isLive ? _mint : _muted),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 64,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(barCount, (index) {
-                final value = controller.waveformValues[index % controller.waveformValues.length];
-                final height = 12 + value * 52;
-                final color = controller.isRecording ? _mint : _ink.withAlpha(60);
-                return Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 120),
-                      height: height,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+          if (isLive)
+            SizedBox(
+              height: 64,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(barCount, (index) {
+                  final value = controller.waveformValues[index % controller.waveformValues.length];
+                  final height = 10 + value * 46;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    width: 3,
+                    height: height,
+                    decoration: BoxDecoration(
+                      color: _mint,
+                      borderRadius: BorderRadius.circular(999),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
+            )
+          else
+            SizedBox(
+              height: 20,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(barCount, (index) {
+                  return Container(
+                    width: 3,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _ink.withAlpha(40),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  );
+                }),
+              ),
             ),
-          ),
         ],
       ),
     );

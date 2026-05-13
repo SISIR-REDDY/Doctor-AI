@@ -27,7 +27,7 @@ val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
 }
 
 android {
-    namespace = "com.sisir.docpilot"
+    namespace = "com.sisirlabs.clinixai"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -52,7 +52,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.sisir.docpilot"
+        applicationId = "com.sisirlabs.clinixai"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

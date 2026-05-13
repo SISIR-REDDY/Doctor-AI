@@ -1,31 +1,32 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import '../../../core/errors/app_exception.dart';
+import '../../../services/firebase/api_credentials_service.dart';
 
 class DeepgramService {
   final String? _apiKey;
 
   DeepgramService({String? apiKey}) : _apiKey = apiKey?.trim();
 
-  String _resolveApiKey() {
+  Future<String> _resolveApiKey() async {
     final configuredKey = _apiKey;
     if (configuredKey != null && configuredKey.isNotEmpty) {
       return configuredKey;
     }
 
-    try {
-      return (dotenv.env['DEEPGRAM_API_KEY'] ?? '').trim();
-    } catch (_) {
-      return '';
-    }
+    return ApiCredentialsService.instance.getDeepgramApiKey();
   }
 
   Future<String> transcribe(String recordingPath) async {
-    final apiKey = _resolveApiKey();
+    final apiKey = await _resolveApiKey();
     if (apiKey.isEmpty) {
-      throw Exception('Missing DEEPGRAM_API_KEY in environment');
+      throw AppException(
+        code: 'missing-deepgram-api-key',
+        message:
+            'Deepgram API key not configured. Please add deepgramApiKey to Firebase collection: app_runtime/api_keys.',
+      );
     }
 
     final uri = Uri.parse('https://api.deepgram.com/v1/listen?model=nova-2');
