@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:docpilot/screens/prescription_screen.dart';
 import 'package:docpilot/screens/summary_screen.dart';
 import 'package:docpilot/screens/transcription_detail_screen.dart';
@@ -288,8 +291,21 @@ class TranscriptionScreen extends StatelessWidget {
   }
 
   Widget _buildWaveformCard(TranscriptionController controller) {
-    const barCount = 24;
     final isLive = controller.isRecording;
+    final isProcessing = controller.isProcessing;
+    final isActive = isLive || isProcessing;
+    final waveValues = controller.waveformValues;
+    final avg = waveValues.isEmpty
+      ? 0.0
+      : waveValues.reduce((a, b) => a + b) / waveValues.length;
+    final peak = waveValues.isEmpty ? 0.0 : waveValues.reduce(max);
+    final voiceLevel = max(controller.audioLevel, (avg * 0.5 + peak * 0.5)).clamp(0.0, 1.0);
+    final energy = pow(voiceLevel, 0.6).toDouble();
+    final amplitude = isLive
+        ? (0.22 + energy * 1.05)
+        : (isProcessing ? 0.46 : 0.16);
+
+    final dockStateText = isLive ? 'Live' : (isProcessing ? 'Processing' : 'Idle');
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -310,50 +326,27 @@ class TranscriptionScreen extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                isLive ? 'Live' : 'Idle',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isLive ? _mint : _muted),
+                dockStateText,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isActive ? _mint : _muted,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          if (isLive)
-            SizedBox(
-              height: 64,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(barCount, (index) {
-                  final value = controller.waveformValues[index % controller.waveformValues.length];
-                  final height = 10 + value * 46;
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    width: 3,
-                    height: height,
-                    decoration: BoxDecoration(
-                      color: _mint,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  );
-                }),
-              ),
-            )
-          else
-            SizedBox(
-              height: 20,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(barCount, (index) {
-                  return Container(
-                    width: 3,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _ink.withAlpha(40),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  );
-                }),
-              ),
+          SizedBox(
+            height: 72,
+            width: double.infinity,
+            child: _SignalDockWave(
+              amplitude: amplitude,
+              voiceLevel: voiceLevel,
+              isLive: isActive,
+              waveColor: isActive ? _mint : _ink.withAlpha(60),
+              guideColor: _ink.withAlpha(30),
             ),
+          ),
         ],
       ),
     );
@@ -642,5 +635,224 @@ class TranscriptionScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _SignalDockWave extends StatefulWidget {
+  final double amplitude;
+  final double voiceLevel;
+  final bool isLive;
+  final Color waveColor;
+  final Color guideColor;
+
+  const _SignalDockWave({
+    required this.amplitude,
+    required this.voiceLevel,
+    required this.isLive,
+    required this.waveColor,
+    required this.guideColor,
+  });
+
+  @override
+  State<_SignalDockWave> createState() => _SignalDockWaveState();
+}
+
+class _SignalDockWaveState extends State<_SignalDockWave> {
+  static const int _sampleCount = 120;
+  static const Duration _frameStep = Duration(milliseconds: 24);
+
+  late final List<double> _samples;
+  Timer? _timer;
+  double _smoothedAmplitude = 0.0;
+  double _smoothedVoice = 0.0;
+  double _beatPhase = 0.0;
+  double _t = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _samples = List<double>.filled(_sampleCount, 0.0, growable: true);
+    _startTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SignalDockWave oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isLive && !widget.isLive) {
+      _smoothedAmplitude *= 0.6;
+      _smoothedVoice *= 0.4;
+    }
+  }
+
+  void _startTicker() {
+    _timer?.cancel();
+    _timer = Timer.periodic(_frameStep, (_) {
+      if (!mounted) {
+        return;
+      }
+
+      _t += _frameStep.inMilliseconds / 1000.0;
+      final inputAmp = widget.amplitude.clamp(0.0, 1.0);
+      _smoothedAmplitude = _smoothedAmplitude * 0.82 + inputAmp * 0.18;
+      final inputVoice = widget.voiceLevel.clamp(0.0, 1.0);
+      _smoothedVoice = _smoothedVoice * 0.7 + inputVoice * 0.3;
+      final voiceGate = ((_smoothedVoice - 0.06) / 0.94).clamp(0.0, 1.0);
+
+      final bpm = widget.isLive
+          ? (60.0 + voiceGate * 130.0)
+          : 44.0;
+      _beatPhase = (_beatPhase + (bpm / 60.0) * (_frameStep.inMilliseconds / 1000.0)) % 1.0;
+
+      final beat = _ecgShape(_beatPhase);
+      final beatStrength = (0.18 + _smoothedAmplitude * 0.95) * (0.15 + voiceGate * 0.85);
+      final voicePulse = sin(_t * (4.0 + voiceGate * 10.0)) * (0.02 + voiceGate * 0.22);
+      final drift = sin(_t * 2.4) * (0.018 * voiceGate);
+      final micro = sin(_t * 17.0) * (0.008 * voiceGate);
+      final rawValue = (beat * beatStrength + voicePulse + drift + micro).clamp(-1.0, 1.0);
+      final value = voiceGate <= 0.02 ? 0.0 : rawValue;
+
+      _samples.removeAt(0);
+      _samples.add(value);
+
+      setState(() {});
+    });
+  }
+
+  double _ecgShape(double phase) {
+    if (phase < 0.08) {
+      final p = phase / 0.08;
+      return 0.14 * sin(pi * p);
+    }
+    if (phase < 0.12) {
+      return -0.16 * ((phase - 0.08) / 0.04);
+    }
+    if (phase < 0.15) {
+      return -0.16 + 1.28 * ((phase - 0.12) / 0.03);
+    }
+    if (phase < 0.18) {
+      return 1.12 - 1.44 * ((phase - 0.15) / 0.03);
+    }
+    if (phase < 0.26) {
+      return -0.32 * (1 - ((phase - 0.18) / 0.08));
+    }
+    if (phase < 0.46) {
+      final t = (phase - 0.26) / 0.20;
+      return 0.26 * sin(pi * t);
+    }
+    return 0.0;
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final renderedSamples = List<double>.unmodifiable(_samples);
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _SignalWavePainter(
+          samples: renderedSamples,
+          amplitude: _smoothedAmplitude,
+          isLive: widget.isLive,
+          waveColor: widget.waveColor,
+          guideColor: widget.guideColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _SignalWavePainter extends CustomPainter {
+  final List<double> samples;
+  final double amplitude;
+  final bool isLive;
+  final Color waveColor;
+  final Color guideColor;
+
+  _SignalWavePainter({
+    required this.samples,
+    required this.amplitude,
+    required this.isLive,
+    required this.waveColor,
+    required this.guideColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final waveRect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final waveGradient = LinearGradient(
+      colors: [waveColor.withAlpha(120), waveColor.withAlpha(230)],
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+    );
+    final paint = Paint()
+      ..shader = waveGradient.createShader(waveRect)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = isLive ? 2.5 : 2.1
+      ..strokeCap = StrokeCap.round;
+
+    final guidePaint = Paint()
+      ..color = guideColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    final centerY = size.height / 2;
+    final liveScale = isLive ? (0.30 + amplitude * 0.50) : (0.16 + amplitude * 0.12);
+    final maxAmplitude = size.height * liveScale;
+
+    for (double x = 0; x < size.width; x += 10) {
+      canvas.drawLine(Offset(x, centerY), Offset((x + 5).clamp(0.0, size.width), centerY), guidePaint);
+    }
+
+    if (samples.length < 2) {
+      return;
+    }
+
+    final points = <Offset>[];
+    for (int i = 0; i < samples.length; i++) {
+      final x = (i / (samples.length - 1)) * size.width;
+      final y = centerY - samples[i] * maxAmplitude;
+      points.add(Offset(x, y));
+    }
+
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (int i = 1; i < points.length; i++) {
+      final prev = points[i - 1];
+      final curr = points[i];
+      final xc = (prev.dx + curr.dx) / 2;
+      final yc = (prev.dy + curr.dy) / 2;
+      path.quadraticBezierTo(prev.dx, prev.dy, xc, yc);
+    }
+    path.lineTo(points.last.dx, points.last.dy);
+
+    if (isLive) {
+      final glowPaint = Paint()
+        ..color = waveColor.withAlpha((110 + amplitude * 90).clamp(110, 200).toInt())
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5.0
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+      canvas.drawPath(path, glowPaint);
+    }
+
+    canvas.drawPath(path, paint);
+
+    final pulsePaint = Paint()
+      ..color = waveColor.withAlpha((120 + amplitude * 90).clamp(120, 210).toInt())
+      ..style = PaintingStyle.fill;
+    final pulseRadius = isLive ? 2.2 + amplitude * 2.8 : 1.6 + amplitude * 1.2;
+    canvas.drawCircle(points.last, pulseRadius, pulsePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SignalWavePainter oldDelegate) {
+    return oldDelegate.amplitude != amplitude ||
+        oldDelegate.isLive != isLive ||
+        oldDelegate.samples != samples ||
+        oldDelegate.waveColor != waveColor ||
+        oldDelegate.guideColor != guideColor;
   }
 }

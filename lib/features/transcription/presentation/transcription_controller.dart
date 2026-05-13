@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math';
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -23,12 +23,18 @@ class TranscriptionController extends ChangeNotifier {
 
   // Waveform — kept here since it's driven by recording state
   final List<double> waveformValues = List.filled(40, 0.0);
+  final Random _waveformRandom = Random();
   Timer? _waveformTimer;
+  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  double _currentAudioLevel = 0.0;
+  double _noiseFloorDb = -60.0;
 
   bool get isRecording => state == TranscriptionState.recording;
   bool get isProcessing =>
       state == TranscriptionState.transcribing ||
       state == TranscriptionState.processing;
+
+  double get audioLevel => _currentAudioLevel;
 
   String get transcription => data.rawTranscript;
   String get summary => data.summary;
@@ -90,6 +96,8 @@ class TranscriptionController extends ChangeNotifier {
       _startWaveformAnimation();
       notifyListeners();
 
+      await _startAmplitudeMonitoring();
+
       developer.log('Started recording to: $_recordingPath');
     } catch (e) {
       _setError('Error starting recording: $e');
@@ -100,7 +108,8 @@ class TranscriptionController extends ChangeNotifier {
     final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     if (isAndroid) {
       return const RecordConfig(
-        encoder: AudioEncoder.wav,
+        encoder: AudioEncoder.aacLc,
+        bitRate: 64000,
         sampleRate: 16000,
         numChannels: 1,
       );
@@ -121,8 +130,7 @@ class TranscriptionController extends ChangeNotifier {
     }
 
     return const RecordConfig(
-      encoder: AudioEncoder.aacLc,
-      bitRate: 64000,
+      encoder: AudioEncoder.wav,
       sampleRate: 16000,
       numChannels: 1,
     );
@@ -147,6 +155,7 @@ class TranscriptionController extends ChangeNotifier {
     try {
       _waveformTimer?.cancel();
       _resetWaveform();
+      await _stopAmplitudeMonitoring();
 
       await _audioRecorder.stop();
       state = TranscriptionState.transcribing;
@@ -195,8 +204,12 @@ class TranscriptionController extends ChangeNotifier {
 
   void _startWaveformAnimation() {
     _waveformTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      final base = _currentAudioLevel.clamp(0.0, 1.0);
+      final energy = pow(base, 0.65).toDouble();
+      final spread = 0.08 + energy * 0.45;
       for (int i = 0; i < waveformValues.length; i++) {
-        waveformValues[i] = Random().nextDouble();
+        final jitter = (_waveformRandom.nextDouble() - 0.5) * spread;
+        waveformValues[i] = (energy + jitter).clamp(0.0, 1.0);
       }
       notifyListeners();
     });
@@ -206,6 +219,36 @@ class TranscriptionController extends ChangeNotifier {
     for (int i = 0; i < waveformValues.length; i++) {
       waveformValues[i] = 0.0;
     }
+    _currentAudioLevel = 0.0;
+    _noiseFloorDb = -60.0;
+  }
+
+  Future<void> _startAmplitudeMonitoring() async {
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
+
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    _amplitudeSubscription = _audioRecorder
+        .onAmplitudeChanged(const Duration(milliseconds: 60))
+        .listen(
+      (amplitude) {
+        final db = max(amplitude.current, amplitude.max);
+        if (db < _noiseFloorDb + 6) {
+          _noiseFloorDb = (_noiseFloorDb * 0.95 + db * 0.05).clamp(-90.0, -30.0);
+        }
+
+        final effectiveDb = db - (_noiseFloorDb + 6.0);
+        final normalized = (effectiveDb / 40.0).clamp(0.0, 1.0);
+        _currentAudioLevel = normalized <= 0.02 ? 0.0 : normalized;
+      },
+      onError: (_) {},
+      cancelOnError: false,
+    );
+  }
+
+  Future<void> _stopAmplitudeMonitoring() async {
+    await _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
   }
 
   void _setError(String message) {
@@ -218,6 +261,7 @@ class TranscriptionController extends ChangeNotifier {
   @override
   void dispose() {
     _waveformTimer?.cancel();
+    _amplitudeSubscription?.cancel();
     _audioRecorder.dispose();
     super.dispose();
   }
