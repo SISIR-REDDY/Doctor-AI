@@ -8,7 +8,7 @@ import 'firebase/api_credentials_service.dart';
 
 class DeepgramService {
   Future<String> transcribeAudioFile(String audioFilePath) async {
-    final apiKey = await ApiCredentialsService.instance.getDeepgramApiKey();
+    final apiKey = await ApiCredentialsService.instance.getDeepgramApiKey(forceRefresh: true);
 
     if (apiKey.isEmpty) {
       throw AppException(

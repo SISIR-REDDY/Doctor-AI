@@ -26,23 +26,6 @@ class ApiCredentialsService {
   ApiCredentials? _cached;
   String? _cachedUserId;
 
-  // All possible locations where API keys might be stored in Firestore
-  static const List<Map<String, String>> _possibleKeyLocations = [
-    {'collection': 'app_runtime', 'document': 'api_keys'},
-    {'collection': 'app_runtime', 'document': 'config'},
-    {'collection': 'api_keys', 'document': 'config'},
-    {'collection': 'api_keys', 'document': 'keys'},
-    {'collection': 'apiKeys', 'document': 'config'},
-    {'collection': 'apiKeys', 'document': 'keys'},
-    {'collection': 'config', 'document': 'api_keys'},
-    {'collection': 'config', 'document': 'apiKeys'},
-    {'collection': 'config', 'document': 'keys'},
-    {'collection': 'runtime', 'document': 'api_keys'},
-    {'collection': 'runtime', 'document': 'config'},
-    {'collection': 'settings', 'document': 'api_keys'},
-    {'collection': 'settings', 'document': 'apiKeys'},
-  ];
-
   // All possible field names for Gemini API key
   static const List<String> _geminiKeyFields = [
     'geminiApiKey',
@@ -72,30 +55,30 @@ class ApiCredentialsService {
 
   Future<void> preload() async {
     try {
-      await _load();
+      await _load(forceRefresh: true);
     } catch (_) {}
   }
 
-  Future<String> getGeminiApiKey() async {
-    final creds = await _load();
+  Future<String> getGeminiApiKey({bool forceRefresh = true}) async {
+    final creds = await _load(forceRefresh: forceRefresh);
     return creds.geminiApiKey;
   }
 
-  Future<String> getDeepgramApiKey() async {
-    final creds = await _load();
+  Future<String> getDeepgramApiKey({bool forceRefresh = true}) async {
+    final creds = await _load(forceRefresh: forceRefresh);
     return creds.deepgramApiKey;
   }
 
-  Future<bool> hasKeys() async {
+  Future<bool> hasKeys({bool forceRefresh = true}) async {
     try {
-      final creds = await _load();
+      final creds = await _load(forceRefresh: forceRefresh);
       return creds.geminiApiKey.isNotEmpty && creds.deepgramApiKey.isNotEmpty;
     } catch (_) {
       return false;
     }
   }
 
-  Future<ApiCredentials> _load() async {
+  Future<ApiCredentials> _load({bool forceRefresh = false}) async {
     final userId = AuthService().currentUser?.uid;
     if (userId == null || userId.isEmpty) {
       clearCache();
@@ -105,15 +88,17 @@ class ApiCredentialsService {
       );
     }
 
-    if (_cached != null && _cachedUserId == userId) {
-      return _cached!;  // Force unwrap - we just checked it's not null
+    if (!forceRefresh) {
+      if (_cached != null && _cachedUserId == userId) {
+        return _cached!; // Still allow explicit cache use when requested.
+      }
+
+      if (_cachedUserId != null && _cachedUserId != userId) {
+        clearCache();
+      }
     }
 
-    if (_cachedUserId != null && _cachedUserId != userId) {
-      clearCache();
-    }
-
-    // Try to load from all possible Firestore locations
+    // Always load from Firestore (no local key sources).
     final primaryCreds = await _loadFromAllPossibleLocations();
     if (primaryCreds != null) {
       _cached = primaryCreds;
@@ -139,26 +124,13 @@ class ApiCredentialsService {
     final firestore = _primaryFirestore;
     if (firestore == null) return null;
 
-    // First try the configured location from env
+    // Only use the configured Firestore location.
     final envCreds = await _tryLoadFromPath(
       firestore,
       FirebaseConfig.apiKeysCollection,
       FirebaseConfig.apiKeysDocument,
     );
     if (envCreds != null) return envCreds;
-
-    // Then try all other possible locations
-    for (final location in _possibleKeyLocations) {
-      final collection = location['collection'];
-      final document = location['document'];
-
-      if (collection == null || document == null) {
-        continue;
-      }
-
-      final creds = await _tryLoadFromPath(firestore, collection, document);
-      if (creds != null) return creds;
-    }
 
     return null;
   }
@@ -169,10 +141,10 @@ class ApiCredentialsService {
     String document,
   ) async {
     try {
-      final snapshot = await firestore
+        final snapshot = await firestore
           .collection(collection)
           .doc(document)
-          .get();
+          .get(const GetOptions(source: Source.server));
 
       final data = snapshot.data();
       if (data == null) return null;

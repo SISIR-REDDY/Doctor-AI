@@ -13,11 +13,10 @@ class ChatbotService {
   // Keep API-version fallback for compatibility, but keep a single model ID.
   static const List<String> _apiVersions = ['v1', 'v1beta'];
 
-  /// Get API key from Firebase
+  /// Get API key from Firebase only (no local fallback)
   Future<String> _getGeminiApiKey() async {
     try {
-      // Try Firebase first
-      final firebaseKey = await _credentialsService.getGeminiApiKey();
+      final firebaseKey = await _credentialsService.getGeminiApiKey(forceRefresh: true);
       if (firebaseKey.isNotEmpty) {
         debugPrint('[ChatbotService] ✅ Using Gemini API key from Firebase');
         return firebaseKey;
