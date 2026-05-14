@@ -517,7 +517,10 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       children: [
         _buildActionTile(
           title: 'Transcription',
-          subtitle: 'Raw conversation',
+          subtitle: _previewLine(
+            controller.transcription,
+            fallback: 'Record a session first',
+          ),
           icon: Icons.record_voice_over,
           color: _mint,
           isEnabled: controller.transcription.isNotEmpty,
@@ -528,7 +531,10 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
         const SizedBox(height: 12),
         _buildActionTile(
           title: 'Summary',
-          subtitle: 'Key takeaways',
+          subtitle: _previewLine(
+            controller.summary,
+            fallback: 'Record a session first',
+          ),
           icon: Icons.summarize,
           color: _sky,
           isEnabled: controller.summary.isNotEmpty,
@@ -539,7 +545,10 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
         const SizedBox(height: 12),
         _buildActionTile(
           title: 'Prescription',
-          subtitle: 'Medication & notes',
+          subtitle: _previewLine(
+            controller.prescription,
+            fallback: 'Record a session first',
+          ),
           icon: Icons.medication,
           color: _sun,
           isEnabled: controller.prescription.isNotEmpty,
@@ -559,117 +568,74 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
     required bool isEnabled,
     required VoidCallback onPressed,
   }) {
-    final badgeText = isEnabled ? 'Open' : 'Locked';
-    final badgeIcon = isEnabled ? Icons.arrow_forward : Icons.lock_outline;
-    final badgeColor = isEnabled ? color : _muted;
-    final actionHint = isEnabled ? 'Tap to review' : 'Record a session first';
+    final borderColor = isEnabled ? color : _muted.withAlpha(90);
+    final fillColor = isEnabled ? Colors.white : const Color(0xFFF2F3F5);
+    final iconColor = isEnabled ? color : _muted;
+    final titleColor = isEnabled ? _ink : _muted;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: isEnabled ? onPressed : null,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 120,
+          height: 84,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [color.withAlpha(45), _card],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: color.withAlpha(70)),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withAlpha(14), blurRadius: 16, offset: const Offset(0, 8)),
-            ],
+            color: fillColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: 1),
           ),
-          child: Stack(
-            children: [
-              Positioned(
-                top: -24,
-                right: -10,
-                child: Container(
-                  width: 90,
-                  height: 90,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color.withAlpha(28),
+                    color: iconColor.withAlpha(18),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: titleColor),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, color: _muted),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              Positioned(
-                left: 0,
-                top: 18,
-                bottom: 18,
-                child: Container(
-                  width: 6,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(12)),
-                  ),
+                Icon(
+                  isEnabled ? Icons.chevron_right : Icons.lock_outline,
+                  color: isEnabled ? _ink : _muted,
+                  size: 18,
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: color.withAlpha(60),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Icon(icon, color: color, size: 26),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            title,
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: isEnabled ? _ink : _muted),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            subtitle,
-                            style: const TextStyle(fontSize: 12, color: _muted),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            actionHint,
-                            style: const TextStyle(fontSize: 11, color: _muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withAlpha(40),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            badgeText,
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: badgeColor),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(badgeIcon, size: 12, color: badgeColor),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  String _previewLine(String text, {required String fallback}) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return fallback;
+    final singleLine = trimmed.replaceAll(RegExp(r'\s+'), ' ');
+    return singleLine.length > 90 ? '${singleLine.substring(0, 90)}...' : singleLine;
   }
 
   Widget _buildRecentCard(BuildContext context, TranscriptionController controller) {
