@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/errors/app_error_handler.dart';
+import '../core/healthcare/healthcare_services_manager.dart';
 import '../models/health_models.dart';
 import '../services/firebase/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
@@ -20,6 +21,8 @@ class DoctorPatientsScreen extends StatefulWidget {
 class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
+  final HealthcareServicesManager _services = HealthcareServicesManager();
+  String? _deletingPatientId;
 
   String? get _doctorId => _authService.currentUser?.uid;
 
@@ -54,6 +57,53 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
     } catch (error) {
       if (!mounted) return;
       AppErrorHandler.showSnackBar(context, error);
+    }
+  }
+
+  Future<void> _confirmDeletePatient(ProviderPatientRecord patient) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Patient'),
+        content: Text(
+          'Delete ${patient.fullName} and all related records? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.dangerColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingPatientId = patient.id);
+    try {
+      await _services.deletePatientAndRecords(patient);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Patient deleted successfully'),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      AppErrorHandler.showSnackBar(context, error);
+    } finally {
+      if (mounted) {
+        setState(() => _deletingPatientId = null);
+      }
     }
   }
 
@@ -203,7 +253,25 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                           ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Delete Patient',
+                            icon: _deletingPatientId == patient.id
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.delete_outline, color: AppTheme.dangerColor),
+                            onPressed: _deletingPatientId == patient.id
+                                ? null
+                                : () => _confirmDeletePatient(patient),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
                     ],
                   ),
                 ),

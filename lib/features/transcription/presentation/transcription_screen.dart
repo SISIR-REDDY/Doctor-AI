@@ -1,29 +1,41 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:docpilot/core/healthcare/healthcare_services_manager.dart';
 import 'package:docpilot/screens/prescription_screen.dart';
 import 'package:docpilot/screens/summary_screen.dart';
 import 'package:docpilot/screens/transcription_detail_screen.dart';
+import 'package:docpilot/widgets/audio_visualizer.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'transcription_controller.dart';
 
-class TranscriptionScreen extends StatelessWidget {
+const Color _bg = Color(0xFFF2F4F7);
+const Color _card = Colors.white;
+const Color _ink = Color(0xFF1E2733);
+const Color _muted = Color(0xFF8B95A5);
+const Color _sky = Color(0xFF6EA8FF);
+const Color _mint = Color(0xFF58D6C7);
+const Color _sun = Color(0xFFFFC857);
+const Color _rose = Color(0xFFFF6B6B);
+const Color _violet = Color(0xFF7B7BFF);
+
+class TranscriptionScreen extends StatefulWidget {
   const TranscriptionScreen({super.key});
 
-  static const Color _bg = Color(0xFFF2F4F7);
-  static const Color _card = Colors.white;
-  static const Color _ink = Color(0xFF1E2733);
-  static const Color _muted = Color(0xFF8B95A5);
-  static const Color _sky = Color(0xFF6EA8FF);
-  static const Color _mint = Color(0xFF58D6C7);
-  static const Color _sun = Color(0xFFFFC857);
-  static const Color _rose = Color(0xFFFF6B6B);
-  static const Color _violet = Color(0xFF7B7BFF);
+  @override
+  State<TranscriptionScreen> createState() => _TranscriptionScreenState();
+}
+
+class _TranscriptionScreenState extends State<TranscriptionScreen> {
+  final HealthcareServicesManager _services = HealthcareServicesManager();
+  bool _promptedForSave = false;
+  String? _lastSavedSignature;
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<TranscriptionController>();
+    _maybePromptForSave(controller);
 
     return Scaffold(
       backgroundColor: _bg,
@@ -50,6 +62,99 @@ class TranscriptionScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _maybePromptForSave(TranscriptionController controller) {
+    if (controller.state == TranscriptionState.recording ||
+        controller.state == TranscriptionState.transcribing ||
+        controller.state == TranscriptionState.processing) {
+      _promptedForSave = false;
+      return;
+    }
+
+    if (controller.state != TranscriptionState.done) return;
+    if (controller.transcription.trim().isEmpty) return;
+
+    final signature = _buildSignature(controller);
+    if (_lastSavedSignature == signature || _promptedForSave) return;
+
+    _promptedForSave = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final suggestedName =
+          _services.suggestPatientNameFromTranscript(controller.transcription);
+      final enteredName =
+          await _promptForPatientName(suggestedName: suggestedName);
+      final resolvedName = _resolvePatientName(enteredName, suggestedName);
+
+      final savedPatient = await _services.createPatientWithSession(
+        patientName: resolvedName,
+        transcript: controller.transcription,
+        summary: controller.summary,
+        prescription: controller.prescription,
+        source: 'transcription',
+      );
+
+      if (!mounted) return;
+      if (savedPatient == null) {
+        _promptedForSave = false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sign in to save this session.'),
+            backgroundColor: _sun,
+          ),
+        );
+        return;
+      }
+
+      _lastSavedSignature = signature;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Saved to patient records.'),
+          backgroundColor: _mint,
+        ),
+      );
+    });
+  }
+
+  String _buildSignature(TranscriptionController controller) {
+    return '${controller.transcription.hashCode}-${controller.summary.hashCode}-${controller.prescription.hashCode}';
+  }
+
+  Future<String?> _promptForPatientName({String? suggestedName}) {
+    final controller = TextEditingController(text: suggestedName ?? '');
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Patient name'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Enter patient name',
+          ),
+          textInputAction: TextInputAction.done,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: const Text('Use default'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _resolvePatientName(String? enteredName, String? suggestedName) {
+    final direct = enteredName?.trim() ?? '';
+    if (direct.isNotEmpty) return direct;
+    final suggestion = suggestedName?.trim() ?? '';
+    if (suggestion.isNotEmpty) return suggestion;
+    return 'Unknown Patient';
   }
 
   String _statusText(TranscriptionState state) {
@@ -294,17 +399,6 @@ class TranscriptionScreen extends StatelessWidget {
     final isLive = controller.isRecording;
     final isProcessing = controller.isProcessing;
     final isActive = isLive || isProcessing;
-    final waveValues = controller.waveformValues;
-    final avg = waveValues.isEmpty
-      ? 0.0
-      : waveValues.reduce((a, b) => a + b) / waveValues.length;
-    final peak = waveValues.isEmpty ? 0.0 : waveValues.reduce(max);
-    final voiceLevel = max(controller.audioLevel, (avg * 0.5 + peak * 0.5)).clamp(0.0, 1.0);
-    final energy = pow(voiceLevel, 0.6).toDouble();
-    final amplitude = isLive
-        ? (0.22 + energy * 1.05)
-        : (isProcessing ? 0.46 : 0.16);
-
     final dockStateText = isLive ? 'Live' : (isProcessing ? 'Processing' : 'Idle');
     return Container(
       padding: const EdgeInsets.all(16),
@@ -337,14 +431,12 @@ class TranscriptionScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 72,
+            height: 90,
             width: double.infinity,
-            child: _SignalDockWave(
-              amplitude: amplitude,
-              voiceLevel: voiceLevel,
-              isLive: isActive,
-              waveColor: isActive ? _mint : _ink.withAlpha(60),
-              guideColor: _ink.withAlpha(30),
+            child: AudioSignalBox(
+              isActive: isActive,
+              color: _mint,
+              audioLevel: controller.audioLevel,
             ),
           ),
         ],

@@ -22,6 +22,118 @@ class AudioVisualizer extends StatefulWidget {
   State<AudioVisualizer> createState() => _AudioVisualizerState();
 }
 
+/// Standalone signal box used for waveform-only displays.
+class AudioSignalBox extends StatefulWidget {
+  final bool isActive;
+  final Color color;
+  final double height;
+  final double? audioLevel;
+  final int maxPoints;
+  final double? width;
+
+  const AudioSignalBox({
+    super.key,
+    required this.isActive,
+    this.color = const Color(0xFF007AFF),
+    this.height = 80,
+    this.audioLevel,
+    this.maxPoints = 60,
+    this.width,
+  });
+
+  @override
+  State<AudioSignalBox> createState() => _AudioSignalBoxState();
+}
+
+class _AudioSignalBoxState extends State<AudioSignalBox>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late List<double> _waveformData;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveformData = List<double>.filled(widget.maxPoints, 0.0, growable: true);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 50),
+    )..addListener(_updateWaveform);
+
+    if (widget.isActive) {
+      _controller.repeat();
+    }
+  }
+
+  void _updateWaveform() {
+    if (!widget.isActive) return;
+
+    setState(() {
+      final level = widget.audioLevel ?? 0.0;
+      _waveformData.add(level);
+      if (_waveformData.length > widget.maxPoints) {
+        _waveformData.removeAt(0);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(AudioSignalBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        _controller.repeat();
+      } else {
+        _controller.stop();
+        setState(() {
+          _waveformData
+            ..clear()
+            ..addAll(List<double>.filled(widget.maxPoints, 0.0));
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final resolvedWidth = widget.width ??
+            (constraints.maxWidth.isFinite ? constraints.maxWidth : 240);
+
+        return Container(
+          width: resolvedWidth,
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: widget.color.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: CustomPaint(
+              size: Size(resolvedWidth, widget.height),
+              painter: _WaveformPainter(
+                data: _waveformData,
+                color: widget.color,
+                isRecording: widget.isActive,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _AudioVisualizerState extends State<AudioVisualizer>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;

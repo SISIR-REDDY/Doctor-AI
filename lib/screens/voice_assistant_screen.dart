@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
@@ -361,24 +360,34 @@ class _InteractiveVoiceAssistantScreenState
         // Audio upload failed, but continue without it
       }
 
-      // Save consultation if patient is selected
-      if (patient != null && summary != null && prescription != null) {
-        await _services.persistConsultation(
-          patient: patient!,
+      final safeSummary = summary ?? '';
+      final safePrescription = prescription ?? '';
+
+      if (transcript.trim().isNotEmpty && transcript != 'No speech detected') {
+        final suggestedName = _services.suggestPatientNameFromTranscript(transcript);
+        final enteredName = await _promptForPatientName(suggestedName: suggestedName);
+        final resolvedName = _resolvePatientName(enteredName, suggestedName);
+
+        final savedPatient = await _services.createPatientWithSession(
+          patientName: resolvedName,
           transcript: transcript,
-          summary: summary,
-          prescription: prescription,
+          summary: safeSummary,
+          prescription: safePrescription,
           source: 'voice',
           audioUrl: audioUrl,
           durationSeconds: recordedDuration.inSeconds,
         );
 
-        // Save clinical note
-        await _services.saveClinicalNote(
-          patientId: patient!.id,
-          title: 'Consultation Summary • ${DateFormat('MMM d, HH:mm').format(DateTime.now())}',
-          content: summary,
-        );
+        if (savedPatient != null && mounted) {
+          setPatient(savedPatient);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sign in to save this consultation.'),
+              backgroundColor: AppTheme.warningColor,
+            ),
+          );
+        }
       }
 
       if (!mounted) return;
@@ -411,6 +420,42 @@ class _InteractiveVoiceAssistantScreenState
         builder: (_) => const DoctorPatientCreateEditScreen(),
       ),
     );
+  }
+
+  Future<String?> _promptForPatientName({String? suggestedName}) {
+    final controller = TextEditingController(text: suggestedName ?? '');
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Patient name'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Enter patient name',
+          ),
+          textInputAction: TextInputAction.done,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: const Text('Use default'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _resolvePatientName(String? enteredName, String? suggestedName) {
+    final direct = enteredName?.trim() ?? '';
+    if (direct.isNotEmpty) return direct;
+    final suggestion = suggestedName?.trim() ?? '';
+    if (suggestion.isNotEmpty) return suggestion;
+    return 'Unknown Patient';
   }
 
   void _openHistoryDetails() {

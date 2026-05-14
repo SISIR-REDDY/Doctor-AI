@@ -135,6 +135,49 @@ class FirestoreService {
     }
   }
 
+  Future<List<DocumentScan>> getDocumentScans(String patientId) async {
+    if (!_isFirebaseAvailable) {
+      return _documentScansCacheByPatient[patientId] ?? const [];
+    }
+
+    try {
+      final snapshot = await _documentScansCollection
+          .where('patientId', isEqualTo: patientId)
+          .get(const GetOptions(source: Source.serverAndCache));
+      final scans = snapshot.docs
+          .map((doc) => DocumentScan.fromMap(doc.data()))
+          .toList()
+        ..sort((a, b) => b.dateScanned.compareTo(a.dateScanned));
+      _documentScansCacheByPatient[patientId] = scans;
+      return scans;
+    } catch (_) {
+      return _documentScansCacheByPatient[patientId] ?? const [];
+    }
+  }
+
+  Future<List<ConsultationSession>> getConsultationSessionsForPatient({
+    required String doctorId,
+    required String patientId,
+  }) async {
+    if (!_isFirebaseAvailable) {
+      return const [];
+    }
+
+    try {
+      final snapshot = await _consultationSessionsCollection
+          .where('doctorId', isEqualTo: doctorId)
+          .where('patientId', isEqualTo: patientId)
+          .get(const GetOptions(source: Source.serverAndCache));
+      final sessions = snapshot.docs
+          .map((doc) => ConsultationSession.fromMap(doc.data()))
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return sessions;
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<void> saveDeviceToken({
     required String userId,
     required String token,

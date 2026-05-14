@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../core/navigation/app_router.dart';
 import '../core/errors/app_error_handler.dart';
+import '../core/healthcare/healthcare_services_manager.dart';
 import '../models/health_models.dart';
-import '../services/firebase/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'doctor_patient_create_edit_screen.dart';
 
@@ -17,7 +17,7 @@ class DoctorPatientDetailScreen extends StatefulWidget {
 }
 
 class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
-  final FirestoreService _firestoreService = FirestoreService();
+  final HealthcareServicesManager _services = HealthcareServicesManager();
   bool _isDeleting = false;
 
   Future<void> _confirmAndDeletePatient() async {
@@ -48,7 +48,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
     setState(() => _isDeleting = true);
 
     try {
-      await _firestoreService.deletePatientRecord(widget.patient.id);
+      await _services.deletePatientAndRecords(widget.patient);
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
