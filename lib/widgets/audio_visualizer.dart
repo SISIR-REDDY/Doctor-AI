@@ -49,6 +49,7 @@ class _AudioSignalBoxState extends State<AudioSignalBox>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late List<double> _waveformData;
+  final Random _random = Random();
 
   @override
   void initState() {
@@ -68,7 +69,10 @@ class _AudioSignalBoxState extends State<AudioSignalBox>
     if (!widget.isActive) return;
 
     setState(() {
-      final level = widget.audioLevel ?? 0.0;
+      final baseLevel = (widget.audioLevel ?? 0.0).clamp(0.0, 1.0);
+      final jitter = (_random.nextDouble() - 0.5) * 0.06;
+      final noiseFloor = 0.02 + _random.nextDouble() * 0.02;
+      final level = (baseLevel + jitter).clamp(noiseFloor, 1.0);
       _waveformData.add(level);
       if (_waveformData.length > widget.maxPoints) {
         _waveformData.removeAt(0);

@@ -206,6 +206,8 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                 index: index,
                 baseDelay: const Duration(milliseconds: 50),
                 child: GlossyCard(
+                  padding: const EdgeInsets.all(AppTheme.sm),
+                  borderRadius: BorderRadius.circular(20),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -215,13 +217,14 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                     );
                   },
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Container(
-                        width: 52,
-                        height: 52,
+                        width: 72,
+                        height: 72,
                         decoration: BoxDecoration(
                           color: AppTheme.primaryColor.withValues(alpha: 0.12),
-                          borderRadius: AppTheme.mediumRadius,
+                          borderRadius: BorderRadius.circular(16),
                         ),
                         child: Center(
                           child: Text(
@@ -236,24 +239,26 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(patient.fullName, style: AppTheme.labelLarge),
-                            const SizedBox(height: AppTheme.xs),
+                            const SizedBox(height: 6),
                             Text(
-                              'Last visit: ${patient.lastVisitSummary}',
-                              maxLines: 2,
+                              '${_formatTime(patient.updatedAt)} • ${patient.lastVisitSummary}',
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTheme.bodySmall,
+                              style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
                             ),
-                            const SizedBox(height: AppTheme.xs),
+                            const SizedBox(height: 6),
                             Text(
                               'Food allergies: ${patient.foodAllergies.length} • Medication allergies: ${patient.medicinalAllergies.length}',
-                              style: AppTheme.labelSmall,
+                              style: AppTheme.labelSmall.copyWith(color: AppTheme.textSecondary),
                             ),
                           ],
                         ),
                       ),
-                      Row(
+                      const SizedBox(width: AppTheme.sm),
+                      Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
@@ -264,12 +269,12 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                                     height: 18,
                                     child: CircularProgressIndicator(strokeWidth: 2),
                                   )
-                                : const Icon(Icons.delete_outline, color: AppTheme.dangerColor),
+                                : const Icon(Icons.delete_outline, color: AppTheme.dangerColor, size: 20),
                             onPressed: _deletingPatientId == patient.id
                                 ? null
                                 : () => _confirmDeletePatient(patient),
                           ),
-                          const Icon(Icons.chevron_right),
+                          const Icon(Icons.chevron_right, size: 18, color: AppTheme.textSecondary),
                         ],
                       ),
                     ],
@@ -281,5 +286,12 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
         },
       ),
     );
+  }
+
+  String _formatTime(DateTime time) {
+    final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final meridiem = time.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $meridiem';
   }
 }

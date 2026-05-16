@@ -254,7 +254,8 @@ class FirestoreService {
     try {
       await _patientsCollection.doc(patientId).delete();
       // Clear from cache
-      for (final key in _patientsCacheByDoctor.keys) {
+      final keys = _patientsCacheByDoctor.keys.toList(growable: false);
+      for (final key in keys) {
         _patientsCacheByDoctor[key]?.removeWhere((p) => p.id == patientId);
       }
     } catch (error) {
@@ -273,7 +274,8 @@ class FirestoreService {
     try {
       await _clinicalReportsCollection.doc(reportId).delete();
       // Clear from cache
-      for (final key in _clinicalCacheByPatient.keys) {
+      final keys = _clinicalCacheByPatient.keys.toList(growable: false);
+      for (final key in keys) {
         _clinicalCacheByPatient[key]?.removeWhere((r) => r.id == reportId);
       }
     } catch (error) {
@@ -292,7 +294,8 @@ class FirestoreService {
     try {
       await _consultationSessionsCollection.doc(sessionId).delete();
       // Clear from cache
-      for (final key in _consultationCacheByKey.keys) {
+      final keys = _consultationCacheByKey.keys.toList(growable: false);
+      for (final key in keys) {
         _consultationCacheByKey[key]?.removeWhere((s) => s.id == sessionId);
       }
     } catch (error) {
@@ -311,7 +314,8 @@ class FirestoreService {
     try {
       await _documentScansCollection.doc(scanId).delete();
       // Clear from cache
-      for (final key in _documentScansCacheByPatient.keys) {
+      final keys = _documentScansCacheByPatient.keys.toList(growable: false);
+      for (final key in keys) {
         _documentScansCacheByPatient[key]?.removeWhere((s) => s.id == scanId);
       }
     } catch (error) {
