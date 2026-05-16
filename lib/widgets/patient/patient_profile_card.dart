@@ -8,16 +8,55 @@ import '../../models/health_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/firebase/storage_service.dart';
 import '../../theme/app_theme.dart';
+import 'patient_record_section.dart';
 
-/// Premium patient profile card with avatar, vitals chips, and contact details.
+/// Field keys for tap-to-edit on the profile card.
+abstract final class PatientFieldKeys {
+  static const name = 'name';
+  static const phone = 'phone';
+  static const email = 'email';
+  static const dob = 'dob';
+}
+
+/// Premium patient profile card — tap any detail to edit in place.
 class PatientProfileCard extends StatefulWidget {
   final ProviderPatientRecord patient;
   final ValueChanged<ProviderPatientRecord>? onPatientUpdated;
+  final String? activeField;
+  final ValueChanged<String> onActivateField;
+  final Future<void> Function() onSaveField;
+
+  final TextEditingController firstNameController;
+  final TextEditingController lastNameController;
+  final TextEditingController contactController;
+  final TextEditingController emailController;
+  final TextEditingController dateOfBirthController;
+  final String gender;
+  final String bloodType;
+  final ValueChanged<String> onGenderChanged;
+  final ValueChanged<String> onBloodTypeChanged;
+  final Future<void> Function() onPickDateOfBirth;
+
+  static const genderOptions = ['Male', 'Female', 'Other', 'Unknown'];
+  static const bloodTypeOptions = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
 
   const PatientProfileCard({
     super.key,
     required this.patient,
+    required this.firstNameController,
+    required this.lastNameController,
+    required this.contactController,
+    required this.emailController,
+    required this.dateOfBirthController,
+    required this.gender,
+    required this.bloodType,
+    required this.onActivateField,
+    required this.onSaveField,
+    required this.onGenderChanged,
+    required this.onBloodTypeChanged,
+    required this.onPickDateOfBirth,
     this.onPatientUpdated,
+    this.activeField,
   });
 
   @override
@@ -41,19 +80,16 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
   @override
   void didUpdateWidget(covariant PatientProfileCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.patient.id != widget.patient.id ||
-        oldWidget.patient.updatedAt != widget.patient.updatedAt) {
+    if (oldWidget.patient.updatedAt != widget.patient.updatedAt ||
+        oldWidget.patient.id != widget.patient.id) {
       _patient = widget.patient;
     }
   }
 
-  bool get _hasPhoto {
-    final path = _patient.photoUrl;
-    return path.isNotEmpty && File(path).existsSync();
-  }
+  bool get _hasPhoto =>
+      _patient.photoUrl.isNotEmpty && File(_patient.photoUrl).existsSync();
 
   Future<void> _showPhotoOptions() async {
-    final hasPhoto = _hasPhoto;
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
@@ -61,70 +97,34 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: AppTheme.lg),
-                decoration: BoxDecoration(
-                  color: AppTheme.dividerColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Text('Patient Photo', style: AppTheme.headingSmall),
-              const SizedBox(height: AppTheme.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: AppTheme.md),
+            Text('Patient Photo', style: AppTheme.headingSmall),
+            const SizedBox(height: AppTheme.lg),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: PatientDetailPalette.charcoal),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: PatientDetailPalette.gold),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+            if (_hasPhoto)
               ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(AppTheme.sm),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    borderRadius: AppTheme.smallRadius,
-                  ),
-                  child: const Icon(Icons.camera_alt, color: AppTheme.primaryColor),
-                ),
-                title: const Text('Take Photo'),
-                subtitle: const Text('Use camera'),
-                onTap: () => Navigator.pop(ctx, 'camera'),
+                leading: const Icon(Icons.delete_outline, color: AppTheme.dangerColor),
+                title: const Text('Remove Photo'),
+                onTap: () => Navigator.pop(ctx, 'remove'),
               ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(AppTheme.sm),
-                  decoration: BoxDecoration(
-                    color: AppTheme.secondaryColor.withValues(alpha: 0.1),
-                    borderRadius: AppTheme.smallRadius,
-                  ),
-                  child: const Icon(Icons.photo_library, color: AppTheme.secondaryColor),
-                ),
-                title: const Text('Choose from Gallery'),
-                subtitle: const Text('Pick an existing photo'),
-                onTap: () => Navigator.pop(ctx, 'gallery'),
-              ),
-              if (hasPhoto)
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(AppTheme.sm),
-                    decoration: BoxDecoration(
-                      color: AppTheme.dangerColor.withValues(alpha: 0.1),
-                      borderRadius: AppTheme.smallRadius,
-                    ),
-                    child: const Icon(Icons.delete_outline, color: AppTheme.dangerColor),
-                  ),
-                  title: const Text('Remove Photo'),
-                  onTap: () => Navigator.pop(ctx, 'remove'),
-                ),
-              const SizedBox(height: AppTheme.sm),
-            ],
-          ),
+            const SizedBox(height: AppTheme.sm),
+          ],
         ),
       ),
     );
-
     if (action == null || !mounted) return;
-
     switch (action) {
       case 'camera':
         await _pickAndSavePhoto(ImageSource.camera);
@@ -143,33 +143,18 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
         maxWidth: 1200,
       );
       if (picked == null || !mounted) return;
-
       setState(() => _isUpdatingPhoto = true);
-
       final savedPath = await _storage.savePatientPhoto(
         sourcePath: picked.path,
         patientId: _patient.id,
       );
-      if (savedPath == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not save photo')),
-          );
-        }
-        return;
-      }
-
+      if (savedPath == null) return;
       final oldPath = _patient.photoUrl;
-      final updated = _patient.copyWith(
-        photoUrl: savedPath,
-        updatedAt: DateTime.now(),
-      );
-
+      final updated = _patient.copyWith(photoUrl: savedPath, updatedAt: DateTime.now());
       await _firestore.savePatientRecord(updated);
       if (oldPath.isNotEmpty && oldPath != savedPath) {
         await _storage.deletePatientPhoto(oldPath);
       }
-
       if (!mounted) return;
       setState(() => _patient = updated);
       widget.onPatientUpdated?.call(updated);
@@ -184,14 +169,9 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
     setState(() => _isUpdatingPhoto = true);
     try {
       final oldPath = _patient.photoUrl;
-      final updated = _patient.copyWith(
-        photoUrl: '',
-        updatedAt: DateTime.now(),
-      );
+      final updated = _patient.copyWith(photoUrl: '', updatedAt: DateTime.now());
       await _firestore.savePatientRecord(updated);
-      if (oldPath.isNotEmpty) {
-        await _storage.deletePatientPhoto(oldPath);
-      }
+      if (oldPath.isNotEmpty) await _storage.deletePatientPhoto(oldPath);
       if (!mounted) return;
       setState(() => _patient = updated);
       widget.onPatientUpdated?.call(updated);
@@ -202,10 +182,79 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
     }
   }
 
+  Future<void> _showPickerSheet({
+    required String title,
+    required List<String> options,
+    required String current,
+    required ValueChanged<String> onSelected,
+  }) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final maxHeight = MediaQuery.of(ctx).size.height * 0.55;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: AppTheme.md, bottom: AppTheme.sm),
+                  decoration: BoxDecoration(
+                    color: AppTheme.dividerColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.sm, AppTheme.lg, AppTheme.md),
+                  child: Text(title, style: AppTheme.headingSmall),
+                ),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.only(bottom: AppTheme.lg),
+                    itemCount: options.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, indent: AppTheme.lg, endIndent: AppTheme.lg),
+                    itemBuilder: (context, index) {
+                      final opt = options[index];
+                      final isSelected = opt == current;
+                      return ListTile(
+                        title: Text(
+                          opt,
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? PatientDetailPalette.charcoal : AppTheme.textPrimary,
+                          ),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle, color: PatientDetailPalette.gold)
+                            : null,
+                        onTap: () => Navigator.pop(ctx, opt),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (picked != null && picked != current) {
+      onSelected(picked);
+      await widget.onSaveField();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final displayName = _patient.fullName.isEmpty ? 'Unknown Patient' : _patient.fullName;
-
     return Container(
       margin: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.lg, AppTheme.lg, AppTheme.sm),
       decoration: BoxDecoration(
@@ -213,34 +262,29 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
         borderRadius: AppTheme.largeRadius,
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryColor.withValues(alpha: 0.08),
+            color: PatientDetailPalette.charcoal.withValues(alpha: 0.1),
             blurRadius: 24,
             offset: const Offset(0, 8),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
           ),
         ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
-        children: [
-          _buildHeader(displayName),
-          _buildDetails(),
-        ],
+        children: [_buildHeader(), _buildDetails()],
       ),
     );
   }
 
-  Widget _buildHeader(String displayName) {
+  Widget _buildHeader() {
+    final editingName = widget.activeField == PatientFieldKeys.name;
+    final displayName = _patient.fullName.isEmpty ? 'Tap to add name' : _patient.fullName;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.xl, AppTheme.lg, AppTheme.lg),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0078D4), Color(0xFF00A4BD)],
+          colors: [PatientDetailPalette.charcoal, PatientDetailPalette.slate],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -258,13 +302,6 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 3),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.15),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
                   ),
                   child: ClipOval(child: _buildAvatar()),
                 ),
@@ -277,14 +314,7 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
                       color: Colors.black.withValues(alpha: 0.4),
                     ),
                     child: const Center(
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
                     ),
                   )
                 else
@@ -293,48 +323,168 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
                     bottom: 0,
                     child: Container(
                       padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.camera_alt_rounded,
-                        size: 16,
-                        color: AppTheme.primaryColor,
-                      ),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: const Icon(Icons.camera_alt_rounded, size: 16, color: PatientDetailPalette.gold),
                     ),
                   ),
               ],
             ),
           ),
           const SizedBox(height: AppTheme.md),
-          Text(
-            displayName,
-            style: AppTheme.headingSmall.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+          if (editingName) ...[
+            _inlineHeaderField(widget.firstNameController, 'First name', autofocus: true),
+            const SizedBox(height: AppTheme.sm),
+            _inlineHeaderField(widget.lastNameController, 'Last name'),
+            const SizedBox(height: AppTheme.sm),
+            TextButton.icon(
+              onPressed: widget.onSaveField,
+              icon: const Icon(Icons.check, color: PatientDetailPalette.gold, size: 18),
+              label: const Text('Done', style: TextStyle(color: PatientDetailPalette.gold)),
             ),
-            textAlign: TextAlign.center,
-          ),
+          ] else
+            _tapTarget(
+              fieldKey: PatientFieldKeys.name,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      displayName,
+                      style: AppTheme.headingSmall.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontStyle: _patient.fullName.isEmpty ? FontStyle.italic : FontStyle.normal,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(Icons.edit, size: 16, color: Colors.white.withValues(alpha: 0.6)),
+                ],
+              ),
+            ),
           const SizedBox(height: AppTheme.sm),
           Wrap(
             spacing: AppTheme.sm,
             runSpacing: AppTheme.xs,
             alignment: WrapAlignment.center,
             children: [
-              _chip(Icons.cake_outlined, '${_patient.age} yrs'),
-              _chip(Icons.wc_outlined, _displayOr(_patient.gender, 'Unknown')),
-              if (_patient.bloodType.isNotEmpty)
-                _chip(Icons.bloodtype_outlined, _patient.bloodType),
+              _tapChip(
+                icon: Icons.cake_outlined,
+                label: '${_computedAge} yrs',
+                onTap: () async {
+                  widget.onActivateField(PatientFieldKeys.dob);
+                  await widget.onPickDateOfBirth();
+                  await widget.onSaveField();
+                },
+              ),
+              _tapChip(
+                icon: Icons.wc_outlined,
+                label: widget.gender.isEmpty ? 'Gender' : widget.gender,
+                onTap: () => _showPickerSheet(
+                  title: 'Select Gender',
+                  options: PatientProfileCard.genderOptions,
+                  current: widget.gender,
+                  onSelected: widget.onGenderChanged,
+                ),
+              ),
+              _tapChip(
+                icon: Icons.bloodtype_outlined,
+                label: widget.bloodType.isEmpty ? 'Blood type' : widget.bloodType,
+                onTap: () => _showPickerSheet(
+                  title: 'Select Blood Type',
+                  options: PatientProfileCard.bloodTypeOptions,
+                  current: widget.bloodType.isEmpty
+                      ? PatientProfileCard.bloodTypeOptions.first
+                      : widget.bloodType,
+                  onSelected: widget.onBloodTypeChanged,
+                ),
+              ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  int get _computedAge {
+    final dob = DateTime.tryParse(widget.dateOfBirthController.text);
+    if (dob == null) return _patient.age;
+    final now = DateTime.now();
+    var years = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) years--;
+    return years < 0 ? 0 : years;
+  }
+
+  Widget _tapTarget({required String fieldKey, required Widget child}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => widget.onActivateField(fieldKey),
+        borderRadius: AppTheme.smallRadius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: AppTheme.xs),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _tapChip({required IconData icon, required String label, required VoidCallback onTap}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.xs),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.9)),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.95),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _inlineHeaderField(TextEditingController controller, String hint, {bool autofocus = false}) {
+    return TextField(
+      controller: controller,
+      autofocus: autofocus,
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+      textAlign: TextAlign.center,
+      textInputAction: TextInputAction.next,
+      onSubmitted: (_) => widget.onSaveField(),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.15),
+        border: OutlineInputBorder(
+          borderRadius: AppTheme.smallRadius,
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: AppTheme.smallRadius,
+          borderSide: const BorderSide(color: PatientDetailPalette.gold, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.sm),
       ),
     );
   }
@@ -353,55 +503,16 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
   }
 
   Widget _placeholderAvatar() {
-    final initials = _getInitials();
+    final first = widget.firstNameController.text.trim();
+    final last = widget.lastNameController.text.trim();
+    final initials = '${first.isNotEmpty ? first[0].toUpperCase() : ''}'
+        '${last.isNotEmpty ? last[0].toUpperCase() : ''}';
     return Container(
       color: Colors.white.withValues(alpha: 0.2),
       child: Center(
         child: initials.isNotEmpty
-            ? Text(
-                initials,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w600,
-                ),
-              )
+            ? Text(initials, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600))
             : const Icon(Icons.person, size: 48, color: Colors.white70),
-      ),
-    );
-  }
-
-  String _getInitials() {
-    final first = _patient.firstName.trim();
-    final last = _patient.lastName.trim();
-    if (first.isEmpty && last.isEmpty) return '';
-    final a = first.isNotEmpty ? first[0].toUpperCase() : '';
-    final b = last.isNotEmpty ? last[0].toUpperCase() : '';
-    return '$a$b';
-  }
-
-  Widget _chip(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.xs),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.9)),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.95),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -411,71 +522,148 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
       padding: const EdgeInsets.all(AppTheme.lg),
       child: Column(
         children: [
-          _detailRow(Icons.phone_outlined, 'Phone', _patient.contactNumber),
+          _detailField(
+            fieldKey: PatientFieldKeys.phone,
+            icon: Icons.phone_outlined,
+            label: 'Phone',
+            value: _patient.contactNumber,
+            controller: widget.contactController,
+            keyboardType: TextInputType.phone,
+          ),
           const Divider(height: AppTheme.xl, color: AppTheme.dividerColor),
-          _detailRow(Icons.email_outlined, 'Email', _patient.email),
-          if (_patient.dateOfBirth.isNotEmpty) ...[
-            const Divider(height: AppTheme.xl, color: AppTheme.dividerColor),
-            _detailRow(
-              Icons.calendar_today_outlined,
-              'Date of Birth',
-              _formatDate(_patient.dateOfBirth),
-            ),
-          ],
+          _detailField(
+            fieldKey: PatientFieldKeys.email,
+            icon: Icons.email_outlined,
+            label: 'Email',
+            value: _patient.email,
+            controller: widget.emailController,
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const Divider(height: AppTheme.xl, color: AppTheme.dividerColor),
+          _detailField(
+            fieldKey: PatientFieldKeys.dob,
+            icon: Icons.calendar_today_outlined,
+            label: 'Date of Birth',
+            value: _patient.dateOfBirth.isEmpty ? '' : _formatDate(_patient.dateOfBirth),
+            controller: widget.dateOfBirthController,
+            readOnly: true,
+            onTapWhenActive: widget.onPickDateOfBirth,
+          ),
         ],
       ),
     );
   }
 
-  Widget _detailRow(IconData icon, String label, String value) {
-    final display = _displayOr(value, 'Not set');
-    final isEmpty = value.trim().isEmpty;
+  Widget _detailField({
+    required String fieldKey,
+    required IconData icon,
+    required String label,
+    required String value,
+    required TextEditingController controller,
+    TextInputType? keyboardType,
+    bool readOnly = false,
+    Future<void> Function()? onTapWhenActive,
+  }) {
+    final isActive = widget.activeField == fieldKey;
+    final display = value.trim().isEmpty ? 'Tap to add' : value.trim();
 
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(AppTheme.sm),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: 0.08),
-            borderRadius: AppTheme.smallRadius,
-          ),
-          child: Icon(icon, size: 20, color: AppTheme.primaryColor),
-        ),
-        const SizedBox(width: AppTheme.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: AppTheme.labelSmall.copyWith(color: AppTheme.textTertiary),
+    if (isActive) {
+      Future<void> openDatePicker() async {
+        if (onTapWhenActive != null) {
+          await onTapWhenActive();
+          await widget.onSaveField();
+        }
+      }
+
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _fieldIcon(icon),
+          const SizedBox(width: AppTheme.md),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              autofocus: !readOnly,
+              readOnly: readOnly,
+              keyboardType: keyboardType,
+              style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+              onTap: readOnly ? openDatePicker : null,
+              onSubmitted: (_) => widget.onSaveField(),
+              decoration: InputDecoration(
+                labelText: label,
+                hintText: readOnly ? 'Tap to pick date' : null,
+                filled: true,
+                fillColor: PatientDetailPalette.gold.withValues(alpha: 0.08),
+                suffixIcon: readOnly
+                    ? IconButton(
+                        tooltip: 'Pick date',
+                        icon: const Icon(Icons.calendar_today, color: PatientDetailPalette.goldMuted),
+                        onPressed: openDatePicker,
+                      )
+                    : IconButton(
+                        tooltip: 'Save',
+                        icon: const Icon(Icons.check_circle, color: PatientDetailPalette.gold),
+                        onPressed: () => widget.onSaveField(),
+                      ),
+                border: OutlineInputBorder(borderRadius: AppTheme.smallRadius),
               ),
-              const SizedBox(height: 2),
-              Text(
-                display,
-                style: AppTheme.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: isEmpty ? AppTheme.textTertiary : AppTheme.textPrimary,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => widget.onActivateField(fieldKey),
+        borderRadius: AppTheme.smallRadius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppTheme.xs),
+          child: Row(
+            children: [
+              _fieldIcon(icon),
+              const SizedBox(width: AppTheme.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: AppTheme.labelSmall.copyWith(color: AppTheme.textTertiary)),
+                    const SizedBox(height: 2),
+                    Text(
+                      display,
+                      style: AppTheme.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: value.trim().isEmpty ? AppTheme.textTertiary : AppTheme.textPrimary,
+                        fontStyle: value.trim().isEmpty ? FontStyle.italic : FontStyle.normal,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              Icon(Icons.edit_outlined, size: 16, color: AppTheme.textTertiary.withValues(alpha: 0.6)),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
-  String _displayOr(String value, String fallback) {
-    return value.trim().isEmpty ? fallback : value.trim();
+  Widget _fieldIcon(IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.sm),
+      decoration: BoxDecoration(
+        color: PatientDetailPalette.gold.withValues(alpha: 0.1),
+        borderRadius: AppTheme.smallRadius,
+      ),
+      child: Icon(icon, size: 20, color: PatientDetailPalette.goldMuted),
+    );
   }
 
   String _formatDate(String iso) {
     final date = DateTime.tryParse(iso);
     if (date == null) return iso;
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 }
