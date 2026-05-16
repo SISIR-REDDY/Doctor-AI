@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter/services.dart';
 
-const Color _bgStart = Color(0xFFF3F5FF);
-const Color _bgEnd = Color(0xFFEFF9F7);
-const Color _surface = Colors.white;
-const Color _ink = Color(0xFF1F2430);
-const Color _muted = Color(0xFF6B7280);
-const Color _accent = Color(0xFF4C6FFF);
-const Color _accentSoft = Color(0xFFE8EEFF);
-const Color _warning = Color(0xFFFFB020);
+import '../core/healthcare/clinical_text_parser.dart';
+import '../core/healthcare/consultation_ui_theme.dart';
+import '../theme/app_theme.dart';
 
 class SummaryScreen extends StatelessWidget {
   final String summary;
@@ -17,60 +12,148 @@ class SummaryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final data = _parseSummary(summary);
-    final missingCount = data.missing.length;
-    final completeness = _completenessLabel(missingCount);
+    final data = ClinicalTextParser.parseSummary(summary);
+    final missing = data.missingOrIncomplete;
+    final completeness = missing.isEmpty ? 'Complete' : missing.length <= 2 ? 'Partial' : 'Needs review';
 
     return Scaffold(
+      backgroundColor: ConsultationPalette.cream,
       appBar: AppBar(
-        title: const Text('Summary'),
-        backgroundColor: _accent,
-        foregroundColor: Colors.white,
+        title: const Text('Clinical Summary'),
+        backgroundColor: ConsultationPalette.surface,
+        foregroundColor: ConsultationPalette.charcoal,
         elevation: 0,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [_bgStart, _bgEnd],
+        scrolledUnderElevation: 0.5,
+        actions: [
+          IconButton(
+            tooltip: 'Copy summary',
+            icon: const Icon(Icons.copy_outlined),
+            onPressed: summary.trim().isEmpty
+                ? null
+                : () {
+                    Clipboard.setData(ClipboardData(text: summary));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Summary copied'), duration: Duration(seconds: 1)),
+                    );
+                  },
           ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHero(completeness, missingCount),
-                const SizedBox(height: 16),
-                _buildAtAGlance(data),
-                const SizedBox(height: 16),
-                _buildSectionGrid(data),
-                const SizedBox(height: 16),
-                _buildPlanCard(data),
-                const SizedBox(height: 16),
-                _buildMissingCard(data),
-                const SizedBox(height: 16),
-                _buildRawOutput(),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, AppTheme.xxl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _HeroCard(
+              title: 'Visit overview',
+              subtitle: data.hasStructuredContent
+                  ? 'Structured SOAP notes from this consultation'
+                  : 'Review narrative summary below',
+              accent: ConsultationPalette.summary,
+              badge: completeness,
+              stats: [
+                if (data.chiefComplaint.isNotEmpty) 'Complaint captured',
+                if (data.assessment.isNotEmpty) 'Assessment documented',
+                if (data.plan.isNotEmpty) 'Plan outlined',
               ],
             ),
-          ),
+            const SizedBox(height: AppTheme.lg),
+            if (!data.hasStructuredContent && data.overview.isNotEmpty) ...[
+              _NarrativeCard(text: data.overview),
+              const SizedBox(height: AppTheme.lg),
+            ],
+            _SoapSection(
+              title: 'Chief complaint',
+              icon: Icons.report_gmailerrorred_outlined,
+              accent: ConsultationPalette.warning,
+              body: data.chiefComplaint,
+            ),
+            _SoapSection(
+              title: 'History of present illness',
+              icon: Icons.history_edu_outlined,
+              accent: ConsultationPalette.summary,
+              body: data.hpi,
+            ),
+            _SoapSection(
+              title: 'Findings & observations',
+              icon: Icons.search_outlined,
+              accent: ConsultationPalette.transcript,
+              body: data.findings,
+            ),
+            _SoapSection(
+              title: 'Clinical assessment',
+              icon: Icons.fact_check_outlined,
+              accent: ConsultationPalette.doctor,
+              body: data.assessment,
+            ),
+            _SoapSection(
+              title: 'Plan & next steps',
+              icon: Icons.playlist_add_check_outlined,
+              accent: ConsultationPalette.prescription,
+              body: data.plan,
+            ),
+            if (data.safetyFlags.isNotEmpty) ...[
+              const SizedBox(height: AppTheme.md),
+              _BulletSection(
+                title: 'Safety flags',
+                icon: Icons.warning_amber_rounded,
+                accent: ConsultationPalette.warning,
+                items: data.safetyFlags,
+              ),
+            ],
+            if (data.followUp.isNotEmpty) ...[
+              const SizedBox(height: AppTheme.md),
+              _BulletSection(
+                title: 'Follow-up',
+                icon: Icons.event_available_outlined,
+                accent: ConsultationPalette.transcript,
+                items: data.followUp,
+              ),
+            ],
+            if (missing.isNotEmpty) ...[
+              const SizedBox(height: AppTheme.md),
+              _BulletSection(
+                title: 'Needs clarification',
+                icon: Icons.help_outline,
+                accent: ConsultationPalette.muted,
+                items: missing,
+              ),
+            ],
+            const SizedBox(height: AppTheme.lg),
+            _RawExpansion(raw: summary),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildHero(String completeness, int missingCount) {
+class _HeroCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final Color accent;
+  final String badge;
+  final List<String> stats;
+
+  const _HeroCard({
+    required this.title,
+    required this.subtitle,
+    required this.accent,
+    required this.badge,
+    required this.stats,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(20),
+        gradient: ConsultationPalette.headerGradient,
+        borderRadius: AppTheme.largeRadius,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 16,
+            color: ConsultationPalette.charcoal.withValues(alpha: 0.15),
+            blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
@@ -83,393 +166,205 @@ class SummaryScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _accentSoft,
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: AppTheme.smallRadius,
                 ),
-                child: const Icon(Icons.summarize, color: _accent, size: 20),
+                child: Icon(Icons.summarize, color: accent.withValues(alpha: 0.9), size: 22),
               ),
-              const SizedBox(width: 10),
-              const Expanded(
+              const SizedBox(width: AppTheme.md),
+              Expanded(
                 child: Text(
-                  'Conversation Summary',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _ink),
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
                 ),
               ),
-              _Pill(label: completeness, color: _accent),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: ConsultationPalette.gold.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: ConsultationPalette.gold.withValues(alpha: 0.5)),
+                ),
+                child: Text(
+                  badge,
+                  style: const TextStyle(color: ConsultationPalette.gold, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            missingCount == 0
-                ? 'All core sections captured.'
-                : '$missingCount missing or incomplete section(s) detected.',
-            style: const TextStyle(fontSize: 12, color: _muted),
-          ),
+          const SizedBox(height: AppTheme.sm),
+          Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
+          if (stats.isNotEmpty) ...[
+            const SizedBox(height: AppTheme.md),
+            Wrap(
+              spacing: AppTheme.sm,
+              runSpacing: AppTheme.xs,
+              children: stats
+                  .map(
+                    (s) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(s, style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 11)),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
         ],
       ),
     );
   }
-
-  Widget _buildAtAGlance(_SummaryData data) {
-    final chief = _firstLine(data.sections['Chief complaint']);
-    final assessment = _firstLine(data.sections['Assessment']);
-    final plan = _firstLine(data.sections['Plan']);
-
-    return Row(
-      children: [
-        Expanded(
-          child: _KpiTile(label: 'Chief complaint', value: chief),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _KpiTile(label: 'Assessment', value: assessment),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _KpiTile(label: 'Plan', value: plan),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionGrid(_SummaryData data) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth > 420;
-        final children = <Widget>[
-          _SectionCard(
-            title: 'Chief complaint',
-            icon: Icons.report,
-            color: _accent,
-            items: data.sections['Chief complaint'] ?? [],
-          ),
-          _SectionCard(
-            title: 'HPI',
-            icon: Icons.sticky_note_2,
-            color: _accent,
-            items: data.sections['HPI'] ?? [],
-          ),
-          _SectionCard(
-            title: 'Findings',
-            icon: Icons.search,
-            color: _accent,
-            items: data.sections['Findings/Observations'] ?? [],
-          ),
-          _SectionCard(
-            title: 'Assessment',
-            icon: Icons.fact_check,
-            color: _accent,
-            items: data.sections['Assessment'] ?? [],
-          ),
-        ];
-
-        if (!isWide) {
-          return Column(
-            children: children
-                .map((card) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: card,
-                    ))
-                .toList(),
-          );
-        }
-
-        return Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: children
-              .map(
-                (card) => SizedBox(
-                  width: (constraints.maxWidth - 12) / 2,
-                  child: card,
-                ),
-              )
-              .toList(),
-        );
-      },
-    );
-  }
-
-  Widget _buildPlanCard(_SummaryData data) {
-    return _SectionCard(
-      title: 'Plan and next steps',
-      icon: Icons.playlist_add_check,
-      color: _accent,
-      items: data.sections['Plan'] ?? [],
-      fallback: 'No plan details captured yet.',
-    );
-  }
-
-  Widget _buildMissingCard(_SummaryData data) {
-    if (data.missing.isEmpty) {
-      return _InfoCard(
-        title: 'Missing details',
-        icon: Icons.check_circle,
-        color: Colors.green,
-        message: 'No missing details detected.',
-      );
-    }
-
-    return _SectionCard(
-      title: 'Missing details',
-      icon: Icons.warning_amber,
-      color: _warning,
-      items: data.missing,
-      tone: _warning,
-    );
-  }
-
-  Widget _buildRawOutput() {
-    return ExpansionTile(
-      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-      collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      backgroundColor: _surface,
-      collapsedBackgroundColor: _surface,
-      title: const Text(
-        'Full output',
-        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _ink),
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: summary.trim().isEmpty
-              ? const Text('No summary available', style: TextStyle(color: _muted))
-              : MarkdownBody(
-                  data: summary,
-                  styleSheet: MarkdownStyleSheet(
-                    p: const TextStyle(fontSize: 14, height: 1.5, color: _ink),
-                    h1: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _accent),
-                    h2: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _accent),
-                    h3: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _accent),
-                    listBullet: const TextStyle(fontSize: 14, color: _accent),
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  String _completenessLabel(int missingCount) {
-    if (missingCount == 0) return 'Complete';
-    if (missingCount <= 2) return 'Partial';
-    return 'Needs input';
-  }
-
-  String _firstLine(List<String>? lines) {
-    if (lines == null || lines.isEmpty) return 'Not specified';
-    return lines.first.trim();
-  }
-
-  _SummaryData _parseSummary(String input) {
-    if (input.trim().isEmpty) {
-      return _SummaryData.empty();
-    }
-
-    final sections = <String, List<String>>{
-      'Chief complaint': [],
-      'HPI': [],
-      'Findings/Observations': [],
-      'Assessment': [],
-      'Plan': [],
-    };
-    final missing = <String>[];
-    String? current;
-
-    final lines = input.split('\n');
-    for (final raw in lines) {
-      final trimmed = raw.trim();
-      if (trimmed.isEmpty) continue;
-
-      final normalized = trimmed.replaceFirst(RegExp(r'^[-*•]\s+'), '');
-      final headingMatch = RegExp(
-        r'^(Chief complaint|HPI|Findings/Observations|Findings|Assessment|Plan|Next steps)\s*:?',
-        caseSensitive: false,
-      ).firstMatch(normalized);
-
-      if (headingMatch != null) {
-        final heading = _normalizeHeading(headingMatch.group(1) ?? '');
-        current = heading;
-        final after = normalized.substring(headingMatch.end).trim();
-        if (after.isNotEmpty) {
-          sections[current]!.add(after);
-        }
-        if (_isMissing(after)) {
-          missing.add('$heading: $after');
-        }
-        continue;
-      }
-
-      if (current != null) {
-        sections[current]!.add(normalized);
-        if (_isMissing(normalized)) {
-          missing.add('$current: $normalized');
-        }
-      } else if (_isMissing(normalized)) {
-        missing.add(normalized);
-      }
-    }
-
-    return _SummaryData(sections: sections, missing: missing);
-  }
-
-  String _normalizeHeading(String value) {
-    final lower = value.toLowerCase();
-    if (lower.contains('chief')) return 'Chief complaint';
-    if (lower == 'hpi') return 'HPI';
-    if (lower.startsWith('findings')) return 'Findings/Observations';
-    if (lower.startsWith('assessment')) return 'Assessment';
-    return 'Plan';
-  }
-
-  bool _isMissing(String value) {
-    final lower = value.toLowerCase();
-    return lower.contains('not specified') ||
-        lower.contains('insufficient') ||
-        lower.contains('missing') ||
-        lower.contains('not possible');
-  }
 }
 
-class _SummaryData {
-  final Map<String, List<String>> sections;
-  final List<String> missing;
+class _NarrativeCard extends StatelessWidget {
+  final String text;
 
-  const _SummaryData({required this.sections, required this.missing});
-
-  factory _SummaryData.empty() {
-    return const _SummaryData(sections: {}, missing: []);
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _Pill({required this.label, required this.color});
+  const _NarrativeCard({required this.text});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
-      ),
-    );
-  }
-}
-
-class _KpiTile extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _KpiTile({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+        color: ConsultationPalette.surface,
+        borderRadius: AppTheme.largeRadius,
+        border: Border.all(color: ConsultationPalette.summary.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: _muted)),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _ink),
-          ),
+          const Text('Narrative summary', style: TextStyle(fontWeight: FontWeight.w700, color: ConsultationPalette.ink)),
+          const SizedBox(height: AppTheme.sm),
+          Text(text, style: const TextStyle(height: 1.5, color: ConsultationPalette.ink, fontSize: 14)),
         ],
       ),
     );
   }
 }
 
-class _SectionCard extends StatelessWidget {
+class _SoapSection extends StatelessWidget {
   final String title;
   final IconData icon;
-  final Color color;
-  final List<String> items;
-  final String? fallback;
-  final Color? tone;
+  final Color accent;
+  final String body;
 
-  const _SectionCard({
+  const _SoapSection({
     required this.title,
     required this.icon,
-    required this.color,
-    required this.items,
-    this.fallback,
-    this.tone,
+    required this.accent,
+    required this.body,
   });
 
   @override
   Widget build(BuildContext context) {
-    final effectiveTone = tone ?? color;
-    final content = items.isEmpty
-        ? [fallback ?? 'No details provided.']
-        : items;
+    final hasContent = body.trim().isNotEmpty && !_isEmpty(body);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppTheme.md),
+      child: Container(
+        padding: const EdgeInsets.all(AppTheme.lg),
+        decoration: BoxDecoration(
+          color: ConsultationPalette.surface,
+          borderRadius: AppTheme.largeRadius,
+          border: Border.all(color: accent.withValues(alpha: hasContent ? 0.2 : 0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: AppTheme.smallRadius,
+                  ),
+                  child: Icon(icon, color: accent, size: 18),
+                ),
+                const SizedBox(width: AppTheme.sm),
+                Expanded(
+                  child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, color: ConsultationPalette.ink)),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppTheme.md),
+            Text(
+              hasContent ? body.trim() : 'Not documented in this visit — tap to add in patient record.',
+              style: TextStyle(
+                height: 1.5,
+                fontSize: 14,
+                color: hasContent ? ConsultationPalette.ink : ConsultationPalette.muted,
+                fontStyle: hasContent ? FontStyle.normal : FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
+  bool _isEmpty(String v) {
+    final lower = v.toLowerCase();
+    return lower.contains('not available') || lower.contains('not specified');
+  }
+}
+
+class _BulletSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color accent;
+  final List<String> items;
+
+  const _BulletSection({
+    required this.title,
+    required this.icon,
+    required this.accent,
+    required this.items,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: effectiveTone.withValues(alpha: 0.18)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: ConsultationPalette.surface,
+        borderRadius: AppTheme.largeRadius,
+        border: Border.all(color: accent.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: effectiveTone.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: effectiveTone, size: 18),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _ink),
-                ),
-              ),
+              Icon(icon, color: accent, size: 20),
+              const SizedBox(width: AppTheme.sm),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700, color: ConsultationPalette.ink)),
             ],
           ),
-          const SizedBox(height: 10),
-          ...content.map(
+          const SizedBox(height: AppTheme.sm),
+          ...items.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('•  ', style: TextStyle(color: _muted)),
-                  Expanded(
-                    child: Text(
-                      item.trim(),
-                      style: const TextStyle(fontSize: 12, color: _ink, height: 1.4),
-                    ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 7),
+                    width: 5,
+                    height: 5,
+                    decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
                   ),
+                  const SizedBox(width: AppTheme.sm),
+                  Expanded(child: Text(item, style: const TextStyle(height: 1.45, fontSize: 14))),
                 ],
               ),
             ),
@@ -480,50 +375,33 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Color color;
-  final String message;
+class _RawExpansion extends StatelessWidget {
+  final String raw;
 
-  const _InfoCard({
-    required this.title,
-    required this.icon,
-    required this.color,
-    required this.message,
-  });
+  const _RawExpansion({required this.raw});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
+        color: ConsultationPalette.surface,
+        borderRadius: AppTheme.largeRadius,
+        border: Border.all(color: AppTheme.dividerColor),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: const Text('Full AI output', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppTheme.lg, 0, AppTheme.lg, AppTheme.lg),
+              child: SelectableText(
+                raw.trim().isEmpty ? 'No summary generated.' : raw,
+                style: const TextStyle(fontSize: 13, height: 1.5, color: ConsultationPalette.muted),
+              ),
             ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _ink)),
-                const SizedBox(height: 4),
-                Text(message, style: const TextStyle(fontSize: 12, color: _muted)),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
