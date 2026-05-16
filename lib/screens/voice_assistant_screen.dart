@@ -9,12 +9,14 @@ import '../core/errors/app_error_handler.dart';
 import '../core/healthcare/healthcare_services_manager.dart';
 import '../core/healthcare/ai_analysis_mixin.dart';
 import '../core/healthcare/patient_loading_mixin.dart';
-import '../core/healthcare/healthcare_widgets.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
 import '../widgets/audio_visualizer.dart';
 import 'doctor_patient_create_edit_screen.dart';
 import 'consultation_history_screen.dart';
+import 'prescription_screen.dart';
+import 'summary_screen.dart';
+import 'transcription_detail_screen.dart';
 
 class InteractiveVoiceAssistantScreen extends StatefulWidget {
   final String patientId;
@@ -679,11 +681,11 @@ class _InteractiveVoiceAssistantScreenState
                     icon: Icons.record_voice_over,
                     hasContent: _latestTranscript.trim().isNotEmpty,
                     color: AppTheme.primaryColor,
-                    onTap: () => HealthcareResultSheet.show(
+                    onTap: () => Navigator.push(
                       context,
-                      title: 'Transcription',
-                      content: _latestTranscript,
-                      icon: Icons.record_voice_over,
+                      MaterialPageRoute(
+                        builder: (_) => TranscriptionDetailScreen(transcription: _latestTranscript),
+                      ),
                     ),
                   ),
                   const SizedBox(height: AppTheme.md),
@@ -695,12 +697,11 @@ class _InteractiveVoiceAssistantScreenState
                     icon: Icons.summarize,
                     hasContent: _latestSummary.trim().isNotEmpty,
                     color: AppTheme.successColor,
-                    onTap: () => HealthcareResultSheet.show(
+                    onTap: () => Navigator.push(
                       context,
-                      title: 'Clinical Summary',
-                      content: _latestSummary,
-                      icon: Icons.summarize,
-                      accentColor: AppTheme.successColor,
+                      MaterialPageRoute(
+                        builder: (_) => SummaryScreen(summary: _latestSummary),
+                      ),
                     ),
                   ),
                   const SizedBox(height: AppTheme.md),
@@ -712,12 +713,11 @@ class _InteractiveVoiceAssistantScreenState
                     icon: Icons.medication,
                     hasContent: _latestPrescription.trim().isNotEmpty,
                     color: AppTheme.warningColor,
-                    onTap: () => HealthcareResultSheet.show(
+                    onTap: () => Navigator.push(
                       context,
-                      title: 'Prescription Suggestions',
-                      content: _latestPrescription,
-                      icon: Icons.medication,
-                      accentColor: AppTheme.warningColor,
+                      MaterialPageRoute(
+                        builder: (_) => PrescriptionScreen(prescription: _latestPrescription),
+                      ),
                     ),
                   ),
                 ],
@@ -913,45 +913,37 @@ class _InteractiveVoiceAssistantScreenState
 '''
         : '';
 
-    return '''As a clinical documentation assistant, analyze this consultation transcript and create a comprehensive clinical summary.
+    return '''As a clinical documentation assistant, analyze this consultation transcript.
 
 $patientContext
 
-**Consultation Transcript:**
+Transcript:
 $transcript
 
-Please provide a structured clinical summary with the following sections:
+Use EXACTLY these section headers (with bullets under each):
 
-## CHIEF CONCERNS
-- Primary reason for visit
-- Patient's main complaints
+Chief complaint:
+- ...
 
-## HISTORY OF PRESENT ILLNESS
-- Onset, duration, and progression of symptoms
-- Associated symptoms
-- Relevant context
+HPI:
+- ...
 
-## CLINICAL ASSESSMENT
-- Key findings from the consultation
-- Clinical impression
-- Differential considerations
+Findings/Observations:
+- ...
 
-## PLAN
-- Recommended investigations
-- Treatment approach
-- Follow-up instructions
+Assessment:
+- ...
 
-## SAFETY FLAGS
-- Red flag symptoms to watch for
-- Warning signs requiring immediate attention
+Plan:
+- ...
 
-## FOLLOW-UP
-- Recommended follow-up timing
-- Additional referrals if needed
+Safety flags:
+- ...
 
-Format clearly with headers and bullet points for easy clinical review.
-Do not include template placeholders like [Insert Date Here] or [Insert Name].
-If information is missing, explicitly write: Not available from transcript.''';
+Follow-up:
+- ...
+
+Rules: Facts from transcript only. If unknown write "Not available from transcript". No # markdown headers.''';
   }
 
   /// Generate prescription prompt WITH the actual transcript included
@@ -965,40 +957,31 @@ If information is missing, explicitly write: Not available from transcript.''';
 '''
         : '';
 
-    return '''As a clinical prescribing assistant, based on this consultation, suggest appropriate prescription recommendations.
+    return '''As a clinical prescribing assistant, review this consultation.
 
 $patientContext
 
-**Consultation Transcript:**
+Transcript:
 $transcript
 
-Please provide prescription suggestions with the following format for each medication:
+Use EXACTLY these section headers:
 
-## PRESCRIPTION RECOMMENDATIONS
+Medications:
+- drug, dose, frequency, duration (mark OTC items with "(OTC)")
 
-For each recommended medication:
-- **Medication Name** (Generic/Brand)
-- **Dose**: Specific dosage
-- **Route**: How to administer
-- **Frequency**: How often
-- **Duration**: How long to take
-- **Special Instructions**: Food requirements, timing, etc.
+Tests and diagnostics:
+- labs/imaging only if indicated
 
-## CAUTIONS & CONTRAINDICATIONS
-- Drug interactions to watch for
-- Conditions that may contraindicate use
-- Side effects to monitor
+Patient education:
+- self-care and return precautions
 
-## PATIENT EDUCATION
-- Key instructions for the patient
-- When to seek medical attention
+Warnings and cautions:
+- allergies, interactions, red flags
 
-## DISCLAIMER
-⚠️ These are AI-generated suggestions only. Final prescription decisions must be made by a licensed healthcare provider after clinical evaluation.
+Missing details:
+- critical gaps for safe prescribing
 
-Format clearly for easy clinical review.
-Do not include template placeholders like [Insert ...].
-If information is missing, explicitly write: Not available from transcript.''';
+Rules: Do not put drugs under Tests. Facts from transcript only. No # headers.''';
   }
 
   String _sanitizeClinicalAiText(String raw) {

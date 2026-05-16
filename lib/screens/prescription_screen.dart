@@ -1,19 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 
-const Color _bgStart = Color(0xFFF3F5FF);
-const Color _bgEnd = Color(0xFFEFF9F7);
-const Color _surface = Colors.white;
-const Color _ink = Color(0xFF1F2430);
-const Color _muted = Color(0xFF6B7280);
-const Color _accent = Color(0xFF4C6FFF);
-const Color _accentSoft = Color(0xFFE8EEFF);
-const Color _warning = Color(0xFFFFB020);
+import '../core/healthcare/clinical_text_parser.dart';
+import '../core/healthcare/consultation_ui_theme.dart';
+import '../theme/app_theme.dart';
 
 class PrescriptionScreen extends StatefulWidget {
   final String prescription;
@@ -27,132 +22,141 @@ class PrescriptionScreen extends StatefulWidget {
 class _PrescriptionScreenState extends State<PrescriptionScreen> {
   bool _isSaving = false;
 
-  Future<void> _savePrescription() async {
-    if (widget.prescription.isEmpty) {
-      _showMessage('No prescription content to save');
+  Future<void> _exportPrescription() async {
+    if (widget.prescription.trim().isEmpty) {
+      _showMessage('No prescription content to export');
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
-
+    setState(() => _isSaving = true);
     try {
-      // Request storage permission
       final status = await Permission.storage.request();
-      if (!status.isGranted) {
-        _showMessage('Storage permission is required to save the prescription');
-        setState(() {
-          _isSaving = false;
-        });
+      if (!status.isGranted && !status.isLimited) {
+        _showMessage('Storage permission needed to export');
         return;
       }
 
-      // Get the documents directory
       final directory = await getApplicationDocumentsDirectory();
-      final fileName = 'prescription_${DateTime.now().millisecondsSinceEpoch}.txt';
-      final filePath = '${directory.path}/$fileName';
-
-      // Write the prescription to a file
-      final file = File(filePath);
-      await file.writeAsString(widget.prescription);
-
-      // Share the file
-      await Share.shareXFiles(
-        [XFile(filePath)],
-        text: 'Your medical prescription',
-      );
-
-      _showMessage('Prescription saved and shared');
+      final filePath = '${directory.path}/prescription_${DateTime.now().millisecondsSinceEpoch}.txt';
+      await File(filePath).writeAsString(widget.prescription);
+      await Share.shareXFiles([XFile(filePath)], text: 'Clinical prescription draft');
+      _showMessage('Prescription exported');
     } catch (e) {
-      _showMessage('Error saving prescription: $e');
+      _showMessage('Export failed: $e');
     } finally {
-      setState(() {
-        _isSaving = false;
-      });
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   void _showMessage(String message) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: message.contains('Error') ? Colors.red : Colors.green,
+        backgroundColor: message.toLowerCase().contains('fail') ? AppTheme.dangerColor : AppTheme.successColor,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final data = _parsePrescription(widget.prescription);
+    final data = ClinicalTextParser.parsePrescription(widget.prescription);
+    final ready = data.missing.isEmpty && data.medications.isNotEmpty;
 
     return Scaffold(
+      backgroundColor: ConsultationPalette.cream,
       appBar: AppBar(
-        title: const Text('Prescription'),
-        backgroundColor: _accent,
-        foregroundColor: Colors.white,
+        title: const Text('Prescription Draft'),
+        backgroundColor: ConsultationPalette.surface,
+        foregroundColor: ConsultationPalette.charcoal,
         elevation: 0,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [_bgStart, _bgEnd],
+        actions: [
+          IconButton(
+            tooltip: 'Copy',
+            icon: const Icon(Icons.copy_outlined),
+            onPressed: widget.prescription.trim().isEmpty
+                ? null
+                : () {
+                    Clipboard.setData(ClipboardData(text: widget.prescription));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Copied'), duration: Duration(seconds: 1)),
+                    );
+                  },
           ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHero(data),
-                const SizedBox(height: 16),
-                _buildMedicationCard(data),
-                const SizedBox(height: 16),
-                _buildTestsCard(data),
-                const SizedBox(height: 16),
-                _buildInstructionCard(data),
-                const SizedBox(height: 16),
-                _buildWarningsCard(data),
-                const SizedBox(height: 16),
-                _buildMissingCard(data),
-                const SizedBox(height: 16),
-                _buildRawOutput(),
-              ],
-            ),
-          ),
-        ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _isSaving ? null : _savePrescription,
-        backgroundColor: _accent,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _isSaving ? null : _exportPrescription,
+        backgroundColor: ConsultationPalette.prescription,
         foregroundColor: Colors.white,
-        elevation: 8,
-        tooltip: 'Save Prescription',
-        child: _isSaving
-            ? const CircularProgressIndicator(color: Colors.white)
-            : const Icon(Icons.download),
+        icon: _isSaving
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.ios_share),
+        label: const Text('Export'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, 100),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildHero(data, ready),
+            const SizedBox(height: AppTheme.lg),
+            _DisclaimerBanner(),
+            const SizedBox(height: AppTheme.lg),
+            _MedCard(items: data.medications),
+            const SizedBox(height: AppTheme.md),
+            _SectionCard(
+              title: 'Tests & diagnostics',
+              icon: Icons.biotech_outlined,
+              accent: ConsultationPalette.transcript,
+              items: data.tests,
+              emptyHint: 'No investigations suggested for this visit.',
+            ),
+            const SizedBox(height: AppTheme.md),
+            _SectionCard(
+              title: 'Patient instructions',
+              icon: Icons.menu_book_outlined,
+              accent: ConsultationPalette.doctor,
+              items: data.instructions,
+              emptyHint: 'Add follow-up and self-care guidance.',
+            ),
+            if (data.warnings.isNotEmpty) ...[
+              const SizedBox(height: AppTheme.md),
+              _SectionCard(
+                title: 'Warnings & cautions',
+                icon: Icons.warning_amber_rounded,
+                accent: ConsultationPalette.warning,
+                items: data.warnings,
+              ),
+            ],
+            if (data.missing.isNotEmpty) ...[
+              const SizedBox(height: AppTheme.md),
+              _SectionCard(
+                title: 'Missing for safe prescribing',
+                icon: Icons.error_outline,
+                accent: ConsultationPalette.warning,
+                items: data.missing,
+              ),
+            ],
+            const SizedBox(height: AppTheme.lg),
+            _RawExpansion(raw: widget.prescription),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildHero(_PrescriptionData data) {
-    final chipColor = data.missing.isEmpty ? Colors.green : _warning;
-
+  Widget _buildHero(PrescriptionData data, bool ready) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(20),
+        gradient: ConsultationPalette.headerGradient,
+        borderRadius: AppTheme.largeRadius,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 16,
+            color: ConsultationPalette.charcoal.withValues(alpha: 0.12),
+            blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
@@ -165,30 +169,43 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _accentSoft,
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: AppTheme.smallRadius,
                 ),
-                child: const Icon(Icons.medication, color: _accent, size: 20),
+                child: const Icon(Icons.medication, color: Colors.white, size: 22),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: AppTheme.md),
               const Expanded(
                 child: Text(
-                  'Prescription Plan',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _ink),
+                  'Treatment plan',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
                 ),
               ),
-              _Pill(label: data.missing.isEmpty ? 'Ready' : 'Needs input', color: chipColor),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: (ready ? AppTheme.successColor : ConsultationPalette.warning).withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  ready ? 'Draft ready' : 'Review needed',
+                  style: TextStyle(
+                    color: ready ? Colors.white : ConsultationPalette.gold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppTheme.md),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppTheme.sm,
+            runSpacing: AppTheme.xs,
             children: [
-              _Pill(label: 'Meds: ${data.medications.length}', color: _accent),
-              _Pill(label: 'Tests: ${data.tests.length}', color: _accent),
-              _Pill(label: 'Warnings: ${data.warnings.length}', color: _warning),
-              _Pill(label: 'Missing: ${data.missing.length}', color: chipColor),
+              _HeroStat('${data.medications.length} meds', Icons.medication_liquid),
+              _HeroStat('${data.tests.length} tests', Icons.science_outlined),
+              _HeroStat('${data.warnings.length} alerts', Icons.shield_outlined),
             ],
           ),
         ],
@@ -196,238 +213,124 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
     );
   }
 
-  Widget _buildMedicationCard(_PrescriptionData data) {
-    return _SectionCard(
-      title: 'Medications',
-      icon: Icons.medical_services,
-      color: _accent,
-      items: data.medications,
-      fallback: 'No medication details provided yet.',
-    );
-  }
-
-  Widget _buildTestsCard(_PrescriptionData data) {
-    return _SectionCard(
-      title: 'Tests and diagnostics',
-      icon: Icons.biotech,
-      color: _accent,
-      items: data.tests,
-      fallback: 'No tests listed.',
-    );
-  }
-
-  Widget _buildInstructionCard(_PrescriptionData data) {
-    return _SectionCard(
-      title: 'Instructions and follow-up',
-      icon: Icons.task_alt,
-      color: _accent,
-      items: data.instructions,
-      fallback: 'No follow-up instructions captured.',
-    );
-  }
-
-  Widget _buildWarningsCard(_PrescriptionData data) {
-    return _SectionCard(
-      title: 'Warnings and cautions',
-      icon: Icons.warning_amber,
-      color: _warning,
-      items: data.warnings,
-      fallback: 'No warnings noted.',
-      tone: _warning,
-    );
-  }
-
-  Widget _buildMissingCard(_PrescriptionData data) {
-    if (data.missing.isEmpty) {
-      return _InfoCard(
-        title: 'Missing details',
-        icon: Icons.check_circle,
-        color: Colors.green,
-        message: 'No missing details detected.',
-      );
-    }
-
-    return _SectionCard(
-      title: 'Missing details',
-      icon: Icons.error_outline,
-      color: _warning,
-      items: data.missing,
-      tone: _warning,
-    );
-  }
-
-  Widget _buildRawOutput() {
-    return ExpansionTile(
-      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-      collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      backgroundColor: _surface,
-      collapsedBackgroundColor: _surface,
-      title: const Text(
-        'Full output',
-        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _ink),
+  Widget _HeroStat(String label, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
       ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: widget.prescription.trim().isEmpty
-              ? const Text('No prescription available', style: TextStyle(color: _muted))
-              : MarkdownBody(
-                  data: widget.prescription,
-                  styleSheet: MarkdownStyleSheet(
-                    p: const TextStyle(fontSize: 14, height: 1.5, color: _ink),
-                    h1: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _accent),
-                    h2: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _accent),
-                    h3: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _accent),
-                    listBullet: const TextStyle(fontSize: 14, color: _accent),
-                  ),
-                ),
-        ),
-      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.9)),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.95), fontSize: 11, fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
-  }
-
-  _PrescriptionData _parsePrescription(String input) {
-    final medications = <String>[];
-    final tests = <String>[];
-    final instructions = <String>[];
-    final warnings = <String>[];
-    final missing = <String>[];
-
-    if (input.trim().isEmpty) {
-      return _PrescriptionData(
-        medications: medications,
-        tests: tests,
-        instructions: instructions,
-        warnings: warnings,
-        missing: missing,
-      );
-    }
-
-    bool captureMissing = false;
-    final lines = input.split('\n');
-    for (final raw in lines) {
-      final trimmed = raw.trim();
-      if (trimmed.isEmpty) continue;
-
-      final line = trimmed.replaceFirst(RegExp(r'^[-*•]\s+'), '');
-      final lower = line.toLowerCase();
-
-      if (lower.startsWith('missing details')) {
-        captureMissing = true;
-        continue;
-      }
-
-      if (captureMissing) {
-        if (_isSectionHeader(lower)) {
-          captureMissing = false;
-        } else {
-          missing.add(line);
-          continue;
-        }
-      }
-
-      if (_looksLikeMedication(lower)) {
-        medications.add(line);
-        continue;
-      }
-      if (_looksLikeTest(lower)) {
-        tests.add(line);
-        continue;
-      }
-      if (_looksLikeWarning(lower)) {
-        warnings.add(line);
-        continue;
-      }
-      if (_looksLikeInstruction(lower)) {
-        instructions.add(line);
-        continue;
-      }
-
-      instructions.add(line);
-    }
-
-    return _PrescriptionData(
-      medications: medications,
-      tests: tests,
-      instructions: instructions,
-      warnings: warnings,
-      missing: missing,
-    );
-  }
-
-  bool _looksLikeMedication(String value) {
-    return value.contains('mg') ||
-        value.contains('tablet') ||
-        value.contains('capsule') ||
-        value.contains('dose') ||
-        value.contains('take ') ||
-        value.contains('rx') ||
-        value.contains('medication');
-  }
-
-  bool _looksLikeTest(String value) {
-    return value.contains('test') ||
-        value.contains('lab') ||
-        value.contains('scan') ||
-        value.contains('x-ray') ||
-        value.contains('mri') ||
-        value.contains('ct');
-  }
-
-  bool _looksLikeWarning(String value) {
-    return value.contains('avoid') ||
-        value.contains('allergy') ||
-        value.contains('warning') ||
-        value.contains('contraindicated');
-  }
-
-  bool _looksLikeInstruction(String value) {
-    return value.contains('follow') ||
-        value.contains('review') ||
-        value.contains('return') ||
-        value.contains('monitor') ||
-        value.contains('instruction');
-  }
-
-  bool _isSectionHeader(String value) {
-    return value.contains('prescription') || value.contains('summary');
   }
 }
 
-class _PrescriptionData {
-  final List<String> medications;
-  final List<String> tests;
-  final List<String> instructions;
-  final List<String> warnings;
-  final List<String> missing;
-
-  const _PrescriptionData({
-    required this.medications,
-    required this.tests,
-    required this.instructions,
-    required this.warnings,
-    required this.missing,
-  });
+class _DisclaimerBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.md),
+      decoration: BoxDecoration(
+        color: ConsultationPalette.warning.withValues(alpha: 0.1),
+        borderRadius: AppTheme.mediumRadius,
+        border: Border.all(color: ConsultationPalette.warning.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: ConsultationPalette.warning, size: 20),
+          SizedBox(width: AppTheme.sm),
+          Expanded(
+            child: Text(
+              'AI-generated draft for clinician review only. Verify allergies, dosing, and interactions before prescribing.',
+              style: TextStyle(fontSize: 12, height: 1.4, color: ConsultationPalette.ink),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _Pill extends StatelessWidget {
-  final String label;
-  final Color color;
+class _MedCard extends StatelessWidget {
+  final List<String> items;
 
-  const _Pill({required this.label, required this.color});
+  const _MedCard({required this.items});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        color: ConsultationPalette.surface,
+        borderRadius: AppTheme.largeRadius,
+        border: Border.all(color: ConsultationPalette.prescription.withValues(alpha: 0.25)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
+        ],
       ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.medication_outlined, color: ConsultationPalette.prescription),
+              SizedBox(width: AppTheme.sm),
+              Text('Medications', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: ConsultationPalette.ink)),
+            ],
+          ),
+          const SizedBox(height: AppTheme.md),
+          if (items.isEmpty)
+            const Text(
+              'No medications identified — review transcript or add manually.',
+              style: TextStyle(color: ConsultationPalette.muted, fontStyle: FontStyle.italic),
+            )
+          else
+            ...items.map((item) => _MedTile(text: item)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MedTile extends StatelessWidget {
+  final String text;
+
+  const _MedTile({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final isOtc = text.toLowerCase().contains('(otc)') || text.toLowerCase().contains('over-the-counter');
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppTheme.sm),
+      padding: const EdgeInsets.all(AppTheme.md),
+      decoration: BoxDecoration(
+        color: ConsultationPalette.prescription.withValues(alpha: 0.05),
+        borderRadius: AppTheme.smallRadius,
+        border: Border(left: BorderSide(color: ConsultationPalette.prescription, width: 3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: Text(text, style: const TextStyle(height: 1.45, fontSize: 14))),
+          if (isOtc)
+            Container(
+              margin: const EdgeInsets.only(left: AppTheme.sm),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: ConsultationPalette.gold.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text('OTC', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: ConsultationPalette.goldMuted)),
+            ),
+        ],
       ),
     );
   }
@@ -436,131 +339,89 @@ class _Pill extends StatelessWidget {
 class _SectionCard extends StatelessWidget {
   final String title;
   final IconData icon;
-  final Color color;
+  final Color accent;
   final List<String> items;
-  final String? fallback;
-  final Color? tone;
+  final String? emptyHint;
 
   const _SectionCard({
     required this.title,
     required this.icon,
-    required this.color,
+    required this.accent,
     required this.items,
-    this.fallback,
-    this.tone,
+    this.emptyHint,
   });
 
   @override
   Widget build(BuildContext context) {
-    final effectiveTone = tone ?? color;
-    final content = items.isEmpty
-        ? [fallback ?? 'No details provided.']
-        : items;
-
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: effectiveTone.withValues(alpha: 0.18)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: ConsultationPalette.surface,
+        borderRadius: AppTheme.largeRadius,
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: effectiveTone.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: effectiveTone, size: 18),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _ink),
-                ),
-              ),
+              Icon(icon, color: accent, size: 20),
+              const SizedBox(width: AppTheme.sm),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700, color: ConsultationPalette.ink)),
             ],
           ),
-          const SizedBox(height: 10),
-          ...content.map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('•  ', style: TextStyle(color: _muted)),
-                  Expanded(
-                    child: Text(
-                      item.trim(),
-                      style: const TextStyle(fontSize: 12, color: _ink, height: 1.4),
+          const SizedBox(height: AppTheme.sm),
+          if (items.isEmpty)
+            Text(emptyHint ?? 'None listed.', style: const TextStyle(color: ConsultationPalette.muted, fontStyle: FontStyle.italic))
+          else
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 7),
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: AppTheme.sm),
+                    Expanded(child: Text(item, style: const TextStyle(height: 1.45, fontSize: 14))),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Color color;
-  final String message;
+class _RawExpansion extends StatelessWidget {
+  final String raw;
 
-  const _InfoCard({
-    required this.title,
-    required this.icon,
-    required this.color,
-    required this.message,
-  });
+  const _RawExpansion({required this.raw});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
+        color: ConsultationPalette.surface,
+        borderRadius: AppTheme.largeRadius,
+        border: Border.all(color: AppTheme.dividerColor),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: const Text('Full AI output', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppTheme.lg, 0, AppTheme.lg, AppTheme.lg),
+              child: SelectableText(raw, style: const TextStyle(fontSize: 13, height: 1.5, color: ConsultationPalette.muted)),
             ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _ink)),
-                const SizedBox(height: 4),
-                Text(message, style: const TextStyle(fontSize: 12, color: _muted)),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
