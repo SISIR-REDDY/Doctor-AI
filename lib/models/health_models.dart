@@ -8,6 +8,7 @@ class ProviderPatientRecord {
   final String bloodType;
   final String contactNumber;
   final String email;
+  final String photoUrl;
   final String lastVisitSummary;
   final List<String> prescriptions;
   final List<String> reports;
@@ -27,6 +28,7 @@ class ProviderPatientRecord {
     this.bloodType = '',
     this.contactNumber = '',
     this.email = '',
+    this.photoUrl = '',
     this.lastVisitSummary = '',
     this.prescriptions = const <String>[],
     this.reports = const <String>[],
@@ -66,6 +68,7 @@ class ProviderPatientRecord {
     String? bloodType,
     String? contactNumber,
     String? email,
+    String? photoUrl,
     String? lastVisitSummary,
     List<String>? prescriptions,
     List<String>? reports,
@@ -85,6 +88,7 @@ class ProviderPatientRecord {
       bloodType: bloodType ?? this.bloodType,
       contactNumber: contactNumber ?? this.contactNumber,
       email: email ?? this.email,
+      photoUrl: photoUrl ?? this.photoUrl,
       lastVisitSummary: lastVisitSummary ?? this.lastVisitSummary,
       prescriptions: prescriptions ?? this.prescriptions,
       reports: reports ?? this.reports,
@@ -107,6 +111,7 @@ class ProviderPatientRecord {
       'bloodType': bloodType,
       'contactNumber': contactNumber,
       'email': email,
+      'photoUrl': photoUrl,
       'lastVisitSummary': lastVisitSummary,
       'prescriptions': prescriptions,
       'reports': reports,
@@ -129,6 +134,7 @@ class ProviderPatientRecord {
       bloodType: (map['bloodType'] ?? '').toString(),
       contactNumber: (map['contactNumber'] ?? '').toString(),
       email: (map['email'] ?? '').toString(),
+      photoUrl: (map['photoUrl'] ?? '').toString(),
       lastVisitSummary: (map['lastVisitSummary'] ?? '').toString(),
       prescriptions: _toStringList(map['prescriptions']),
       reports: _toStringList(map['reports']),

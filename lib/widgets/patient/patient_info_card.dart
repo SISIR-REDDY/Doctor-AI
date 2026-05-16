@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../models/health_models.dart';
@@ -25,19 +27,7 @@ class PatientInfoCard extends StatelessWidget {
       onTap: onTap,
       child: Row(
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.1),
-              borderRadius: AppTheme.smallRadius,
-            ),
-            child: const Icon(
-              Icons.person,
-              color: AppTheme.primaryColor,
-              size: 28,
-            ),
-          ),
+          _buildAvatar(),
           const SizedBox(width: AppTheme.md),
           Expanded(
             child: Column(
@@ -78,6 +68,24 @@ class PatientInfoCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildAvatar() {
+    final photoPath = patient.photoUrl;
+    final hasPhoto = photoPath.isNotEmpty && File(photoPath).existsSync();
+
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+        borderRadius: AppTheme.smallRadius,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: hasPhoto
+          ? Image.file(File(photoPath), fit: BoxFit.cover)
+          : const Icon(Icons.person, color: AppTheme.primaryColor, size: 28),
     );
   }
 

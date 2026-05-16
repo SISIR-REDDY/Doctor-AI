@@ -5,6 +5,7 @@ import '../core/errors/app_error_handler.dart';
 import '../core/healthcare/healthcare_services_manager.dart';
 import '../models/health_models.dart';
 import '../theme/app_theme.dart';
+import '../widgets/patient/patient_profile_card.dart';
 import 'doctor_patient_create_edit_screen.dart';
 
 class DoctorPatientDetailScreen extends StatefulWidget {
@@ -18,7 +19,14 @@ class DoctorPatientDetailScreen extends StatefulWidget {
 
 class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
   final HealthcareServicesManager _services = HealthcareServicesManager();
+  late ProviderPatientRecord _patient;
   bool _isDeleting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _patient = widget.patient;
+  }
 
   Future<void> _confirmAndDeletePatient() async {
     final confirmed = await showDialog<bool>(
@@ -26,7 +34,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Patient'),
         content: Text(
-          'Are you sure you want to delete ${widget.patient.fullName}? '
+          'Are you sure you want to delete ${_patient.fullName}? '
           'This action cannot be undone and will also remove all associated records.',
         ),
         actions: [
@@ -48,7 +56,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
     setState(() => _isDeleting = true);
 
     try {
-      await _services.deletePatientAndRecords(widget.patient);
+      await _services.deletePatientAndRecords(_patient);
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -57,7 +65,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
           backgroundColor: AppTheme.successColor,
         ),
       );
-      Navigator.of(context).pop(true); // Return true to indicate deletion
+      Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
       AppErrorHandler.showSnackBar(context, error);
@@ -68,27 +76,35 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
     }
   }
 
+  void _openEdit() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DoctorPatientCreateEditScreen(patient: _patient),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final displayName = _patient.fullName.isEmpty ? 'Unknown Patient' : _patient.fullName;
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: Text(widget.patient.fullName),
+        title: Text(
+          displayName,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: AppTheme.surfaceColor,
         elevation: 0,
+        scrolledUnderElevation: 0.5,
         actions: [
           IconButton(
             tooltip: 'Edit Patient',
-            icon: const Icon(Icons.edit),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DoctorPatientCreateEditScreen(patient: widget.patient),
-                ),
-              );
-            },
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: _openEdit,
           ),
           IconButton(
             tooltip: 'Delete Patient',
@@ -105,82 +121,71 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
       ),
       body: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GlossyCard(
-              margin: const EdgeInsets.all(AppTheme.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Patient Snapshot', style: AppTheme.headingSmall),
-                  const SizedBox(height: AppTheme.md),
-                  _row('Age', '${widget.patient.age} years'),
-                  _row('Gender', widget.patient.gender),
-                  _row('Blood Type', widget.patient.bloodType),
-                  _row('Phone', widget.patient.contactNumber),
-                  _row('Email', widget.patient.email),
-                ],
-              ),
+            PatientProfileCard(
+              patient: _patient,
+              onPatientUpdated: (updated) => setState(() => _patient = updated),
             ),
 
-            // Quick Action Buttons
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.sm, AppTheme.lg, 0),
+              child: Text('Quick Actions', style: AppTheme.labelLarge),
+            ),
+            const SizedBox(height: AppTheme.sm),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
               child: Row(
                 children: [
                   Expanded(
                     child: _actionButton(
-                      context,
-                      icon: Icons.mic_none,
+                      icon: Icons.mic_none_rounded,
                       label: 'Consultation',
                       color: AppTheme.primaryColor,
                       onTap: () => Navigator.pushNamed(
                         context,
                         AppRouter.voiceAssistant,
-                        arguments: {
-                          'patientId': widget.patient.id,
-                        },
+                        arguments: {'patientId': _patient.id},
                       ),
                     ),
                   ),
                   const SizedBox(width: AppTheme.sm),
                   Expanded(
                     child: _actionButton(
-                      context,
-                      icon: Icons.note_alt,
+                      icon: Icons.note_alt_outlined,
                       label: 'Notes',
                       color: AppTheme.secondaryColor,
                       onTap: () => Navigator.pushNamed(
                         context,
                         AppRouter.clinicalNotes,
-                        arguments: widget.patient.id,
+                        arguments: _patient.id,
                       ),
                     ),
                   ),
                   const SizedBox(width: AppTheme.sm),
                   Expanded(
                     child: _actionButton(
-                      context,
-                      icon: Icons.document_scanner,
+                      icon: Icons.document_scanner_outlined,
                       label: 'Scan Doc',
                       color: AppTheme.warningColor,
                       onTap: () => Navigator.pushNamed(
                         context,
                         AppRouter.documentScanner,
-                        arguments: widget.patient.id,
+                        arguments: _patient.id,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: AppTheme.sm),
+            const SizedBox(height: AppTheme.lg),
 
-            _section('Last Visit Summary', [widget.patient.lastVisitSummary]),
-            _section('Prescriptions', widget.patient.prescriptions),
-            _section('Reports', widget.patient.reports),
-            _section('Food Allergies', widget.patient.foodAllergies),
-            _section('Medicinal Allergies', widget.patient.medicinalAllergies),
-            _section('Medical History', widget.patient.medicalHistory),
+            _section('Last Visit Summary', [_patient.lastVisitSummary]),
+            _section('Prescriptions', _patient.prescriptions),
+            _section('Reports', _patient.reports),
+            _section('Food Allergies', _patient.foodAllergies),
+            _section('Medicinal Allergies', _patient.medicinalAllergies),
+            _section('Medical History', _patient.medicalHistory),
             const SizedBox(height: AppTheme.xxl),
           ],
         ),
@@ -188,82 +193,112 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
     );
   }
 
-  Widget _actionButton(
-    BuildContext context, {
+  Widget _actionButton({
     required IconData icon,
     required String label,
     required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: AppTheme.mediumRadius,
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: AppTheme.xs),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppTheme.mediumRadius,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor,
+            borderRadius: AppTheme.mediumRadius,
+            border: Border.all(color: color.withValues(alpha: 0.2)),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppTheme.xs),
-      child: Row(
-        children: [
-          SizedBox(width: 120, child: Text(label, style: AppTheme.bodySmall)),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppTheme.lg),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(AppTheme.sm),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: AppTheme.smallRadius,
+                  ),
+                  child: Icon(icon, color: color, size: 22),
+                ),
+                const SizedBox(height: AppTheme.sm),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _section(String title, List<String> values) {
+    final nonEmpty = values.where((v) => v.trim().isNotEmpty).toList();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SectionHeader(title: title),
           GlossyCard(
-            child: values.isEmpty
-                ? Text('None recorded', style: AppTheme.bodySmall)
+            padding: const EdgeInsets.all(AppTheme.lg),
+            child: nonEmpty.isEmpty
+                ? Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: AppTheme.textTertiary.withValues(alpha: 0.8),
+                      ),
+                      const SizedBox(width: AppTheme.sm),
+                      Text(
+                        'None recorded',
+                        style: AppTheme.bodySmall.copyWith(color: AppTheme.textTertiary),
+                      ),
+                    ],
+                  )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: values
+                    children: nonEmpty
                         .map(
                           (value) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: AppTheme.xs),
+                            padding: const EdgeInsets.only(bottom: AppTheme.sm),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 6),
-                                  child: Icon(Icons.circle, size: 7, color: AppTheme.primaryColor),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 7),
+                                  child: Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: AppTheme.primaryColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(width: AppTheme.sm),
-                                Expanded(child: Text(value, style: AppTheme.bodyMedium)),
+                                const SizedBox(width: AppTheme.md),
+                                Expanded(
+                                  child: Text(
+                                    value,
+                                    style: AppTheme.bodyMedium.copyWith(height: 1.45),
+                                  ),
+                                ),
                               ],
                             ),
                           ),

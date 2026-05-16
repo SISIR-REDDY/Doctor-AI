@@ -6,6 +6,57 @@ import 'package:path_provider/path_provider.dart';
 /// Local storage service for audio files
 /// Uses device storage instead of Firebase Storage (works with free plan)
 class StorageService {
+  Future<Directory> _getPatientPhotosDirectory() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final photosDir = Directory('${appDir.path}/patient_photos');
+    if (!await photosDir.exists()) {
+      await photosDir.create(recursive: true);
+    }
+    return photosDir;
+  }
+
+  /// Save patient profile photo locally. Returns the permanent file path.
+  Future<String?> savePatientPhoto({
+    required String sourcePath,
+    required String patientId,
+  }) async {
+    try {
+      final sourceFile = File(sourcePath);
+      if (!await sourceFile.exists()) return null;
+
+      final photosDir = await _getPatientPhotosDirectory();
+      final extension = sourcePath.split('.').last.toLowerCase();
+      final safeExt = ['jpg', 'jpeg', 'png', 'webp'].contains(extension) ? extension : 'jpg';
+      final destinationPath = '${photosDir.path}/patient_$patientId.$safeExt';
+
+      final destination = File(destinationPath);
+      if (await destination.exists()) {
+        await destination.delete();
+      }
+      await sourceFile.copy(destinationPath);
+      return destinationPath;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[StorageService] Failed to save patient photo: $e');
+      }
+      return null;
+    }
+  }
+
+  Future<void> deletePatientPhoto(String photoPath) async {
+    if (photoPath.isEmpty) return;
+    try {
+      final file = File(photoPath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[StorageService] Failed to delete patient photo: $e');
+      }
+    }
+  }
+
   /// Get the local audio storage directory
   Future<Directory> _getAudioDirectory() async {
     final appDir = await getApplicationDocumentsDirectory();
