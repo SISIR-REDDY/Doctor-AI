@@ -16,29 +16,66 @@ class GeminiService {
   }
 
   String _buildSummaryPrompt(String transcript) {
-    return '''You are a clinical documentation assistant.
-Summarize the following doctor-patient conversation in a concise, structured format.
+    return '''You are a clinical documentation assistant. Analyze this consultation transcript.
 
-Format:
-- Chief complaint
-- HPI (1-2 sentences)
-- Findings/Observations
-- Assessment
-- Plan/Next steps
-
-Conversation:
+Transcript:
 $transcript
-''';
+
+Respond using EXACTLY these section headers (one per line, with bullets under each):
+
+Chief complaint:
+- ...
+
+HPI:
+- ...
+
+Findings/Observations:
+- ...
+
+Assessment:
+- ...
+
+Plan:
+- ...
+
+Safety flags:
+- ... (or "None noted")
+
+Follow-up:
+- ...
+
+Rules:
+- Use only facts from the transcript. If unknown, write "Not available from transcript".
+- No markdown headers (#). No placeholders like [Insert name].
+- Keep each section concise and clinically useful.''';
   }
 
   String _buildPrescriptionPrompt(String transcript) {
-    return '''You are a clinical assistant.
-Based on the conversation below, draft a prescription plan or recommendations.
-If information is insufficient, state "Insufficient data" and list missing details.
-Use bullet points.
+    return '''You are a clinical prescribing assistant. Based on this consultation transcript:
 
-Conversation:
 $transcript
-''';
+
+Respond using EXACTLY these section headers:
+
+Medications:
+- drug name, dose, frequency, duration (only if supported by transcript)
+
+Tests and diagnostics:
+- labs/imaging to order (only if clinically indicated)
+
+Patient education:
+- self-care, lifestyle, when to return
+
+Warnings and cautions:
+- allergies, interactions, red flags
+
+Missing details:
+- list any critical missing info for a safe prescription
+
+Rules:
+- Separate OTC suggestions under Medications with "(OTC)" prefix.
+- Do not put medication advice under Tests.
+- If insufficient data, say so under Missing details.
+- No markdown # headers. No placeholders.''';
   }
 }
