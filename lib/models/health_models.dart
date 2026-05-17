@@ -8,7 +8,10 @@ class ProviderPatientRecord {
   final String bloodType;
   final String contactNumber;
   final String email;
+  /// Local absolute path (runtime only; not written to Firestore).
   final String photoUrl;
+  /// Filename stored in Firestore, e.g. `patient_<id>.jpg` (efficient, portable).
+  final String photoFileName;
   final String lastVisitSummary;
   final List<String> prescriptions;
   final List<String> reports;
@@ -29,6 +32,7 @@ class ProviderPatientRecord {
     this.contactNumber = '',
     this.email = '',
     this.photoUrl = '',
+    this.photoFileName = '',
     this.lastVisitSummary = '',
     this.prescriptions = const <String>[],
     this.reports = const <String>[],
@@ -69,6 +73,7 @@ class ProviderPatientRecord {
     String? contactNumber,
     String? email,
     String? photoUrl,
+    String? photoFileName,
     String? lastVisitSummary,
     List<String>? prescriptions,
     List<String>? reports,
@@ -89,6 +94,7 @@ class ProviderPatientRecord {
       contactNumber: contactNumber ?? this.contactNumber,
       email: email ?? this.email,
       photoUrl: photoUrl ?? this.photoUrl,
+      photoFileName: photoFileName ?? this.photoFileName,
       lastVisitSummary: lastVisitSummary ?? this.lastVisitSummary,
       prescriptions: prescriptions ?? this.prescriptions,
       reports: reports ?? this.reports,
@@ -111,7 +117,7 @@ class ProviderPatientRecord {
       'bloodType': bloodType,
       'contactNumber': contactNumber,
       'email': email,
-      'photoUrl': photoUrl,
+      if (photoFileName.trim().isNotEmpty) 'photoFileName': photoFileName.trim(),
       'lastVisitSummary': lastVisitSummary,
       'prescriptions': prescriptions,
       'reports': reports,
@@ -134,7 +140,8 @@ class ProviderPatientRecord {
       bloodType: (map['bloodType'] ?? '').toString(),
       contactNumber: (map['contactNumber'] ?? '').toString(),
       email: (map['email'] ?? '').toString(),
-      photoUrl: (map['photoUrl'] ?? '').toString(),
+      photoUrl: '',
+      photoFileName: _resolvePhotoFileName(map),
       lastVisitSummary: (map['lastVisitSummary'] ?? '').toString(),
       prescriptions: _toStringList(map['prescriptions']),
       reports: _toStringList(map['reports']),
@@ -157,6 +164,8 @@ class ClinicalNote {
   final List<String> treatments;
   final List<String> followUpItems;
   final String createdBy;
+  /// `written`, `voice`, or `ai`
+  final String noteType;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -170,6 +179,7 @@ class ClinicalNote {
     this.treatments = const <String>[],
     this.followUpItems = const <String>[],
     this.createdBy = 'Clinician',
+    this.noteType = 'written',
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -185,6 +195,7 @@ class ClinicalNote {
     List<String>? treatments,
     List<String>? followUpItems,
     String? createdBy,
+    String? noteType,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -198,6 +209,7 @@ class ClinicalNote {
       treatments: treatments ?? this.treatments,
       followUpItems: followUpItems ?? this.followUpItems,
       createdBy: createdBy ?? this.createdBy,
+      noteType: noteType ?? this.noteType,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -214,6 +226,7 @@ class ClinicalNote {
       'treatments': treatments,
       'followUpItems': followUpItems,
       'createdBy': createdBy,
+      'noteType': noteType,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -230,10 +243,22 @@ class ClinicalNote {
       treatments: _toStringList(map['treatments']),
       followUpItems: _toStringList(map['followUpItems']),
       createdBy: (map['createdBy'] ?? 'Clinician').toString(),
+      noteType: (map['noteType'] ?? 'written').toString(),
       createdAt: _toDateTime(map['createdAt']),
       updatedAt: _toDateTime(map['updatedAt']),
     );
   }
+}
+
+String _resolvePhotoFileName(Map<String, dynamic> map) {
+  final stored = (map['photoFileName'] ?? '').toString().trim();
+  if (stored.isNotEmpty) return stored;
+
+  final legacyPath = (map['photoUrl'] ?? '').toString().trim();
+  if (legacyPath.isEmpty) return '';
+
+  final parts = legacyPath.replaceAll('\\', '/').split('/');
+  return parts.isNotEmpty ? parts.last : '';
 }
 
 class ConsultationSession {

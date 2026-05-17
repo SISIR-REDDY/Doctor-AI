@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../models/health_models.dart';
 import '../../theme/app_theme.dart';
+import 'patient_avatar.dart';
 
 /// Reusable patient information display card
 /// Provides consistent patient info UI across different clinical screens
@@ -72,20 +71,10 @@ class PatientInfoCard extends StatelessWidget {
   }
 
   Widget _buildAvatar() {
-    final photoPath = patient.photoUrl;
-    final hasPhoto = photoPath.isNotEmpty && File(photoPath).existsSync();
-
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withValues(alpha: 0.1),
-        borderRadius: AppTheme.smallRadius,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: hasPhoto
-          ? Image.file(File(photoPath), fit: BoxFit.cover)
-          : const Icon(Icons.person, color: AppTheme.primaryColor, size: 28),
+    return PatientAvatar.fromPatient(
+      patient,
+      size: 56,
+      borderRadius: 14,
     );
   }
 

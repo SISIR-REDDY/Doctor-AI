@@ -3,20 +3,79 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+/// Result of saving a patient photo locally (Firestore stores [fileName] only).
+class PatientPhotoSaveResult {
+  final String fileName;
+  final String localPath;
+
+  const PatientPhotoSaveResult({
+    required this.fileName,
+    required this.localPath,
+  });
+}
+
 /// Local storage service for audio files
 /// Uses device storage instead of Firebase Storage (works with free plan)
 class StorageService {
+  static String? _cachedPatientPhotosDir;
+
+  /// Warms the local photos directory cache so list avatars can resolve paths synchronously.
+  Future<void> warmPatientPhotosCache() async {
+    await _getPatientPhotosDirectory();
+  }
+
+  /// Resolves a patient photo path from Firestore filename, legacy path, or patient id.
+  String? resolvePatientPhotoPathSync({
+    required String photoUrl,
+    required String photoFileName,
+    required String patientId,
+  }) {
+    final dir = _cachedPatientPhotosDir;
+
+    final fileName = photoFileName.trim();
+    if (fileName.isNotEmpty && dir != null) {
+      final byName = '$dir${Platform.pathSeparator}$fileName';
+      if (_fileExistsSync(byName)) return byName;
+    }
+
+    final trimmed = photoUrl.trim();
+    if (trimmed.isNotEmpty && _fileExistsSync(trimmed)) {
+      return trimmed;
+    }
+
+    if (dir == null || patientId.trim().isEmpty) return null;
+
+    for (final ext in const ['jpg', 'jpeg', 'png', 'webp']) {
+      final candidate = '$dir${Platform.pathSeparator}patient_${patientId.trim()}.$ext';
+      if (_fileExistsSync(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  bool _fileExistsSync(String path) {
+    if (path.isEmpty) return false;
+    if (File(path).existsSync()) return true;
+    final normalized = path
+        .replaceAll('/', Platform.pathSeparator)
+        .replaceAll('\\', Platform.pathSeparator);
+    if (normalized != path && File(normalized).existsSync()) {
+      return true;
+    }
+    return false;
+  }
+
   Future<Directory> _getPatientPhotosDirectory() async {
     final appDir = await getApplicationDocumentsDirectory();
     final photosDir = Directory('${appDir.path}/patient_photos');
     if (!await photosDir.exists()) {
       await photosDir.create(recursive: true);
     }
+    _cachedPatientPhotosDir = photosDir.path;
     return photosDir;
   }
 
-  /// Save patient profile photo locally. Returns the permanent file path.
-  Future<String?> savePatientPhoto({
+  /// Saves a compressed photo locally. Firestore should store [PatientPhotoSaveResult.fileName] only.
+  Future<PatientPhotoSaveResult?> savePatientPhoto({
     required String sourcePath,
     required String patientId,
   }) async {
@@ -25,16 +84,16 @@ class StorageService {
       if (!await sourceFile.exists()) return null;
 
       final photosDir = await _getPatientPhotosDirectory();
-      final extension = sourcePath.split('.').last.toLowerCase();
-      final safeExt = ['jpg', 'jpeg', 'png', 'webp'].contains(extension) ? extension : 'jpg';
-      final destinationPath = '${photosDir.path}/patient_$patientId.$safeExt';
+      const safeExt = 'jpg';
+      final fileName = 'patient_${patientId.trim()}.$safeExt';
+      final destinationPath = '${photosDir.path}${Platform.pathSeparator}$fileName';
 
       final destination = File(destinationPath);
       if (await destination.exists()) {
         await destination.delete();
       }
       await sourceFile.copy(destinationPath);
-      return destinationPath;
+      return PatientPhotoSaveResult(fileName: fileName, localPath: destinationPath);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[StorageService] Failed to save patient photo: $e');

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -8,7 +6,10 @@ import '../../models/health_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/firebase/storage_service.dart';
 import '../../theme/app_theme.dart';
+import 'patient_avatar.dart';
 import 'patient_record_section.dart';
+
+const double _profileAvatarSize = 148;
 
 /// Field keys for tap-to-edit on the profile card.
 abstract final class PatientFieldKeys {
@@ -75,19 +76,26 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
   void initState() {
     super.initState();
     _patient = widget.patient;
+    _storage.warmPatientPhotosCache();
   }
 
   @override
   void didUpdateWidget(covariant PatientProfileCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.patient.updatedAt != widget.patient.updatedAt ||
-        oldWidget.patient.id != widget.patient.id) {
+        oldWidget.patient.id != widget.patient.id ||
+        oldWidget.patient.photoUrl != widget.patient.photoUrl) {
       _patient = widget.patient;
     }
   }
 
   bool get _hasPhoto =>
-      _patient.photoUrl.isNotEmpty && File(_patient.photoUrl).existsSync();
+      _storage.resolvePatientPhotoPathSync(
+        photoUrl: _patient.photoUrl,
+        photoFileName: _patient.photoFileName,
+        patientId: _patient.id,
+      ) !=
+      null;
 
   Future<void> _showPhotoOptions() async {
     final action = await showModalBottomSheet<String>(
@@ -139,20 +147,25 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
     try {
       final picked = await _imagePicker.pickImage(
         source: source,
-        imageQuality: 85,
-        maxWidth: 1200,
+        imageQuality: 72,
+        maxWidth: 800,
+        maxHeight: 800,
       );
       if (picked == null || !mounted) return;
       setState(() => _isUpdatingPhoto = true);
-      final savedPath = await _storage.savePatientPhoto(
+      final saved = await _storage.savePatientPhoto(
         sourcePath: picked.path,
         patientId: _patient.id,
       );
-      if (savedPath == null) return;
+      if (saved == null) return;
       final oldPath = _patient.photoUrl;
-      final updated = _patient.copyWith(photoUrl: savedPath, updatedAt: DateTime.now());
+      final updated = _patient.copyWith(
+        photoUrl: saved.localPath,
+        photoFileName: saved.fileName,
+        updatedAt: DateTime.now(),
+      );
       await _firestore.savePatientRecord(updated);
-      if (oldPath.isNotEmpty && oldPath != savedPath) {
+      if (oldPath.isNotEmpty && oldPath != saved.localPath) {
         await _storage.deletePatientPhoto(oldPath);
       }
       if (!mounted) return;
@@ -169,7 +182,11 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
     setState(() => _isUpdatingPhoto = true);
     try {
       final oldPath = _patient.photoUrl;
-      final updated = _patient.copyWith(photoUrl: '', updatedAt: DateTime.now());
+      final updated = _patient.copyWith(
+        photoUrl: '',
+        photoFileName: '',
+        updatedAt: DateTime.now(),
+      );
       await _firestore.savePatientRecord(updated);
       if (oldPath.isNotEmpty) await _storage.deletePatientPhoto(oldPath);
       if (!mounted) return;
@@ -281,7 +298,7 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.xl, AppTheme.lg, AppTheme.lg),
+      padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.xxl, AppTheme.lg, AppTheme.xl),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [PatientDetailPalette.charcoal, PatientDetailPalette.slate],
@@ -296,19 +313,19 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 3),
-                  ),
-                  child: ClipOval(child: _buildAvatar()),
+                PatientAvatar.fromPatient(
+                  _patient,
+                  size: _profileAvatarSize,
+                  borderRadius: _profileAvatarSize / 2,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  initialsColor: Colors.white,
+                  borderColor: Colors.white,
+                  borderWidth: 3,
                 ),
                 if (_isUpdatingPhoto)
                   Container(
-                    width: 100,
-                    height: 100,
+                    width: _profileAvatarSize,
+                    height: _profileAvatarSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.black.withValues(alpha: 0.4),
@@ -319,12 +336,12 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
                   )
                 else
                   Positioned(
-                    right: 0,
-                    bottom: 0,
+                    right: 4,
+                    bottom: 4,
                     child: Container(
-                      padding: const EdgeInsets.all(6),
+                      padding: const EdgeInsets.all(8),
                       decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                      child: const Icon(Icons.camera_alt_rounded, size: 16, color: PatientDetailPalette.gold),
+                      child: const Icon(Icons.camera_alt_rounded, size: 18, color: PatientDetailPalette.gold),
                     ),
                   ),
               ],
@@ -485,34 +502,6 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
           borderSide: const BorderSide(color: PatientDetailPalette.gold, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.sm),
-      ),
-    );
-  }
-
-  Widget _buildAvatar() {
-    if (_hasPhoto) {
-      return Image.file(
-        File(_patient.photoUrl),
-        fit: BoxFit.cover,
-        width: 100,
-        height: 100,
-        errorBuilder: (_, __, ___) => _placeholderAvatar(),
-      );
-    }
-    return _placeholderAvatar();
-  }
-
-  Widget _placeholderAvatar() {
-    final first = widget.firstNameController.text.trim();
-    final last = widget.lastNameController.text.trim();
-    final initials = '${first.isNotEmpty ? first[0].toUpperCase() : ''}'
-        '${last.isNotEmpty ? last[0].toUpperCase() : ''}';
-    return Container(
-      color: Colors.white.withValues(alpha: 0.2),
-      child: Center(
-        child: initials.isNotEmpty
-            ? Text(initials, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600))
-            : const Icon(Icons.person, size: 48, color: Colors.white70),
       ),
     );
   }
