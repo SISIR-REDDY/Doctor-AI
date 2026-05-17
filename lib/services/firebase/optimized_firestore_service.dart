@@ -5,6 +5,7 @@ import '../../core/config/firebase_config.dart';
 import '../../core/errors/app_exception.dart';
 import '../../models/health_models.dart';
 import 'firebase_bootstrap_service.dart';
+import 'firestore_service.dart';
 
 /// Enhanced Firestore service with optimized queries, batch operations, and smart caching
 class OptimizedFirestoreService {
@@ -342,7 +343,8 @@ class OptimizedFirestoreService {
   /// Watch patients with connection resilience
   Stream<List<ProviderPatientRecord>> watchDoctorPatientsOptimized(String doctorId) {
     if (!_isFirebaseAvailable) {
-      return Stream.value(_patientsCacheByDoctor[doctorId] ?? const []);
+      final cached = _patientsCacheByDoctor[doctorId] ?? const [];
+      return Stream.value(List<ProviderPatientRecord>.from(cached));
     }
 
     return _patientsCollection
@@ -361,9 +363,10 @@ class OptimizedFirestoreService {
               .map((doc) => ProviderPatientRecord.fromMap(doc.data()))
               .toList();
 
-          _patientsCacheByDoctor[doctorId] = patients;
+          _patientsCacheByDoctor[doctorId] =
+              List<ProviderPatientRecord>.from(patients);
           _updateCacheTimestamp('patients_$doctorId');
-          return patients;
+          return List<ProviderPatientRecord>.from(patients);
         });
   }
 
@@ -543,13 +546,21 @@ class OptimizedFirestoreService {
     }
   }
 
+  static void _evictPatientFromOptimizedCache(String patientId) {
+    for (final key in _patientsCacheByDoctor.keys.toList()) {
+      final current = _patientsCacheByDoctor[key];
+      if (current == null) continue;
+      _patientsCacheByDoctor[key] =
+          current.where((p) => p.id != patientId).toList(growable: false);
+    }
+  }
+
   Future<void> deletePatientRecord(String patientId) async {
+    FirestoreService.evictPatientFromCache(patientId);
+    _evictPatientFromOptimizedCache(patientId);
     if (!_isFirebaseAvailable) return;
     try {
       await _patientsCollection.doc(patientId).delete();
-      for (final cacheList in _patientsCacheByDoctor.values) {
-        cacheList.removeWhere((p) => p.id == patientId);
-      }
     } catch (e) {
       debugPrint('[OptimizedFirestoreService] Error deleting patient: $e');
       rethrow;
@@ -560,8 +571,11 @@ class OptimizedFirestoreService {
     if (!_isFirebaseAvailable) return;
     try {
       await _clinicalReportsCollection.doc(reportId).delete();
-      for (final cacheList in _clinicalCacheByPatient.values) {
-        cacheList.removeWhere((n) => n.id == reportId);
+      for (final key in _clinicalCacheByPatient.keys.toList()) {
+        final current = _clinicalCacheByPatient[key];
+        if (current == null) continue;
+        _clinicalCacheByPatient[key] =
+            current.where((n) => n.id != reportId).toList(growable: false);
       }
     } catch (e) {
       debugPrint('[OptimizedFirestoreService] Error deleting clinical report: $e');
@@ -573,8 +587,11 @@ class OptimizedFirestoreService {
     if (!_isFirebaseAvailable) return;
     try {
       await _documentScansCollection.doc(scanId).delete();
-      for (final cacheList in _documentScansCacheByPatient.values) {
-        cacheList.removeWhere((s) => s.id == scanId);
+      for (final key in _documentScansCacheByPatient.keys.toList()) {
+        final current = _documentScansCacheByPatient[key];
+        if (current == null) continue;
+        _documentScansCacheByPatient[key] =
+            current.where((s) => s.id != scanId).toList(growable: false);
       }
     } catch (e) {
       debugPrint('[OptimizedFirestoreService] Error deleting document scan: $e');

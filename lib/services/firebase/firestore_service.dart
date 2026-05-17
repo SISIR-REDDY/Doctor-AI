@@ -97,7 +97,8 @@ class FirestoreService {
 
   Stream<List<ClinicalNote>> watchClinicalReports(String patientId) {
     if (!_isFirebaseAvailable) {
-      return Stream.value(_clinicalCacheByPatient[patientId] ?? const []);
+      final cached = _clinicalCacheByPatient[patientId] ?? const [];
+      return Stream.value(List<ClinicalNote>.from(cached));
     }
 
     return _clinicalReportsCollection
@@ -109,15 +110,36 @@ class FirestoreService {
               .map((doc) => ClinicalNote.fromMap(doc.data()))
               .toList()
               ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-            _clinicalCacheByPatient[patientId] = notes;
-            return notes;
+            _clinicalCacheByPatient[patientId] =
+                List<ClinicalNote>.from(notes);
+            return List<ClinicalNote>.from(notes);
+          },
+        );
+  }
+
+  Stream<List<ClinicalNote>> watchClinicalReportsForDoctor(String doctorId) {
+    if (!_isFirebaseAvailable) {
+      return Stream.value(const []);
+    }
+
+    return _clinicalReportsCollection
+        .where('doctorId', isEqualTo: doctorId)
+        .snapshots()
+        .map(
+          (snapshot) {
+            final notes = snapshot.docs
+                .map((doc) => ClinicalNote.fromMap(doc.data()))
+                .toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return List<ClinicalNote>.from(notes);
           },
         );
   }
 
   Future<List<ClinicalNote>> getClinicalReports(String patientId) async {
     if (!_isFirebaseAvailable) {
-      return _clinicalCacheByPatient[patientId] ?? const [];
+      final cached = _clinicalCacheByPatient[patientId] ?? const [];
+      return List<ClinicalNote>.from(cached);
     }
 
     try {
@@ -128,10 +150,28 @@ class FirestoreService {
           .map((doc) => ClinicalNote.fromMap(doc.data()))
           .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      _clinicalCacheByPatient[patientId] = notes;
-      return notes;
+      _clinicalCacheByPatient[patientId] = List<ClinicalNote>.from(notes);
+      return List<ClinicalNote>.from(notes);
     } catch (_) {
-      return _clinicalCacheByPatient[patientId] ?? const [];
+      final cached = _clinicalCacheByPatient[patientId] ?? const [];
+      return List<ClinicalNote>.from(cached);
+    }
+  }
+
+  Future<List<ClinicalNote>> getClinicalReportsForDoctor(String doctorId) async {
+    if (!_isFirebaseAvailable) return const [];
+
+    try {
+      final snapshot = await _clinicalReportsCollection
+          .where('doctorId', isEqualTo: doctorId)
+          .get(const GetOptions(source: Source.serverAndCache));
+      final notes = snapshot.docs
+          .map((doc) => ClinicalNote.fromMap(doc.data()))
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return List<ClinicalNote>.from(notes);
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -193,9 +233,47 @@ class FirestoreService {
     );
   }
 
+  /// Removes a patient from in-memory caches without mutating lists the UI may be iterating.
+  static void evictPatientFromCache(String patientId) {
+    for (final key in _patientsCacheByDoctor.keys.toList()) {
+      final current = _patientsCacheByDoctor[key];
+      if (current == null) continue;
+      _patientsCacheByDoctor[key] =
+          current.where((p) => p.id != patientId).toList(growable: false);
+    }
+  }
+
+  static void _evictClinicalNoteFromCache(String reportId) {
+    for (final key in _clinicalCacheByPatient.keys.toList()) {
+      final current = _clinicalCacheByPatient[key];
+      if (current == null) continue;
+      _clinicalCacheByPatient[key] =
+          current.where((r) => r.id != reportId).toList(growable: false);
+    }
+  }
+
+  static void _evictConsultationFromCache(String sessionId) {
+    for (final key in _consultationCacheByKey.keys.toList()) {
+      final current = _consultationCacheByKey[key];
+      if (current == null) continue;
+      _consultationCacheByKey[key] =
+          current.where((s) => s.id != sessionId).toList(growable: false);
+    }
+  }
+
+  static void _evictDocumentScanFromCache(String scanId) {
+    for (final key in _documentScansCacheByPatient.keys.toList()) {
+      final current = _documentScansCacheByPatient[key];
+      if (current == null) continue;
+      _documentScansCacheByPatient[key] =
+          current.where((s) => s.id != scanId).toList(growable: false);
+    }
+  }
+
   Stream<List<ProviderPatientRecord>> watchDoctorPatients(String doctorId) {
     if (!_isFirebaseAvailable) {
-      return Stream.value(_patientsCacheByDoctor[doctorId] ?? const []);
+      final cached = _patientsCacheByDoctor[doctorId] ?? const [];
+      return Stream.value(List<ProviderPatientRecord>.from(cached));
     }
 
     return _patientsCollection
@@ -204,18 +282,20 @@ class FirestoreService {
         .map(
           (snapshot) {
             final patients = snapshot.docs
-              .map((doc) => ProviderPatientRecord.fromMap(doc.data()))
-              .toList()
+                .map((doc) => ProviderPatientRecord.fromMap(doc.data()))
+                .toList()
               ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-            _patientsCacheByDoctor[doctorId] = patients;
-            return patients;
+            _patientsCacheByDoctor[doctorId] =
+                List<ProviderPatientRecord>.from(patients);
+            return List<ProviderPatientRecord>.from(patients);
           },
         );
   }
 
   Future<List<ProviderPatientRecord>> getDoctorPatients(String doctorId) async {
     if (!_isFirebaseAvailable) {
-      return _patientsCacheByDoctor[doctorId] ?? const [];
+      final cached = _patientsCacheByDoctor[doctorId] ?? const [];
+      return List<ProviderPatientRecord>.from(cached);
     }
 
     try {
@@ -226,10 +306,11 @@ class FirestoreService {
           .map((doc) => ProviderPatientRecord.fromMap(doc.data()))
           .toList()
           ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      _patientsCacheByDoctor[doctorId] = patients;
-      return patients;
+      _patientsCacheByDoctor[doctorId] = List<ProviderPatientRecord>.from(patients);
+      return List<ProviderPatientRecord>.from(patients);
     } catch (_) {
-      return _patientsCacheByDoctor[doctorId] ?? const [];
+      final cached = _patientsCacheByDoctor[doctorId] ?? const [];
+      return List<ProviderPatientRecord>.from(cached);
     }
   }
 
@@ -249,15 +330,12 @@ class FirestoreService {
 
   /// Delete a patient record from Firestore
   Future<void> deletePatientRecord(String patientId) async {
+    evictPatientFromCache(patientId);
+
     if (!_isFirebaseAvailable) return;
 
     try {
       await _patientsCollection.doc(patientId).delete();
-      // Clear from cache
-      final keys = _patientsCacheByDoctor.keys.toList(growable: false);
-      for (final key in keys) {
-        _patientsCacheByDoctor[key]?.removeWhere((p) => p.id == patientId);
-      }
     } catch (error) {
       throw AppException(
         code: 'delete-patient-record-failed',
@@ -272,12 +350,8 @@ class FirestoreService {
     if (!_isFirebaseAvailable) return;
 
     try {
+      _evictClinicalNoteFromCache(reportId);
       await _clinicalReportsCollection.doc(reportId).delete();
-      // Clear from cache
-      final keys = _clinicalCacheByPatient.keys.toList(growable: false);
-      for (final key in keys) {
-        _clinicalCacheByPatient[key]?.removeWhere((r) => r.id == reportId);
-      }
     } catch (error) {
       throw AppException(
         code: 'delete-clinical-report-failed',
@@ -292,12 +366,8 @@ class FirestoreService {
     if (!_isFirebaseAvailable) return;
 
     try {
+      _evictConsultationFromCache(sessionId);
       await _consultationSessionsCollection.doc(sessionId).delete();
-      // Clear from cache
-      final keys = _consultationCacheByKey.keys.toList(growable: false);
-      for (final key in keys) {
-        _consultationCacheByKey[key]?.removeWhere((s) => s.id == sessionId);
-      }
     } catch (error) {
       throw AppException(
         code: 'delete-consultation-session-failed',
@@ -312,12 +382,8 @@ class FirestoreService {
     if (!_isFirebaseAvailable) return;
 
     try {
+      _evictDocumentScanFromCache(scanId);
       await _documentScansCollection.doc(scanId).delete();
-      // Clear from cache
-      final keys = _documentScansCacheByPatient.keys.toList(growable: false);
-      for (final key in keys) {
-        _documentScansCacheByPatient[key]?.removeWhere((s) => s.id == scanId);
-      }
     } catch (error) {
       throw AppException(
         code: 'delete-document-scan-failed',
