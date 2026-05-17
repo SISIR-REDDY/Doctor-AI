@@ -62,6 +62,9 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> get _documentScansCollection =>
       _requireFirestore().collection('document_scans');
 
+  CollectionReference<Map<String, dynamic>> get _emergencyTriageCollection =>
+      _requireFirestore().collection('emergency_triage');
+
   String _consultationCacheKey(String doctorId, String? patientId) {
     final patientSegment = (patientId ?? '').trim();
     return '$doctorId::$patientSegment';
@@ -564,5 +567,68 @@ class FirestoreService {
             _documentScansCacheByPatient[patientId] = scans;
       return scans;
     });
+  }
+
+  Future<void> saveEmergencyTriage(EmergencyTriageRecord record) async {
+    if (!_isFirebaseAvailable) return;
+    try {
+      await _emergencyTriageCollection.doc(record.id).set(record.toMap());
+    } catch (error) {
+      throw AppException(
+        code: 'save-emergency-triage-failed',
+        message: 'Unable to save emergency triage to cloud.',
+        cause: error,
+      );
+    }
+  }
+
+  Future<EmergencyTriageRecord?> getEmergencyTriageById(String triageId) async {
+    if (!_isFirebaseAvailable || triageId.trim().isEmpty) return null;
+    try {
+      final doc = await _emergencyTriageCollection.doc(triageId.trim()).get();
+      if (!doc.exists || doc.data() == null) return null;
+      return EmergencyTriageRecord.fromMap(doc.data()!);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<EmergencyTriageRecord?> findEmergencyTriageByShareCode(String code) async {
+    final normalized = code.trim().toUpperCase();
+    if (normalized.isEmpty || !_isFirebaseAvailable) return null;
+
+    try {
+      final snapshot = await _emergencyTriageCollection
+          .orderBy('createdAt', descending: true)
+          .limit(200)
+          .get();
+      for (final doc in snapshot.docs) {
+        final record = EmergencyTriageRecord.fromMap(doc.data());
+        if (record.shareCode == normalized || record.id.toUpperCase().endsWith(normalized)) {
+          return record;
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  Stream<List<EmergencyTriageRecord>> watchEmergencyTriageForDoctor(String doctorId) {
+    if (!_isFirebaseAvailable) {
+      return Stream.value(const []);
+    }
+    return _emergencyTriageCollection
+        .where('doctorId', isEqualTo: doctorId)
+        .snapshots()
+        .map(
+          (snapshot) {
+            final records = snapshot.docs
+                .map((doc) => EmergencyTriageRecord.fromMap(doc.data()))
+                .toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            return List<EmergencyTriageRecord>.from(records);
+          },
+        );
   }
 }

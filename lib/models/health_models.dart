@@ -330,6 +330,143 @@ class ConsultationSession {
   }
 }
 
+/// Emergency triage case stored in Firestore for handoff and sharing.
+class EmergencyTriageRecord {
+  final String id;
+  final String doctorId;
+  final String patientId;
+  final String patientName;
+  final int patientAge;
+  final String patientGender;
+  final List<String> patientAllergies;
+  final List<String> patientMedicalHistory;
+  final String chiefComplaint;
+  final String symptoms;
+  final String vitalSignsSummary;
+  final int painLevel;
+  final String arrivalMode;
+  final String triageNotes;
+  final int esiLevel;
+  final String priorityLevel;
+  final String aiAssessment;
+  final String createdBy;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  EmergencyTriageRecord({
+    this.id = '',
+    this.doctorId = '',
+    this.patientId = '',
+    this.patientName = '',
+    this.patientAge = 0,
+    this.patientGender = '',
+    this.patientAllergies = const [],
+    this.patientMedicalHistory = const [],
+    this.chiefComplaint = '',
+    this.symptoms = '',
+    this.vitalSignsSummary = '',
+    this.painLevel = 0,
+    this.arrivalMode = 'walk-in',
+    this.triageNotes = '',
+    this.esiLevel = 0,
+    this.priorityLevel = '',
+    this.aiAssessment = '',
+    this.createdBy = 'Clinician',
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
+
+  String get shareCode => id.length >= 8 ? id.substring(id.length - 8).toUpperCase() : id.toUpperCase();
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'doctorId': doctorId,
+      'patientId': patientId,
+      'patientName': patientName,
+      'patientAge': patientAge,
+      'patientGender': patientGender,
+      'patientAllergies': patientAllergies,
+      'patientMedicalHistory': patientMedicalHistory,
+      'chiefComplaint': chiefComplaint,
+      'symptoms': symptoms,
+      'vitalSignsSummary': vitalSignsSummary,
+      'painLevel': painLevel,
+      'arrivalMode': arrivalMode,
+      'triageNotes': triageNotes,
+      'esiLevel': esiLevel,
+      'priorityLevel': priorityLevel,
+      'aiAssessment': aiAssessment,
+      'createdBy': createdBy,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory EmergencyTriageRecord.fromMap(Map<String, dynamic> map) {
+    return EmergencyTriageRecord(
+      id: (map['id'] ?? '').toString(),
+      doctorId: (map['doctorId'] ?? '').toString(),
+      patientId: (map['patientId'] ?? '').toString(),
+      patientName: (map['patientName'] ?? '').toString(),
+      patientAge: int.tryParse((map['patientAge'] ?? '0').toString()) ?? 0,
+      patientGender: (map['patientGender'] ?? '').toString(),
+      patientAllergies: _toStringList(map['patientAllergies']),
+      patientMedicalHistory: _toStringList(map['patientMedicalHistory']),
+      chiefComplaint: (map['chiefComplaint'] ?? '').toString(),
+      symptoms: (map['symptoms'] ?? '').toString(),
+      vitalSignsSummary: (map['vitalSignsSummary'] ?? '').toString(),
+      painLevel: int.tryParse((map['painLevel'] ?? '0').toString()) ?? 0,
+      arrivalMode: (map['arrivalMode'] ?? 'walk-in').toString(),
+      triageNotes: (map['triageNotes'] ?? '').toString(),
+      esiLevel: int.tryParse((map['esiLevel'] ?? '0').toString()) ?? 0,
+      priorityLevel: (map['priorityLevel'] ?? '').toString(),
+      aiAssessment: (map['aiAssessment'] ?? '').toString(),
+      createdBy: (map['createdBy'] ?? 'Clinician').toString(),
+      createdAt: _toDateTime(map['createdAt']),
+      updatedAt: _toDateTime(map['updatedAt']),
+    );
+  }
+
+  factory EmergencyTriageRecord.fromPatient({
+    required String id,
+    required String doctorId,
+    required ProviderPatientRecord patient,
+    required String chiefComplaint,
+    required String symptoms,
+    required String vitalSignsSummary,
+    required int painLevel,
+    required String arrivalMode,
+    required String triageNotes,
+    required int esiLevel,
+    required String priorityLevel,
+    required String aiAssessment,
+    required String createdBy,
+  }) {
+    return EmergencyTriageRecord(
+      id: id,
+      doctorId: doctorId,
+      patientId: patient.id,
+      patientName: patient.fullName,
+      patientAge: patient.age,
+      patientGender: patient.gender,
+      patientAllergies: patient.allergies,
+      patientMedicalHistory: patient.medicalHistory,
+      chiefComplaint: chiefComplaint,
+      symptoms: symptoms,
+      vitalSignsSummary: vitalSignsSummary,
+      painLevel: painLevel,
+      arrivalMode: arrivalMode,
+      triageNotes: triageNotes,
+      esiLevel: esiLevel,
+      priorityLevel: priorityLevel,
+      aiAssessment: aiAssessment,
+      createdBy: createdBy,
+    );
+  }
+}
+
 class DocumentScan {
   final String id;
   final String patientId;
