@@ -1,21 +1,31 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import '../core/errors/app_error_handler.dart';
+import '../core/healthcare/emergency_triage_share.dart';
+import '../core/navigation/app_router.dart';
 import '../models/health_models.dart';
 import '../services/chatbot_service.dart';
-import '../services/firebase/firestore_service.dart';
 import '../services/firebase/auth_service.dart';
+import '../services/firebase/firestore_service.dart';
+import '../services/firebase/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
+import '../widgets/emergency/emergency_patient_panel.dart';
 
 class EmergencyTriageScreen extends StatefulWidget {
   final String? patientId;
+  final String? initialTriageId;
 
   const EmergencyTriageScreen({
     super.key,
     this.patientId,
+    this.initialTriageId,
   });
 
   @override
@@ -27,9 +37,11 @@ class _EmergencyTriageScreenState extends State<EmergencyTriageScreen>
   final ChatbotService _chatbotService = ChatbotService();
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
+  final Uuid _uuid = const Uuid();
 
   final TextEditingController _chiefComplaintController = TextEditingController();
   final TextEditingController _symptomsController = TextEditingController();
+  final TextEditingController _triageNotesController = TextEditingController();
 
   // Structured Vital Signs Controllers
   final TextEditingController _bpSystolicController = TextEditingController();
@@ -50,7 +62,12 @@ class _EmergencyTriageScreenState extends State<EmergencyTriageScreen>
   IconData _priorityIcon = Icons.info;
 
   ProviderPatientRecord? _currentPatient;
+  final List<ProviderPatientRecord> _patients = [];
+  StreamSubscription<List<ProviderPatientRecord>>? _patientsSubscription;
   bool _isLoadingPatient = true;
+  String _arrivalMode = 'walk-in';
+  String? _savedTriageId;
+  EmergencyTriageRecord? _lastSavedRecord;
 
   int _painLevel = 0;
 
@@ -121,14 +138,46 @@ class _EmergencyTriageScreenState extends State<EmergencyTriageScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
-    _loadPatientData();
+    StorageService().warmPatientPhotosCache();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await _loadPatientData();
+    _watchPatients();
+    final triageId = widget.initialTriageId?.trim();
+    if (triageId != null && triageId.isNotEmpty) {
+      await _importTriageById(triageId);
+    }
+  }
+
+  void _watchPatients() {
+    final doctorId = _authService.currentUser?.uid;
+    if (doctorId == null) return;
+    _patientsSubscription?.cancel();
+    _patientsSubscription = _firestoreService.watchDoctorPatients(doctorId).listen((list) {
+      if (!mounted) return;
+      setState(() => _patients..clear()..addAll(list));
+      if (_currentPatient != null) {
+        ProviderPatientRecord? updated;
+        for (final p in list) {
+          if (p.id == _currentPatient!.id) {
+            updated = p;
+            break;
+          }
+        }
+        if (updated != null) _currentPatient = updated;
+      }
+    });
   }
 
   @override
   void dispose() {
+    _patientsSubscription?.cancel();
     _pulseController.dispose();
     _chiefComplaintController.dispose();
     _symptomsController.dispose();
+    _triageNotesController.dispose();
     _bpSystolicController.dispose();
     _bpDiastolicController.dispose();
     _heartRateController.dispose();
@@ -139,13 +188,13 @@ class _EmergencyTriageScreenState extends State<EmergencyTriageScreen>
   }
 
   Future<void> _loadPatientData() async {
-    if (widget.patientId == null || widget.patientId == 'no-patient') {
+    final id = widget.patientId?.trim();
+    if (id == null || id.isEmpty || id == 'no-patient') {
       setState(() => _isLoadingPatient = false);
       return;
     }
 
     try {
-      // Get doctor's patients and find the specific one
       final doctorId = _authService.currentUser?.uid;
       if (doctorId == null) {
         setState(() => _isLoadingPatient = false);
@@ -154,24 +203,216 @@ class _EmergencyTriageScreenState extends State<EmergencyTriageScreen>
 
       final patients = await _firestoreService.getDoctorPatients(doctorId);
       ProviderPatientRecord? patient;
-      try {
-        patient = patients.firstWhere((p) => p.id == widget.patientId);
-      } catch (_) {
-        patient = patients.isNotEmpty ? patients.first : null;
+      for (final p in patients) {
+        if (p.id == id) {
+          patient = p;
+          break;
+        }
       }
-      if (mounted && patient != null) {
+      if (mounted) {
         setState(() {
           _currentPatient = patient;
           _isLoadingPatient = false;
         });
-      } else {
-        setState(() => _isLoadingPatient = false);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingPatient = false);
         AppErrorHandler.showSnackBar(context, e);
       }
+    }
+  }
+
+  void _onPatientSelected(ProviderPatientRecord? patient) {
+    setState(() => _currentPatient = patient);
+  }
+
+  Future<void> _importTriageById(String idOrCode) async {
+    setState(() => _isLoadingPatient = true);
+    try {
+      EmergencyTriageRecord? record =
+          await _firestoreService.getEmergencyTriageById(idOrCode);
+      record ??= await _firestoreService.findEmergencyTriageByShareCode(idOrCode);
+      if (record == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Triage case not found. Check the share code.')),
+          );
+        }
+        return;
+      }
+      _applyImportedRecord(record);
+      if (record.patientId.isNotEmpty && _patients.isNotEmpty) {
+        ProviderPatientRecord? linked;
+        for (final p in _patients) {
+          if (p.id == record.patientId) {
+            linked = p;
+            break;
+          }
+        }
+        if (linked != null) _currentPatient = linked;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Loaded triage case ${record.shareCode}'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
+    } finally {
+      if (mounted) setState(() => _isLoadingPatient = false);
+    }
+  }
+
+  void _applyImportedRecord(EmergencyTriageRecord record) {
+    setState(() {
+      _chiefComplaintController.text = record.chiefComplaint;
+      _symptomsController.text = record.symptoms;
+      _triageNotesController.text = record.triageNotes;
+      _painLevel = record.painLevel;
+      _arrivalMode = record.arrivalMode;
+      _triageAssessment = record.aiAssessment;
+      _priorityLevel = record.priorityLevel;
+      _esiLevel = record.esiLevel;
+      _savedTriageId = record.id;
+      _lastSavedRecord = record;
+      if (record.priorityLevel.isNotEmpty) _applyPriorityStyle(record.priorityLevel);
+    });
+  }
+
+  void _applyPriorityStyle(String level) {
+    switch (level.toUpperCase()) {
+      case 'CRITICAL':
+        _priorityColor = AppTheme.dangerColor;
+        _priorityIcon = Icons.warning_rounded;
+      case 'HIGH':
+        _priorityColor = AppTheme.warningColor;
+        _priorityIcon = Icons.priority_high_rounded;
+      case 'MEDIUM':
+        _priorityColor = AppTheme.primaryColor;
+        _priorityIcon = Icons.info_rounded;
+      default:
+        _priorityColor = AppTheme.successColor;
+        _priorityIcon = Icons.check_circle_rounded;
+    }
+  }
+
+  Future<void> _showImportDialog() async {
+    final controller = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import shared case'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Share code or Triage ID',
+            hintText: 'e.g. A1B2C3D4',
+          ),
+          textCapitalization: TextCapitalization.characters,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Load'),
+          ),
+        ],
+      ),
+    );
+    if (code != null && code.isNotEmpty) await _importTriageById(code);
+  }
+
+  Future<EmergencyTriageRecord?> _buildTriageRecord() async {
+    final doctorId = _authService.currentUser?.uid ?? '';
+    if (doctorId.isEmpty) return null;
+
+    final patient = _currentPatient;
+    final id = _savedTriageId ?? 'triage_${_uuid.v4()}';
+
+    if (patient != null) {
+      return EmergencyTriageRecord.fromPatient(
+        id: id,
+        doctorId: doctorId,
+        patient: patient,
+        chiefComplaint: _chiefComplaintController.text.trim(),
+        symptoms: _symptomsController.text.trim(),
+        vitalSignsSummary: _buildVitalSignsString(),
+        painLevel: _painLevel,
+        arrivalMode: _arrivalMode,
+        triageNotes: _triageNotesController.text.trim(),
+        esiLevel: _esiLevel,
+        priorityLevel: _priorityLevel,
+        aiAssessment: _triageAssessment,
+        createdBy: _authService.currentUser?.displayName ?? 'Clinician',
+      );
+    }
+
+    return EmergencyTriageRecord(
+      id: id,
+      doctorId: doctorId,
+      patientId: '',
+      patientName: 'Unknown patient',
+      chiefComplaint: _chiefComplaintController.text.trim(),
+      symptoms: _symptomsController.text.trim(),
+      vitalSignsSummary: _buildVitalSignsString(),
+      painLevel: _painLevel,
+      arrivalMode: _arrivalMode,
+      triageNotes: _triageNotesController.text.trim(),
+      esiLevel: _esiLevel,
+      priorityLevel: _priorityLevel,
+      aiAssessment: _triageAssessment,
+      createdBy: _authService.currentUser?.displayName ?? 'Clinician',
+    );
+  }
+
+  Future<void> _persistTriageRecord() async {
+    final record = await _buildTriageRecord();
+    if (record == null) return;
+    await _firestoreService.saveEmergencyTriage(record);
+    setState(() {
+      _savedTriageId = record.id;
+      _lastSavedRecord = record;
+    });
+  }
+
+  Future<void> _shareTriageHandoff() async {
+    if (_triageAssessment.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Run triage assessment before sharing')),
+      );
+      return;
+    }
+    if (_currentPatient == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a patient from your log to share with full details')),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await _persistTriageRecord();
+      final record = _lastSavedRecord;
+      if (record == null) return;
+
+      final message = EmergencyTriageShare.buildShareMessage(
+        record: record,
+        doctorName: _authService.currentUser?.displayName ?? 'Clinician',
+      );
+      await SharePlus.instance.share(
+        ShareParams(
+          text: message,
+          subject: 'Emergency Triage — ${record.patientName} (${record.priorityLevel})',
+        ),
+      );
+    } catch (e) {
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -309,10 +550,10 @@ Suggested next steps (admit, observe, discharge with follow-up)
     if (_triageAssessment.isEmpty) return;
 
     final patientId = _currentPatient?.id ?? widget.patientId;
-    if (patientId == null || patientId == 'no-patient') {
+    if (patientId == null || patientId.isEmpty || patientId == 'no-patient') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Select a patient to save the triage assessment'),
+          content: Text('Select a patient from your log to save the triage assessment'),
           duration: Duration(seconds: 3),
         ),
       );
@@ -322,25 +563,44 @@ Suggested next steps (admit, observe, discharge with follow-up)
     setState(() => _isSaving = true);
 
     try {
+      await _persistTriageRecord();
+
+      final doctorId = _authService.currentUser?.uid ?? '';
+      final now = DateTime.now();
       final note = ClinicalNote(
+        id: 'note_${_uuid.v4()}',
         patientId: patientId,
+        doctorId: doctorId,
         title: 'Emergency Triage - $_priorityLevel (ESI-$_esiLevel)',
         content: '''Chief Complaint: ${_chiefComplaintController.text.trim()}
-
+Arrival: $_arrivalMode
 Vital Signs: ${_buildVitalSignsString()}
 Pain Level: $_painLevel/10
 Symptoms: ${_symptomsController.text.trim().isEmpty ? 'Not provided' : _symptomsController.text.trim()}
+Handoff notes: ${_triageNotesController.text.trim().isEmpty ? '—' : _triageNotesController.text.trim()}
 
---- AI TRIAGE ASSESSMENT ---.
+--- AI TRIAGE ASSESSMENT ---
 
 $_triageAssessment''',
         diagnosis: 'Emergency Triage - $_priorityLevel Priority',
         treatments: [],
         followUpItems: ['Monitor vitals', 'Reassess as needed'],
         createdBy: _authService.currentUser?.displayName ?? 'Clinician',
+        noteType: 'ai',
+        createdAt: now,
+        updatedAt: now,
       );
 
       await _firestoreService.saveClinicalReport(note);
+
+      if (_currentPatient != null) {
+        final updated = _currentPatient!.copyWith(
+          lastVisitSummary: 'Emergency triage: ${_chiefComplaintController.text.trim()}',
+          updatedAt: now,
+        );
+        await _firestoreService.savePatientRecord(updated);
+        _currentPatient = updated;
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);
@@ -402,60 +662,11 @@ $_triageAssessment''',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Patient Info Card (if available)
-                        if (_currentPatient != null) ...[
-                          SlideUpAnimation(
-                            child: _buildPatientInfoCard(),
-                          ),
-                          const SizedBox(height: AppTheme.lg),
-                        ],
-
-                        // Quick Complaint Templates
-                        SlideUpAnimation(
-                          delay: const Duration(milliseconds: 50),
-                          child: _buildQuickComplaintTemplates(),
-                        ),
-                        const SizedBox(height: AppTheme.lg),
-
-                        // Priority Badge (if assessment done)
-                        if (_priorityLevel.isNotEmpty) ...[
-                          FadeInAnimation(
-                            child: _buildPriorityBadge(),
-                          ),
-                          const SizedBox(height: AppTheme.lg),
-                        ],
-
-                        // Assessment Input Form
-                        SlideUpAnimation(
-                          delay: const Duration(milliseconds: 100),
-                          child: _buildAssessmentForm(),
-                        ),
-
-                        const SizedBox(height: AppTheme.lg),
-
-                        // Pain Level Slider
-                        SlideUpAnimation(
-                          delay: const Duration(milliseconds: 200),
-                          child: _buildPainLevelCard(),
-                        ),
-
-                        const SizedBox(height: AppTheme.xl),
-
-                        // Action Button
-                        ScaleAnimation(
-                          delay: const Duration(milliseconds: 300),
-                          child: _buildAssessButton(),
-                        ),
-
-                        // Assessment Results
+                        SlideUpAnimation(child: _buildUnifiedTriageCard()),
                         if (_triageAssessment.isNotEmpty) ...[
-                          const SizedBox(height: AppTheme.xl),
-                          FadeInAnimation(
-                            delay: const Duration(milliseconds: 400),
-                            child: _buildAssessmentResults(),
-                          ),
+                          const SizedBox(height: AppTheme.lg),
+                          FadeInAnimation(child: _buildAssessmentResults()),
                         ],
-
                         const SizedBox(height: AppTheme.xl),
                       ],
                     ),
@@ -463,6 +674,137 @@ $_triageAssessment''',
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _sectionLabel(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppTheme.sm),
+      child: Text(
+        title.toUpperCase(),
+        style: AppTheme.labelSmall.copyWith(
+          color: AppTheme.textSecondary,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionDivider() => const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppTheme.lg),
+        child: Divider(height: 1, color: AppTheme.dividerColor),
+      );
+
+  Widget _buildUnifiedTriageCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.dividerColor.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg, vertical: AppTheme.md),
+            color: const Color(0xFFFEF2F2),
+            child: Row(
+              children: [
+                Icon(Icons.emergency, color: AppTheme.dangerColor, size: 22),
+                const SizedBox(width: AppTheme.sm),
+                Expanded(
+                  child: Text(
+                    'Triage assessment',
+                    style: AppTheme.labelLarge.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.dangerColor,
+                    ),
+                  ),
+                ),
+                if (_priorityLevel.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _priorityColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_priorityIcon, size: 14, color: _priorityColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          _esiLevel > 0 ? 'ESI-$_esiLevel · $_priorityLevel' : _priorityLevel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _priorityColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppTheme.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _sectionLabel('Patient'),
+                EmergencyTriagePatientSection(
+                  patients: _patients,
+                  selectedPatient: _currentPatient,
+                  isLoading: _isLoadingPatient,
+                  onPatientSelected: _onPatientSelected,
+                  onRefresh: _loadPatientData,
+                  triageNotesController: _triageNotesController,
+                  arrivalMode: _arrivalMode,
+                  onArrivalModeChanged: (m) => setState(() => _arrivalMode = m),
+                ),
+                _sectionDivider(),
+                _sectionLabel('Quick templates'),
+                _buildQuickComplaintTemplates(compact: true),
+                _sectionDivider(),
+                _sectionLabel('Chief complaint & vitals'),
+                _buildFormField(
+                  label: 'Chief complaint',
+                  required: true,
+                  icon: Icons.report_problem_outlined,
+                  controller: _chiefComplaintController,
+                  hint: 'Primary reason for visit',
+                  maxLines: 2,
+                ),
+                const SizedBox(height: AppTheme.md),
+                _buildVitalSignsSection(),
+                const SizedBox(height: AppTheme.md),
+                _buildFormField(
+                  label: 'Symptoms',
+                  icon: Icons.medical_information_outlined,
+                  controller: _symptomsController,
+                  hint: 'Onset, duration, severity',
+                  maxLines: 2,
+                ),
+                _sectionDivider(),
+                _sectionLabel('Pain level'),
+                _buildPainLevelInline(),
+                const SizedBox(height: AppTheme.lg),
+                _buildAssessButton(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -527,120 +869,48 @@ $_triageAssessment''',
           ),
         ),
       actions: [
-        if (_triageAssessment.isNotEmpty)
+        IconButton(
+          onPressed: _showImportDialog,
+          icon: const Icon(Icons.download_outlined, color: Colors.white),
+          tooltip: 'Import shared case',
+        ),
+        if (_triageAssessment.isNotEmpty) ...[
+          IconButton(
+            onPressed: _isSaving ? null : _shareTriageHandoff,
+            icon: const Icon(Icons.share_outlined, color: Colors.white),
+            tooltip: 'Share handoff',
+          ),
           IconButton(
             onPressed: _clearAssessment,
             icon: const Icon(Icons.refresh, color: Colors.white),
             tooltip: 'New Assessment',
           ),
+        ],
       ],
     );
   }
 
-  Widget _buildPatientInfoCard() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.md),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.mediumRadius,
-        border: Border.all(color: AppTheme.dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-            radius: 24,
-            child: Text(
-              _currentPatient!.fullName.substring(0, 1).toUpperCase(),
-              style: TextStyle(
-                color: AppTheme.primaryColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppTheme.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _currentPatient!.fullName,
-                  style: AppTheme.labelLarge.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Age: ${_currentPatient!.age}',
-                  style: AppTheme.bodySmall,
-                ),
-                if (_currentPatient!.medicalHistory.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Wrap(
-                      spacing: 4,
-                      children: _currentPatient!.medicalHistory.take(3).map((h) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.warningColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            h,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: AppTheme.warningColor,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.dangerColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.emergency_outlined,
-              color: AppTheme.dangerColor,
-              size: 20,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickComplaintTemplates() {
+  Widget _buildQuickComplaintTemplates({bool compact = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.flash_on, size: 16, color: AppTheme.warningColor),
-            const SizedBox(width: 6),
-            Text(
-              'Quick Complaint Templates',
-              style: AppTheme.labelMedium.copyWith(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+        if (!compact) ...[
+          Row(
+            children: [
+              Icon(Icons.flash_on, size: 16, color: AppTheme.warningColor),
+              const SizedBox(width: 6),
+              Text(
+                'Quick templates',
+                style: AppTheme.labelMedium.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.sm),
+        ],
+        _buildEsiQuickReference(),
         const SizedBox(height: AppTheme.sm),
         SizedBox(
-          height: 80,
+          height: compact ? 72 : 80,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: _quickComplaintTemplates.length,
@@ -696,6 +966,37 @@ $_triageAssessment''',
     );
   }
 
+  Widget _buildEsiQuickReference() {
+    const levels = [
+      (1, 'Immediate', Color(0xFFDC2626)),
+      (2, 'Emergent', Color(0xFFEA580C)),
+      (3, 'Urgent', Color(0xFFF59E0B)),
+      (4, 'Less urgent', Color(0xFF2563EB)),
+      (5, 'Non-urgent', Color(0xFF059669)),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: levels.map((e) {
+          final (level, label, color) = e;
+          return Container(
+            margin: const EdgeInsets.only(right: AppTheme.sm),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.35)),
+            ),
+            child: Text(
+              'ESI-$level $label',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   void _applyQuickTemplate(Map<String, dynamic> template) {
     setState(() {
       _chiefComplaintController.text = template['complaint'] as String;
@@ -707,166 +1008,6 @@ $_triageAssessment''',
         content: Text('Applied ${template['name']} template'),
         duration: const Duration(seconds: 1),
         backgroundColor: template['color'] as Color,
-      ),
-    );
-  }
-
-  Widget _buildPriorityBadge() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        final scale = _priorityLevel == 'CRITICAL'
-            ? 1.0 + (_pulseController.value * 0.02)
-            : 1.0;
-        return Transform.scale(
-          scale: scale,
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppTheme.lg,
-              vertical: AppTheme.md,
-            ),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  _priorityColor.withValues(alpha: 0.15),
-                  _priorityColor.withValues(alpha: 0.08),
-                ],
-              ),
-              borderRadius: AppTheme.mediumRadius,
-              border: Border.all(color: _priorityColor.withValues(alpha: 0.4), width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: _priorityColor.withValues(alpha: 0.2),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(_priorityIcon, color: _priorityColor, size: 28),
-                const SizedBox(width: AppTheme.md),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'TRIAGE PRIORITY',
-                      style: TextStyle(
-                        color: _priorityColor.withValues(alpha: 0.7),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    Text(
-                      _priorityLevel,
-                      style: TextStyle(
-                        color: _priorityColor,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
-                if (_esiLevel > 0) ...[
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _priorityColor.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _priorityColor.withValues(alpha: 0.4)),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'ESI',
-                          style: TextStyle(
-                            color: _priorityColor,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          '$_esiLevel',
-                          style: TextStyle(
-                            color: _priorityColor,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildAssessmentForm() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.lg),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.largeRadius,
-        border: Border.all(color: AppTheme.dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.dangerColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.assignment, color: AppTheme.dangerColor, size: 20),
-              ),
-              const SizedBox(width: AppTheme.md),
-              Text('Patient Assessment', style: AppTheme.headingSmall),
-            ],
-          ),
-          const SizedBox(height: AppTheme.lg),
-
-          // Chief Complaint
-          _buildFormField(
-            label: 'Chief Complaint',
-            required: true,
-            icon: Icons.report_problem_outlined,
-            controller: _chiefComplaintController,
-            hint: 'Primary reason for emergency visit',
-            maxLines: 2,
-          ),
-          const SizedBox(height: AppTheme.lg),
-
-          // Structured Vital Signs
-          _buildVitalSignsSection(),
-          const SizedBox(height: AppTheme.md),
-
-          // Symptoms
-          _buildFormField(
-            label: 'Current Symptoms',
-            icon: Icons.medical_information_outlined,
-            controller: _symptomsController,
-            hint: 'Describe symptoms, duration, and severity',
-            maxLines: 2,
-          ),
-        ],
       ),
     );
   }
@@ -1084,19 +1225,19 @@ $_triageAssessment''',
                 suffixText: suffix,
                 suffixStyle: AppTheme.bodySmall,
                 filled: true,
-                fillColor: AppTheme.backgroundColor,
+                fillColor: const Color(0xFFF8F9FB),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 border: OutlineInputBorder(
-                  borderRadius: AppTheme.mediumRadius,
+                  borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: borderColor),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: AppTheme.mediumRadius,
+                  borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: borderColor, width: borderColor == AppTheme.dividerColor ? 1 : 2),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: AppTheme.mediumRadius,
+                  borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: borderColor == AppTheme.dividerColor ? AppTheme.dangerColor : borderColor, width: 2),
                 ),
               ),
@@ -1156,17 +1297,14 @@ $_triageAssessment''',
             hintText: hint,
             hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
             filled: true,
-            fillColor: AppTheme.backgroundColor,
-            border: OutlineInputBorder(
-              borderRadius: AppTheme.mediumRadius,
-              borderSide: BorderSide(color: AppTheme.dividerColor),
-            ),
+            fillColor: const Color(0xFFF8F9FB),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(
-              borderRadius: AppTheme.mediumRadius,
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: AppTheme.dividerColor),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: AppTheme.mediumRadius,
+              borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: AppTheme.dangerColor, width: 1.5),
             ),
             contentPadding: const EdgeInsets.symmetric(
@@ -1179,88 +1317,39 @@ $_triageAssessment''',
     );
   }
 
-  Widget _buildPainLevelCard() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.lg),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.largeRadius,
-        border: Border.all(color: AppTheme.dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _getPainColor().withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.sentiment_satisfied_alt, color: _getPainColor(), size: 20),
-              ),
-              const SizedBox(width: AppTheme.md),
-              Text('Pain Level', style: AppTheme.headingSmall),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _getPainColor().withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '$_painLevel / 10',
-                  style: TextStyle(
-                    color: _getPainColor(),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppTheme.lg),
-          SliderTheme(
-            data: SliderThemeData(
-              activeTrackColor: _getPainColor(),
-              inactiveTrackColor: _getPainColor().withValues(alpha: 0.2),
-              thumbColor: _getPainColor(),
-              overlayColor: _getPainColor().withValues(alpha: 0.2),
-              trackHeight: 8,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 14),
+  Widget _buildPainLevelInline() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text(_getPainDescription(), style: AppTheme.labelMedium.copyWith(color: _getPainColor())),
+            const Spacer(),
+            Text(
+              '$_painLevel / 10',
+              style: TextStyle(color: _getPainColor(), fontWeight: FontWeight.w700, fontSize: 15),
             ),
-            child: Slider(
-              value: _painLevel.toDouble(),
-              min: 0,
-              max: 10,
-              divisions: 10,
-              onChanged: (value) {
-                setState(() {
-                  _painLevel = value.toInt();
-                });
-                HapticFeedback.selectionClick();
-              },
-            ),
+          ],
+        ),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: _getPainColor(),
+            inactiveTrackColor: _getPainColor().withValues(alpha: 0.15),
+            thumbColor: _getPainColor(),
+            trackHeight: 6,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 11),
           ),
-          const SizedBox(height: AppTheme.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('No Pain', style: AppTheme.bodySmall),
-              Text(_getPainDescription(), style: AppTheme.labelMedium.copyWith(color: _getPainColor())),
-              Text('Worst Pain', style: AppTheme.bodySmall),
-            ],
+          child: Slider(
+            value: _painLevel.toDouble(),
+            min: 0,
+            max: 10,
+            divisions: 10,
+            onChanged: (value) {
+              setState(() => _painLevel = value.toInt());
+              HapticFeedback.selectionClick();
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1279,68 +1368,24 @@ $_triageAssessment''',
   }
 
   Widget _buildAssessButton() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: AppTheme.mediumRadius,
-        gradient: _isAssessing
-            ? null
-            : const LinearGradient(
-                colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
-              ),
-        boxShadow: _isAssessing
-            ? null
-            : [
-                BoxShadow(
-                  color: AppTheme.dangerColor.withValues(alpha: 0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _isAssessing ? null : _performTriageAssessment,
-          borderRadius: AppTheme.mediumRadius,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (_isAssessing) ...[
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                  const SizedBox(width: AppTheme.md),
-                  const Text(
-                    'Analyzing Patient...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ] else ...[
-                  const Icon(Icons.medical_services, color: Colors.white, size: 24),
-                  const SizedBox(width: AppTheme.md),
-                  const Text(
-                    'Perform Triage Assessment',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: _isAssessing ? null : _performTriageAssessment,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppTheme.dangerColor,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
+        icon: _isAssessing
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              )
+            : const Icon(Icons.medical_services_outlined),
+        label: Text(_isAssessing ? 'Analyzing…' : 'Run AI triage assessment'),
       ),
     );
   }
@@ -1419,30 +1464,49 @@ $_triageAssessment''',
               color: AppTheme.backgroundColor,
               borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.info_outline, size: 16, color: AppTheme.textSecondary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'AI-generated assessment. Clinical judgment required.',
-                    style: AppTheme.bodySmall.copyWith(fontStyle: FontStyle.italic),
-                  ),
+                Text(
+                  'AI-generated. Clinical judgment required.',
+                  style: AppTheme.bodySmall.copyWith(fontStyle: FontStyle.italic),
                 ),
-                const SizedBox(width: AppTheme.md),
+                const SizedBox(height: AppTheme.sm),
+                Wrap(
+                  spacing: AppTheme.sm,
+                  runSpacing: AppTheme.sm,
+                  children: [
                 TextButton.icon(
+                  onPressed: _currentPatient == null
+                      ? null
+                      : () {
+                          Navigator.pushNamed(
+                            context,
+                            AppRouter.patientDetail,
+                            arguments: _currentPatient,
+                          );
+                        },
+                  icon: const Icon(Icons.person_outline, size: 18),
+                  label: const Text('Patient chart'),
+                ),
+                TextButton.icon(
+                  onPressed: _isSaving ? null : _shareTriageHandoff,
+                  icon: const Icon(Icons.share_outlined, size: 18),
+                  label: const Text('Share'),
+                ),
+                FilledButton.icon(
                   onPressed: _isSaving ? null : _saveTriageToClinicalNotes,
                   icon: _isSaving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(Icons.save_outlined, color: AppTheme.successColor, size: 18),
-                  label: Text(
-                    _isSaving ? 'Saving...' : 'Save to Notes',
-                    style: TextStyle(color: AppTheme.successColor),
-                  ),
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.save_outlined, size: 18),
+                  label: Text(_isSaving ? 'Saving…' : 'Save'),
+                  style: FilledButton.styleFrom(backgroundColor: AppTheme.successColor),
+                ),
+                  ],
                 ),
               ],
             ),

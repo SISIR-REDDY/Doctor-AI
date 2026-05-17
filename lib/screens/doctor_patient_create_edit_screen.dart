@@ -165,7 +165,9 @@ class _DoctorPatientCreateEditScreenState
       if (mounted) {
         _showSuccess(
             widget.patient != null ? 'Patient updated successfully!' : 'Patient added successfully!');
-        // Successfully saved - stay on screen to allow further edits
+        if (widget.patient == null) {
+          Navigator.pop(context, record);
+        }
       }
     } catch (e) {
       _showError('Failed to save patient: $e');
