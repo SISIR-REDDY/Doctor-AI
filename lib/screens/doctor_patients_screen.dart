@@ -7,7 +7,9 @@ import '../models/health_models.dart';
 import '../services/firebase/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../services/firebase/storage_service.dart';
 import '../theme/app_animations.dart';
+import '../widgets/patient/patient_avatar.dart';
 import 'doctor_patient_create_edit_screen.dart';
 import 'doctor_patient_detail_screen.dart';
 
@@ -22,9 +24,16 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
   final HealthcareServicesManager _services = HealthcareServicesManager();
-  String? _deletingPatientId;
+  final Set<String> _deletingPatientIds = {};
+  final Set<String> _optimisticallyRemovedIds = {};
 
   String? get _doctorId => _authService.currentUser?.uid;
+
+  @override
+  void initState() {
+    super.initState();
+    StorageService().warmPatientPhotosCache();
+  }
 
   Future<void> _addQuickSamplePatient() async {
     final doctorId = _doctorId;
@@ -86,23 +95,31 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
     );
 
     if (confirmed != true || !mounted) return;
+    if (_deletingPatientIds.contains(patient.id)) return;
 
-    setState(() => _deletingPatientId = patient.id);
+    setState(() {
+      _deletingPatientIds.add(patient.id);
+      _optimisticallyRemovedIds.add(patient.id);
+    });
+
     try {
       await _services.deletePatientAndRecords(patient);
       if (!mounted) return;
+      setState(() => _optimisticallyRemovedIds.remove(patient.id));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Patient deleted successfully'),
+          content: Text('Patient deleted'),
+          duration: Duration(seconds: 2),
           backgroundColor: AppTheme.successColor,
         ),
       );
     } catch (error) {
       if (!mounted) return;
+      setState(() => _optimisticallyRemovedIds.remove(patient.id));
       AppErrorHandler.showSnackBar(context, error);
     } finally {
       if (mounted) {
-        setState(() => _deletingPatientId = null);
+        setState(() => _deletingPatientIds.remove(patient.id));
       }
     }
   }
@@ -167,7 +184,9 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
             );
           }
 
-          final patients = snapshot.data ?? const [];
+          final patients = (snapshot.data ?? const [])
+              .where((p) => !_optimisticallyRemovedIds.contains(p.id))
+              .toList(growable: false);
           if (patients.isEmpty) {
             return Center(
               child: Padding(
@@ -206,7 +225,7 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                 index: index,
                 baseDelay: const Duration(milliseconds: 50),
                 child: GlossyCard(
-                  padding: const EdgeInsets.all(AppTheme.sm),
+                  padding: const EdgeInsets.all(AppTheme.md),
                   borderRadius: BorderRadius.circular(20),
                   onTap: () {
                     Navigator.push(
@@ -219,21 +238,10 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Center(
-                          child: Text(
-                            patient.firstName.isNotEmpty
-                                ? patient.firstName[0].toUpperCase()
-                                : '?',
-                            style: AppTheme.headingSmall.copyWith(color: AppTheme.primaryColor),
-                          ),
-                        ),
+                      PatientAvatar.fromPatient(
+                        patient,
+                        size: 88,
+                        borderRadius: 20,
                       ),
                       const SizedBox(width: AppTheme.md),
                       Expanded(
@@ -263,14 +271,14 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
                         children: [
                           IconButton(
                             tooltip: 'Delete Patient',
-                            icon: _deletingPatientId == patient.id
+                            icon: _deletingPatientIds.contains(patient.id)
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
                                     child: CircularProgressIndicator(strokeWidth: 2),
                                   )
                                 : const Icon(Icons.delete_outline, color: AppTheme.dangerColor, size: 20),
-                            onPressed: _deletingPatientId == patient.id
+                            onPressed: _deletingPatientIds.contains(patient.id)
                                 ? null
                                 : () => _confirmDeletePatient(patient),
                           ),

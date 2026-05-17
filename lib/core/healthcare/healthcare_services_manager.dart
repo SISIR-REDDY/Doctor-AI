@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/health_models.dart';
@@ -159,29 +162,59 @@ class HealthcareServicesManager {
     final doctorId = currentDoctorId;
     if (doctorId.isEmpty) return;
 
-    final sessions = await firestore.getConsultationSessionsForPatient(
-      doctorId: doctorId,
-      patientId: patient.id,
+    final patientId = patient.id;
+
+    // Delete patient doc first (also evicts cache) so the list updates immediately.
+    await firestore.deletePatientRecord(patientId);
+
+    if (patient.photoUrl.trim().isNotEmpty) {
+      unawaited(storage.deletePatientPhoto(patient.photoUrl));
+    }
+
+    // Related records cleanup runs in background — does not block the patients UI.
+    unawaited(
+      _deleteRelatedPatientData(doctorId: doctorId, patientId: patientId).catchError(
+        (error, stack) {
+          if (kDebugMode) {
+            debugPrint(
+              '[HealthcareServicesManager] Background cleanup failed for $patientId: $error\n$stack',
+            );
+          }
+        },
+      ),
     );
+  }
 
-    for (final session in sessions) {
-      if (session.audioUrl != null && session.audioUrl!.trim().isNotEmpty) {
-        await storage.deleteAudioFile(session.audioUrl!);
-      }
-      await firestore.deleteConsultationSession(session.id);
+  Future<void> _deleteRelatedPatientData({
+    required String doctorId,
+    required String patientId,
+  }) async {
+    final results = await Future.wait([
+      firestore.getConsultationSessionsForPatient(doctorId: doctorId, patientId: patientId),
+      firestore.getClinicalReports(patientId),
+      firestore.getDocumentScans(patientId),
+    ]);
+
+    final sessions = results[0] as List<ConsultationSession>;
+    final notes = results[1] as List<ClinicalNote>;
+    final scans = results[2] as List<DocumentScan>;
+
+    final cleanupTasks = <Future<void>>[
+      for (final session in sessions)
+        () async {
+          final audioUrl = session.audioUrl?.trim() ?? '';
+          if (audioUrl.isNotEmpty) {
+            await storage.deleteAudioFile(audioUrl);
+          }
+          await firestore.deleteConsultationSession(session.id);
+        }(),
+      for (final note in notes) firestore.deleteClinicalReport(note.id),
+      for (final scan in scans) firestore.deleteDocumentScan(scan.id),
+    ];
+
+    if (cleanupTasks.isNotEmpty) {
+      await Future.wait(cleanupTasks);
     }
-
-    final notes = await firestore.getClinicalReports(patient.id);
-    for (final note in notes) {
-      await firestore.deleteClinicalReport(note.id);
-    }
-
-    final scans = await firestore.getDocumentScans(patient.id);
-    for (final scan in scans) {
-      await firestore.deleteDocumentScan(scan.id);
-    }
-
-    await firestore.deletePatientRecord(patient.id);
   }
 
   String _firstLine(String text, {String fallback = ''}) {
