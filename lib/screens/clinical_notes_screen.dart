@@ -1,12 +1,18 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+
 import '../core/errors/app_error_handler.dart';
-import '../theme/app_theme.dart';
+import '../core/healthcare/consultation_ui_theme.dart';
 import '../models/health_models.dart';
+import '../services/chatbot_service.dart';
 import '../services/firebase/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
-import '../services/chatbot_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/clinical/clinical_note_card.dart';
+import '../widgets/clinical/clinical_voice_input.dart';
+import '../widgets/patient/patient_avatar.dart';
 
 class ClinicalNotesScreen extends StatefulWidget {
   final String patientId;
@@ -22,28 +28,51 @@ class ClinicalNotesScreen extends StatefulWidget {
 
 class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
   final List<ClinicalNote> _notes = [];
+  final List<ProviderPatientRecord> _patients = [];
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final ChatbotService _chatbotService = ChatbotService();
   final TextEditingController _searchController = TextEditingController();
+  final Uuid _uuid = const Uuid();
+
   String _selectedFilter = 'all';
   String _searchQuery = '';
   bool _isSyncingCloud = false;
+  String? _selectedPatientId;
   StreamSubscription<List<ClinicalNote>>? _cloudSubscription;
+  StreamSubscription<List<ProviderPatientRecord>>? _patientsSubscription;
+
+  bool get _isGlobalNotes =>
+      widget.patientId.trim().isEmpty || widget.patientId == 'new';
+
+  String? get _doctorId => _authService.currentUser?.uid;
 
   @override
   void initState() {
     super.initState();
-    // Load data asynchronously without blocking UI render
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadInitialNotes();
-      _listenToCloudReports();
-    });
+    _selectedPatientId = _isGlobalNotes ? null : widget.patientId;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  Future<void> _bootstrap() async {
+    final doctorId = _doctorId;
+    if (doctorId == null) return;
+
+    if (_isGlobalNotes) {
+      _patientsSubscription =
+          _firestoreService.watchDoctorPatients(doctorId).listen((patients) {
+        if (!mounted) return;
+        setState(() => _patients..clear()..addAll(patients));
+      });
+    }
+
+    await _loadInitialNotes();
+    _listenToCloudReports();
   }
 
   Future<void> _loadInitialNotes() async {
     setState(() => _isSyncingCloud = true);
-    final notes = await _firestoreService.getClinicalReports(widget.patientId);
+    final notes = await _fetchNotes();
     if (!mounted) return;
     setState(() {
       _notes
@@ -53,22 +82,50 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
     });
   }
 
+  Future<List<ClinicalNote>> _fetchNotes() async {
+    final doctorId = _doctorId;
+    if (doctorId == null) return const [];
+
+    if (_isGlobalNotes && (_selectedPatientId == null || _selectedPatientId!.isEmpty)) {
+      return _firestoreService.getClinicalReportsForDoctor(doctorId);
+    }
+
+    final patientId = _selectedPatientId ?? widget.patientId;
+    if (patientId.isEmpty || patientId == 'new') {
+      return _firestoreService.getClinicalReportsForDoctor(doctorId);
+    }
+    return _firestoreService.getClinicalReports(patientId);
+  }
+
   @override
   void dispose() {
     _cloudSubscription?.cancel();
+    _patientsSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   void _listenToCloudReports() {
+    _cloudSubscription?.cancel();
     if (!_firestoreService.isFirebaseAvailable) {
       setState(() => _isSyncingCloud = false);
       return;
     }
 
-    _isSyncingCloud = true;
-    _cloudSubscription =
-        _firestoreService.watchClinicalReports(widget.patientId).listen(
+    final doctorId = _doctorId;
+    if (doctorId == null) return;
+
+    setState(() => _isSyncingCloud = true);
+
+    final Stream<List<ClinicalNote>> stream;
+    if (_isGlobalNotes && (_selectedPatientId == null || _selectedPatientId!.isEmpty)) {
+      stream = _firestoreService.watchClinicalReportsForDoctor(doctorId);
+    } else {
+      final patientId = _selectedPatientId ?? widget.patientId;
+      stream = _firestoreService.watchClinicalReports(patientId);
+    }
+
+    _cloudSubscription = stream.listen(
       (cloudNotes) {
         if (!mounted) return;
         setState(() {
@@ -78,16 +135,81 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
           _isSyncingCloud = false;
         });
       },
-      onError: (error) {
+      onError: (_) {
         if (!mounted) return;
-        setState(() {
-          _isSyncingCloud = false;
-        });
+        setState(() => _isSyncingCloud = false);
       },
     );
   }
 
-  Future<void> _createClinicalReport() async {
+  String? _resolvePatientIdForNewNote() {
+    if (!_isGlobalNotes) return widget.patientId;
+    return _selectedPatientId;
+  }
+
+  Future<void> _pickPatientIfNeeded() async {
+    if (!_isGlobalNotes) return;
+    if (_selectedPatientId != null && _selectedPatientId!.isNotEmpty) return;
+    if (_patients.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a patient first to attach clinical notes')),
+      );
+      return;
+    }
+
+    final picked = await showModalBottomSheet<ProviderPatientRecord>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.5,
+        minChildSize: 0.35,
+        maxChildSize: 0.85,
+        builder: (_, controller) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AppTheme.lg),
+              child: Text('Select Patient', style: AppTheme.headingSmall),
+            ),
+            Expanded(
+              child: ListView.builder(
+                controller: controller,
+                itemCount: _patients.length,
+                itemBuilder: (_, i) {
+                  final p = _patients[i];
+                  return ListTile(
+                    leading: PatientAvatar.fromPatient(p, size: 44, borderRadius: 12),
+                    title: Text(p.fullName),
+                    subtitle: Text('${p.age} yrs • ${p.gender}'),
+                    onTap: () => Navigator.pop(ctx, p),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (picked != null) {
+      setState(() => _selectedPatientId = picked.id);
+      _listenToCloudReports();
+    }
+  }
+
+  Future<void> _createClinicalReport({
+    String? initialContent,
+    String noteType = 'written',
+    String? suggestedTitle,
+  }) async {
+    await _pickPatientIfNeeded();
+    final patientId = _resolvePatientIdForNewNote();
+    if (patientId == null || patientId.isEmpty || patientId == 'new') return;
+
     final result = await showModalBottomSheet<Map<String, String>?>(
       context: context,
       isScrollControlled: true,
@@ -95,21 +217,31 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => _CreateNoteDialog(
-        patientId: widget.patientId,
+        patientId: patientId,
         chatbotService: _chatbotService,
+        initialContent: initialContent,
+        initialTitle: suggestedTitle,
+        noteType: noteType,
       ),
     );
 
     if (result == null) return;
 
+    final doctorId = _doctorId ?? '';
+    final now = DateTime.now();
     final note = ClinicalNote(
-      patientId: widget.patientId,
+      id: 'note_${_uuid.v4()}',
+      patientId: patientId,
+      doctorId: doctorId,
       title: result['title']!,
       content: result['content']!,
       diagnosis: result['diagnosis']?.isEmpty == true ? null : result['diagnosis'],
       treatments: result['treatments']?.split('\n').where((t) => t.trim().isNotEmpty).toList() ?? [],
       followUpItems: result['followUpItems']?.split('\n').where((f) => f.trim().isNotEmpty).toList() ?? [],
       createdBy: _authService.currentUser?.displayName ?? 'Clinician',
+      noteType: result['noteType'] ?? noteType,
+      createdAt: now,
+      updatedAt: now,
     );
 
     setState(() {
@@ -123,6 +255,30 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
         AppErrorHandler.showSnackBar(context, error);
       }
     }
+  }
+
+  Future<void> _startVoiceNote() async {
+    await _pickPatientIfNeeded();
+    final patientId = _resolvePatientIdForNewNote();
+    if (patientId == null || patientId.isEmpty || patientId == 'new') return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ClinicalVoiceInput(
+        onCancel: () => Navigator.pop(ctx),
+        onTranscriptReady: (transcript) {
+          Navigator.pop(ctx);
+          final title = 'Voice Note • ${_formatShortDate(DateTime.now())}';
+          _createClinicalReport(
+            initialContent: transcript,
+            noteType: 'voice',
+            suggestedTitle: title,
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _editNote(ClinicalNote note) async {
@@ -219,13 +375,14 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredNotes = _filterNotes();
+    final voiceCount = _notes.where((n) => n.noteType == 'voice').length;
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: ConsultationPalette.cream,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: const Text('Clinical Notes'),
-        backgroundColor: AppTheme.surfaceColor,
+        backgroundColor: ConsultationPalette.surface,
         elevation: 0,
         actions: [
           if (_isSyncingCloud)
@@ -243,35 +400,36 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
       ),
       body: Column(
         children: [
+          if (_isGlobalNotes) _buildPatientSelector(),
+          _buildStatsStrip(filteredNotes.length, voiceCount),
           Padding(
             padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, 0),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search notes, diagnosis, treatment...',
-                prefixIcon: const Icon(Icons.search),
+                hintText: 'Search notes, diagnosis, treatment…',
+                filled: true,
+                fillColor: ConsultationPalette.surface,
+                prefixIcon: const Icon(Icons.search, color: ConsultationPalette.muted),
                 suffixIcon: _searchQuery.isEmpty
                     ? null
                     : IconButton(
                         onPressed: () {
                           _searchController.clear();
-                          setState(() {
-                            _searchQuery = '';
-                          });
+                          setState(() => _searchQuery = '');
                         },
                         icon: const Icon(Icons.close),
                       ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
               ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value.trim().toLowerCase();
-                });
-              },
+              onChanged: (value) => setState(() => _searchQuery = value.trim().toLowerCase()),
             ),
           ),
-          // Filter Tabs
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
+            padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, 0),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -279,37 +437,159 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
                   _buildFilterChip('All', 'all'),
                   _buildFilterChip('This Month', 'month'),
                   _buildFilterChip('This Year', 'year'),
-                  _buildFilterChip('Archival', 'archive'),
+                  _buildFilterChip('Voice', 'voice'),
+                  _buildFilterChip('Archived', 'archive'),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: AppTheme.lg),
-
-          // Notes List
+          const SizedBox(height: AppTheme.md),
           if (filteredNotes.isEmpty)
-            Expanded(
-              child: _buildEmptyState(),
-            )
+            Expanded(child: _buildEmptyState())
           else
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
+                padding: const EdgeInsets.fromLTRB(AppTheme.lg, 0, AppTheme.lg, 100),
                 itemCount: filteredNotes.length,
                 itemBuilder: (context, index) {
+                  final note = filteredNotes[index];
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: AppTheme.lg),
-                    child: _buildNoteCard(filteredNotes[index]),
+                    padding: const EdgeInsets.only(bottom: AppTheme.md),
+                    child: ClinicalNoteCard(
+                      note: note,
+                      onTap: () => _showNoteDetails(note),
+                      onEdit: () => _editNote(note),
+                      onDelete: () => _deleteNote(note),
+                    ),
                   );
                 },
               ),
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _createClinicalReport,
-        icon: const Icon(Icons.add_chart),
-        label: const Text('New Report'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'voice_note',
+            onPressed: _startVoiceNote,
+            backgroundColor: ConsultationPalette.transcript,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.mic_rounded),
+            label: const Text('Voice Note'),
+          ),
+          const SizedBox(height: AppTheme.sm),
+          FloatingActionButton.extended(
+            heroTag: 'new_report',
+            onPressed: () => _createClinicalReport(),
+            backgroundColor: ConsultationPalette.charcoal,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.note_add_outlined),
+            label: const Text('New Report'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPatientSelector() {
+    ProviderPatientRecord? selected;
+    if (_selectedPatientId != null) {
+      for (final p in _patients) {
+        if (p.id == _selectedPatientId) {
+          selected = p;
+          break;
+        }
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, 0),
+      child: Material(
+        color: ConsultationPalette.surface,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: () async {
+            await _pickPatientIfNeeded();
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.sm),
+            child: Row(
+              children: [
+                if (selected != null)
+                  PatientAvatar.fromPatient(selected, size: 40, borderRadius: 10)
+                else
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: ConsultationPalette.summary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.people_outline, color: ConsultationPalette.summary),
+                  ),
+                const SizedBox(width: AppTheme.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        selected?.fullName ?? 'All patients',
+                        style: AppTheme.labelLarge,
+                      ),
+                      Text(
+                        selected == null
+                            ? 'Showing notes across your panel'
+                            : 'Tap to change patient',
+                        style: AppTheme.bodySmall.copyWith(color: ConsultationPalette.muted),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.expand_more, color: ConsultationPalette.muted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsStrip(int visibleCount, int voiceCount) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, 0),
+      child: Row(
+        children: [
+          _statChip(Icons.description_outlined, '$visibleCount shown'),
+          const SizedBox(width: AppTheme.sm),
+          _statChip(Icons.mic_rounded, '$voiceCount voice'),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: _loadInitialNotes,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Refresh'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.xs),
+      decoration: BoxDecoration(
+        color: ConsultationPalette.surface,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: ConsultationPalette.muted),
+          const SizedBox(width: 6),
+          Text(label, style: AppTheme.labelSmall.copyWith(color: ConsultationPalette.ink)),
+        ],
       ),
     );
   }
@@ -328,145 +608,18 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
             vertical: AppTheme.md,
           ),
           decoration: BoxDecoration(
-            color: isSelected ? AppTheme.primaryColor : Colors.transparent,
-            border: isSelected
-                ? null
-                : Border.all(color: AppTheme.dividerColor),
-            borderRadius: AppTheme.mediumRadius,
+            color: isSelected ? ConsultationPalette.charcoal : ConsultationPalette.surface,
+            border: isSelected ? null : Border.all(color: ConsultationPalette.cream),
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
             label,
             style: AppTheme.labelMedium.copyWith(
-              color: isSelected ? Colors.white : AppTheme.textPrimary,
+              color: isSelected ? Colors.white : ConsultationPalette.ink,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildNoteCard(ClinicalNote note) {
-    return GlossyCard(
-      onTap: () => _showNoteDetails(note),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      note.title,
-                      style: AppTheme.headingSmall,
-                    ),
-                    const SizedBox(height: AppTheme.xs),
-                    Text(
-                      'Dr. ${note.createdBy.split(' ').last}',
-                      style: AppTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 120),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppTheme.md,
-                        vertical: AppTheme.xs,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getDiagnosisColor(note.diagnosis)
-                            .withValues(alpha: 0.1),
-                        borderRadius: AppTheme.mediumRadius,
-                      ),
-                      child: Text(
-                        _diagnosisText(note),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTheme.labelSmall.copyWith(
-                          color: _getDiagnosisColor(note.diagnosis),
-                        ),
-                      ),
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _editNote(note);
-                      } else if (value == 'delete') {
-                        _deleteNote(note);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 18),
-                            SizedBox(width: 8),
-                            Text('Edit'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, size: 18, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Delete', style: TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      ),
-                    ],
-                    icon: Icon(Icons.more_vert, color: AppTheme.textSecondary),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: AppTheme.lg),
-          Text(
-            note.content,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppTheme.bodySmall,
-          ),
-          const SizedBox(height: AppTheme.lg),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _formatDate(note.createdAt),
-                style: AppTheme.labelSmall,
-              ),
-              if (note.treatments.isNotEmpty)
-                Row(
-                  children: [
-                    Icon(
-                      Icons.medication,
-                      size: 16,
-                      color: AppTheme.primaryColor,
-                    ),
-                    const SizedBox(width: AppTheme.xs),
-                    Text(
-                      '${note.treatments.length} treatments',
-                      style: AppTheme.labelSmall.copyWith(
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -704,6 +857,8 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
                 (note) => note.createdAt.isBefore(DateTime(now.year - 1)))
             .toList(),
         );
+      case 'voice':
+        return _applySearch(_notes.where((note) => note.noteType == 'voice').toList());
       default:
         return _applySearch(_notes);
     }
@@ -724,29 +879,61 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.note_outlined,
-            size: 64,
-            color: Colors.grey.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: AppTheme.md),
-          Text(
-            'No Clinical Notes',
-            style: AppTheme.headingMedium.copyWith(
-              color: Colors.grey,
+      child: Padding(
+        padding: const EdgeInsets.all(AppTheme.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppTheme.xl),
+              decoration: BoxDecoration(
+                color: ConsultationPalette.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.note_alt_outlined,
+                size: 56,
+                color: ConsultationPalette.muted.withValues(alpha: 0.5),
+              ),
             ),
-          ),
-          const SizedBox(height: AppTheme.xs),
-          Text(
-            'Notes will appear here',
-            style: AppTheme.bodySmall,
-          ),
-        ],
+            const SizedBox(height: AppTheme.lg),
+            Text('No clinical notes yet', style: AppTheme.headingSmall),
+            const SizedBox(height: AppTheme.sm),
+            Text(
+              'Dictate with Voice Note or create a structured report. Notes sync to Firestore for this patient.',
+              textAlign: TextAlign.center,
+              style: AppTheme.bodySmall.copyWith(color: ConsultationPalette.muted),
+            ),
+            const SizedBox(height: AppTheme.xl),
+            Wrap(
+              spacing: AppTheme.sm,
+              runSpacing: AppTheme.sm,
+              alignment: WrapAlignment.center,
+              children: [
+                FilledButton.icon(
+                  onPressed: _startVoiceNote,
+                  icon: const Icon(Icons.mic_rounded),
+                  label: const Text('Voice Note'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ConsultationPalette.transcript,
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _createClinicalReport(),
+                  icon: const Icon(Icons.note_add_outlined),
+                  label: const Text('New Report'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  String _formatShortDate(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}';
   }
 
   Color _getDiagnosisColor(String? diagnosis) {
@@ -796,11 +983,17 @@ class _CreateNoteDialog extends StatefulWidget {
   final String patientId;
   final ChatbotService chatbotService;
   final ClinicalNote? existingNote;
+  final String? initialContent;
+  final String? initialTitle;
+  final String noteType;
 
   const _CreateNoteDialog({
     required this.patientId,
     required this.chatbotService,
     this.existingNote,
+    this.initialContent,
+    this.initialTitle,
+    this.noteType = 'written',
   });
 
   @override
@@ -828,6 +1021,9 @@ class _CreateNoteDialogState extends State<_CreateNoteDialog> {
       _diagnosisController.text = note.diagnosis ?? '';
       _treatmentsController.text = note.treatments.join('\n');
       _followUpController.text = note.followUpItems.join('\n');
+    } else {
+      if (widget.initialTitle != null) _titleController.text = widget.initialTitle!;
+      if (widget.initialContent != null) _contentController.text = widget.initialContent!;
     }
   }
 
@@ -956,6 +1152,27 @@ Format the response clearly with each section labeled.
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.noteType == 'voice' && widget.existingNote == null)
+              Container(
+                margin: const EdgeInsets.only(bottom: AppTheme.md),
+                padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.sm),
+                decoration: BoxDecoration(
+                  color: ConsultationPalette.transcript.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.mic_rounded, color: ConsultationPalette.transcript, size: 18),
+                    const SizedBox(width: AppTheme.sm),
+                    Expanded(
+                      child: Text(
+                        'Transcription ready — review and save',
+                        style: AppTheme.labelSmall.copyWith(color: ConsultationPalette.transcript),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Row(
               children: [
                 Text(
@@ -1123,6 +1340,7 @@ Format the response clearly with each section labeled.
                       'diagnosis': _diagnosisController.text.trim(),
                       'treatments': _treatmentsController.text.trim(),
                       'followUpItems': _followUpController.text.trim(),
+                      'noteType': widget.existingNote?.noteType ?? widget.noteType,
                     });
                   },
                   child: Text(widget.existingNote == null ? 'Create Note' : 'Update Note'),
