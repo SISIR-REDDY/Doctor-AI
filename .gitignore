@@ -137,6 +137,7 @@ coverage/
 # Log files
 *.log
 flutter_*.log
+flutter_*.png
 
 # Environment variables - SECURITY CRITICAL
 .env*
