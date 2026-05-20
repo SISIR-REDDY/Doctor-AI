@@ -910,7 +910,7 @@ $_triageAssessment''',
         _buildEsiQuickReference(),
         const SizedBox(height: AppTheme.sm),
         SizedBox(
-          height: compact ? 72 : 80,
+          height: compact ? 76 : 88,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: _quickComplaintTemplates.length,
@@ -920,49 +920,68 @@ $_triageAssessment''',
               final color = template['color'] as Color;
               return GestureDetector(
                 onTap: () => _applyQuickTemplate(template),
-                child: Container(
-                  width: 85,
-                  padding: const EdgeInsets.all(AppTheme.sm),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.08),
-                    borderRadius: AppTheme.mediumRadius,
-                    border: Border.all(color: color.withValues(alpha: 0.3)),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          template['icon'] as IconData,
-                          color: color,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        template['name'] as String,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: color,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
+                child: _buildQuickTemplateChip(
+                  template: template,
+                  color: color,
+                  compact: compact,
                 ),
               );
             },
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildQuickTemplateChip({
+    required Map<String, dynamic> template,
+    required Color color,
+    required bool compact,
+  }) {
+    final iconSize = compact ? 18.0 : 20.0;
+    final iconPad = compact ? 6.0 : 8.0;
+    final outerPad = compact ? 6.0 : AppTheme.sm;
+    final labelSize = compact ? 10.0 : 11.0;
+
+    return Container(
+      width: compact ? 76 : 85,
+      padding: EdgeInsets.all(outerPad),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: AppTheme.mediumRadius,
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: EdgeInsets.all(iconPad),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              template['icon'] as IconData,
+              color: color,
+              size: iconSize,
+            ),
+          ),
+          SizedBox(height: compact ? 4 : 6),
+          Text(
+            template['name'] as String,
+            style: TextStyle(
+              fontSize: labelSize,
+              fontWeight: FontWeight.w600,
+              color: color,
+              height: 1.1,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
