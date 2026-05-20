@@ -1,15 +1,19 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
+import 'dart:async';
 
-import '../core/base_patient_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
+
 import '../core/errors/app_error_handler.dart';
+import '../core/navigation/app_router.dart';
 import '../models/health_models.dart';
 import '../services/chatbot_service.dart';
+import '../services/firebase/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
+import '../services/firebase/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
+import '../widgets/patient/patient_log_selector.dart';
 
 class MedicationSafetyScreen extends StatefulWidget {
   final String? patientId;
@@ -23,10 +27,16 @@ class MedicationSafetyScreen extends StatefulWidget {
   State<MedicationSafetyScreen> createState() => _MedicationSafetyScreenState();
 }
 
-class _MedicationSafetyScreenState extends State<MedicationSafetyScreen>
-    with BasePatientScreen<MedicationSafetyScreen> {
+class _MedicationSafetyScreenState extends State<MedicationSafetyScreen> {
   final ChatbotService _chatbotService = ChatbotService();
   final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService = AuthService();
+  final Uuid _uuid = const Uuid();
+
+  ProviderPatientRecord? _selectedPatient;
+  final List<ProviderPatientRecord> _patients = [];
+  StreamSubscription<List<ProviderPatientRecord>>? _patientsSubscription;
+  bool _isLoadingPatients = true;
 
   final TextEditingController _medicationController = TextEditingController();
   final TextEditingController _doseController = TextEditingController();
@@ -96,30 +106,106 @@ class _MedicationSafetyScreenState extends State<MedicationSafetyScreen>
   @override
   void initState() {
     super.initState();
-    _initializeScreen();
+    StorageService().warmPatientPhotosCache();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await _loadInitialPatient();
+    _watchPatients();
+  }
+
+  void _watchPatients() {
+    final doctorId = _authService.currentUser?.uid;
+    if (doctorId == null) {
+      setState(() => _isLoadingPatients = false);
+      return;
+    }
+    _patientsSubscription?.cancel();
+    _patientsSubscription = _firestoreService.watchDoctorPatients(doctorId).listen((list) {
+      if (!mounted) return;
+      setState(() {
+        _patients
+          ..clear()
+          ..addAll(list);
+        if (_selectedPatient != null) {
+          for (final p in list) {
+            if (p.id == _selectedPatient!.id) {
+              _selectedPatient = p;
+              break;
+            }
+          }
+        }
+      });
+    });
+    setState(() => _isLoadingPatients = false);
+  }
+
+  Future<void> _loadInitialPatient() async {
+    final id = widget.patientId?.trim();
+    if (id == null || id.isEmpty) return;
+    final doctorId = _authService.currentUser?.uid;
+    if (doctorId == null) return;
+    try {
+      final list = await _firestoreService.getDoctorPatients(doctorId);
+      for (final p in list) {
+        if (p.id == id) {
+          if (mounted) _applyPatient(p, importChartMeds: true);
+          break;
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _applyPatient(ProviderPatientRecord p, {bool importChartMeds = false}) {
+    setState(() {
+      _selectedPatient = p;
+      _ageController.text = p.age > 0 ? '${p.age}' : '';
+      if (importChartMeds && p.prescriptions.isNotEmpty) {
+        for (final rx in p.prescriptions) {
+          final trimmed = rx.trim();
+          if (trimmed.isNotEmpty && !_currentMedications.contains(trimmed)) {
+            _currentMedications.add(trimmed);
+          }
+        }
+      }
+    });
+  }
+
+  void _importChartMedications() {
+    final p = _selectedPatient;
+    if (p == null || p.prescriptions.isEmpty) return;
+    setState(() {
+      for (final rx in p.prescriptions) {
+        final trimmed = rx.trim();
+        if (trimmed.isNotEmpty && !_currentMedications.contains(trimmed)) {
+          _currentMedications.add(trimmed);
+        }
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Imported medications from patient chart')),
+    );
+  }
+
+  List<String> get _quickMedicationChips {
+    final chips = <String>{};
+    if (_selectedPatient != null) {
+      chips.addAll(_selectedPatient!.prescriptions.map((e) => e.trim()).where((e) => e.isNotEmpty));
+    }
+    chips.addAll(_commonMedications);
+    return chips.take(14).toList();
   }
 
   @override
   void dispose() {
+    _patientsSubscription?.cancel();
     _medicationController.dispose();
     _doseController.dispose();
     _medicationFocus.dispose();
     _weightController.dispose();
     _ageController.dispose();
     super.dispose();
-  }
-
-  @override
-  void onPatientLoaded(ProviderPatientRecord loadedPatient) {
-    setState(() {
-      _currentMedications.addAll(loadedPatient.prescriptions.take(5));
-    });
-  }
-
-  Future<void> _initializeScreen() async {
-    if (widget.patientId != null) {
-      await loadPatientData(widget.patientId);
-    }
   }
 
   void _addMedication() {
@@ -166,11 +252,13 @@ As a clinical pharmacist, analyze the following medications for drug interaction
 **Medications to Analyze:**
 ${_currentMedications.map((med) => '• $med').join('\n')}
 
-${patient != null ? '''
+${_selectedPatient != null ? '''
 **Patient Context:**
-- Age: ${patient!.age}
-- Medical History: ${patient!.medicalHistory.isEmpty ? 'No documented conditions' : patient!.medicalHistory.join(', ')}
-- Known Allergies: ${patient!.allergies.isEmpty ? 'None documented' : patient!.allergies.join(', ')}
+- Name: ${_selectedPatient!.fullName}
+- Age: ${_selectedPatient!.age}
+- Medical History: ${_selectedPatient!.medicalHistory.isEmpty ? 'No documented conditions' : _selectedPatient!.medicalHistory.join(', ')}
+- Known Allergies: ${_selectedPatient!.allergies.isEmpty ? 'None documented' : _selectedPatient!.allergies.join(', ')}
+- Current prescriptions on file: ${_selectedPatient!.prescriptions.isEmpty ? 'None' : _selectedPatient!.prescriptions.join(', ')}
 ''' : ''}
 
 Please provide a comprehensive safety analysis with the following structured format:
@@ -248,11 +336,11 @@ Format each section clearly with severity indicators (🔴 CRITICAL, 🟠 HIGH, 
   Future<void> _saveMedicationAnalysisToNotes() async {
     if (_analysisResult.isEmpty) return;
 
-    final patientId = patient?.id;
-    if (patientId == null) {
+    final patientId = _selectedPatient?.id;
+    if (patientId == null || patientId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Select a patient to save the medication safety analysis'),
+          content: Text('Select a patient from your log to save this analysis'),
           duration: Duration(seconds: 3),
         ),
       );
@@ -263,8 +351,12 @@ Format each section clearly with severity indicators (🔴 CRITICAL, 🟠 HIGH, 
 
     try {
       final severity = _severityResults['overall'] ?? 'LOW';
+      final doctorId = _authService.currentUser?.uid ?? '';
+      final now = DateTime.now();
       final note = ClinicalNote(
+        id: 'note_${_uuid.v4()}',
         patientId: patientId,
+        doctorId: doctorId,
         title: 'Medication Safety Analysis - $severity Risk',
         content: '''Medications Analyzed: ${_currentMedications.join(', ')}
 
@@ -278,10 +370,22 @@ $_analysisResult''',
           'Review medication list regularly',
           'Patient education provided'
         ],
-        createdBy: 'Clinical Pharmacist',
+        createdBy: _authService.currentUser?.displayName ?? 'Clinician',
+        noteType: 'ai',
+        createdAt: now,
+        updatedAt: now,
       );
 
       await _firestoreService.saveClinicalReport(note);
+
+      if (_selectedPatient != null) {
+        final updated = _selectedPatient!.copyWith(
+          prescriptions: List<String>.from(_currentMedications),
+          updatedAt: now,
+        );
+        await _firestoreService.savePatientRecord(updated);
+        _selectedPatient = updated;
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);
@@ -392,6 +496,23 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
     HapticFeedback.mediumImpact();
   }
 
+  Widget _sectionLabel(String title) => Padding(
+        padding: const EdgeInsets.only(bottom: AppTheme.sm),
+        child: Text(
+          title.toUpperCase(),
+          style: AppTheme.labelSmall.copyWith(
+            color: AppTheme.textSecondary,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+      );
+
+  Widget _sectionDivider() => const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppTheme.lg),
+        child: Divider(height: 1, color: AppTheme.dividerColor),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -405,66 +526,242 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Patient Info Card
-                  if (hasPatient) ...[
-                    SlideUpAnimation(
-                      child: _buildPatientCard(),
-                    ),
-                    const SizedBox(height: AppTheme.lg),
-                  ],
-
-                  // Add Medication Section
-                  SlideUpAnimation(
-                    delay: const Duration(milliseconds: 100),
-                    child: _buildAddMedicationCard(),
-                  ),
-
-                  const SizedBox(height: AppTheme.lg),
-
-                  // Current Medications List
-                  if (_currentMedications.isNotEmpty) ...[
-                    SlideUpAnimation(
-                      delay: const Duration(milliseconds: 200),
-                      child: _buildMedicationsList(),
-                    ),
-                    const SizedBox(height: AppTheme.xl),
-                    ScaleAnimation(
-                      delay: const Duration(milliseconds: 300),
-                      child: _buildCheckSafetyButton(),
-                    ),
-                    const SizedBox(height: AppTheme.md),
-                    ScaleAnimation(
-                      delay: const Duration(milliseconds: 400),
-                      child: _buildDosageCalculatorButton(),
-                    ),
-                  ],
-
-                  // Analysis Results
+                  SlideUpAnimation(child: _buildUnifiedMedicationCard()),
                   if (_analysisResult.isNotEmpty) ...[
-                    const SizedBox(height: AppTheme.xl),
-                    FadeInAnimation(
-                      child: _buildAnalysisCard(),
-                    ),
-                  ],
-
-                  // Dosage Calculator Results
-                  if (_showDosageCalculator) ...[
                     const SizedBox(height: AppTheme.lg),
-                    SlideUpAnimation(
-                      child: _buildDosageCalculatorCard(),
-                    ),
+                    FadeInAnimation(child: _buildAnalysisCard()),
                   ],
-
-                  // Empty State
-                  if (_currentMedications.isEmpty && _analysisResult.isEmpty)
-                    SlideUpAnimation(
-                      delay: const Duration(milliseconds: 200),
-                      child: _buildEmptyState(),
-                    ),
-
                   const SizedBox(height: AppTheme.xl),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnifiedMedicationCard() {
+    final severity = _severityResults['overall'];
+    final severityColor = severity != null ? _getSeverityColor(severity) : null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.dividerColor.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg, vertical: AppTheme.md),
+            color: const Color(0xFFFFF7ED),
+            child: Row(
+              children: [
+                Icon(Icons.medication_outlined, color: Colors.orange.shade800, size: 22),
+                const SizedBox(width: AppTheme.sm),
+                Expanded(
+                  child: Text(
+                    'Drug interaction check',
+                    style: AppTheme.labelLarge.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                ),
+                if (_currentMedications.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_currentMedications.length} meds',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.orange.shade900,
+                      ),
+                    ),
+                  ),
+                if (severity != null && severityColor != null) ...[
+                  const SizedBox(width: AppTheme.sm),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: severityColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      severity,
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: severityColor),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppTheme.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _sectionLabel('Patient'),
+                PatientLogSelector(
+                  patients: _patients,
+                  selectedPatient: _selectedPatient,
+                  isLoading: _isLoadingPatients,
+                  onSelected: (p) {
+                    if (p != null) _applyPatient(p, importChartMeds: true);
+                    else setState(() => _selectedPatient = null);
+                  },
+                  onRefresh: _loadInitialPatient,
+                ),
+                if (_selectedPatient != null && _selectedPatient!.prescriptions.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppTheme.sm),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _importChartMedications,
+                        icon: const Icon(Icons.download_outlined, size: 18),
+                        label: const Text('Import meds from chart'),
+                      ),
+                    ),
+                  ),
+                _sectionDivider(),
+                _sectionLabel('Add medication'),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: _medicationController,
+                        focusNode: _medicationFocus,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: InputDecoration(
+                          hintText: 'Medication name',
+                          filled: true,
+                          fillColor: const Color(0xFFF8F9FB),
+                          prefixIcon: const Icon(Icons.medication_outlined, size: 20),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          isDense: true,
+                        ),
+                        onSubmitted: (_) => _addMedication(),
+                      ),
+                    ),
+                    const SizedBox(width: AppTheme.sm),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _doseController,
+                        decoration: InputDecoration(
+                          hintText: 'Dose',
+                          filled: true,
+                          fillColor: const Color(0xFFF8F9FB),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          isDense: true,
+                        ),
+                        onSubmitted: (_) => _addMedication(),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppTheme.sm),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _addMedication,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add to list'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppTheme.md),
+                Text(
+                  _selectedPatient != null ? 'Quick add (chart + common)' : 'Common medications',
+                  style: AppTheme.labelSmall.copyWith(color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: AppTheme.xs),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _quickMedicationChips.map((med) {
+                    final fromChart = _selectedPatient?.prescriptions.contains(med) ?? false;
+                    return ActionChip(
+                      label: Text(med, style: const TextStyle(fontSize: 12)),
+                      avatar: fromChart
+                          ? Icon(Icons.assignment_outlined, size: 14, color: AppTheme.primaryColor)
+                          : null,
+                      onPressed: () {
+                        _medicationController.text = med;
+                        _addMedication();
+                      },
+                    );
+                  }).toList(),
+                ),
+                if (_currentMedications.isNotEmpty) ...[
+                  _sectionDivider(),
+                  _sectionLabel('Medication list (${_currentMedications.length})'),
+                  ...List.generate(_currentMedications.length, (index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppTheme.sm),
+                      child: Material(
+                        color: const Color(0xFFF8F9FB),
+                        borderRadius: BorderRadius.circular(12),
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.medication, color: Colors.orange.shade700, size: 20),
+                          title: Text(_currentMedications[index], style: AppTheme.bodyMedium),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () => _removeMedication(index),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: AppTheme.lg),
+                  _buildCheckSafetyButton(),
+                  const SizedBox(height: AppTheme.sm),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() => _showDosageCalculator = !_showDosageCalculator);
+                      if (_showDosageCalculator && _selectedPatient != null) {
+                        _ageController.text = '${_selectedPatient!.age}';
+                      }
+                    },
+                    icon: Icon(_showDosageCalculator ? Icons.expand_less : Icons.calculate_outlined),
+                    label: Text(_showDosageCalculator ? 'Hide dosage calculator' : 'Dosage calculator'),
+                  ),
+                  if (_showDosageCalculator) ...[
+                    const SizedBox(height: AppTheme.md),
+                    _buildDosageCalculatorCard(),
+                  ],
+                ] else
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppTheme.xl),
+                    child: Text(
+                      'Select a patient and add medications to run interaction analysis.',
+                      textAlign: TextAlign.center,
+                      style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -478,10 +775,10 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
       expandedHeight: 80,
       floating: false,
       pinned: true,
-      backgroundColor: Colors.orange.shade300,
+      backgroundColor: Colors.orange.shade700,
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
-          color: Colors.orange.shade300,
+          color: Colors.orange.shade700,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(AppTheme.lg, 0, AppTheme.lg, AppTheme.sm),
             child: Column(
@@ -491,17 +788,13 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            width: 0.5,
-                          ),
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
-                          CupertinoIcons.shield_lefthalf_fill,
+                          Icons.shield_outlined,
                           color: Colors.white,
                           size: 24,
                         ),
@@ -545,7 +838,7 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(
-                                CupertinoIcons.number,
+                                Icons.medication_outlined,
                                 color: Colors.white,
                                 size: 12,
                               ),
@@ -570,532 +863,35 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
         ),
       actions: [
         if (_currentMedications.isNotEmpty || _analysisResult.isNotEmpty)
-          CupertinoButton(
-            padding: const EdgeInsets.all(12),
-            child: const Icon(
-              CupertinoIcons.refresh_circled,
-              color: Colors.white,
-              size: 24,
-            ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            tooltip: 'Clear all',
             onPressed: _clearAll,
           ),
       ],
     );
   }
 
-  Widget _buildPatientCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: CupertinoColors.systemOrange.withValues(alpha: 0.2),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFFF6B35),
-                  Color(0xFFE55D4A),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFF6B35).withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                getPatientDisplayName().substring(0, 1).toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: AppTheme.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  getPatientDisplayName(),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1D1D1F),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  getPatientInfo(),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: CupertinoColors.systemGrey,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: CupertinoColors.systemOrange.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              CupertinoIcons.person_badge_plus,
-              color: CupertinoColors.systemOrange,
-              size: 20,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddMedicationCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: CupertinoColors.systemGrey5,
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.systemBlue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  CupertinoIcons.add_circled,
-                  color: CupertinoColors.systemBlue,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: AppTheme.md),
-              const Text(
-                'Add Medications',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1D1D1F),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Medication Name
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Medication Name',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: CupertinoColors.systemGrey,
-                ),
-              ),
-              const SizedBox(height: 8),
-              CupertinoTextField(
-                controller: _medicationController,
-                focusNode: _medicationFocus,
-                textCapitalization: TextCapitalization.words,
-                placeholder: 'e.g., Aspirin, Metformin, Lisinopril',
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.systemGrey6,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: CupertinoColors.systemGrey4,
-                    width: 0.5,
-                  ),
-                ),
-                prefix: Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: Icon(
-                    CupertinoIcons.capsule,
-                    color: CupertinoColors.systemGrey,
-                    size: 20,
-                  ),
-                ),
-                onSubmitted: (_) => _addMedication(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Dose (Optional)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Dose (Optional)',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: CupertinoColors.systemGrey,
-                ),
-              ),
-              const SizedBox(height: 8),
-              CupertinoTextField(
-                controller: _doseController,
-                placeholder: 'e.g., 100mg daily, 500mg twice daily',
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.systemGrey6,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: CupertinoColors.systemGrey4,
-                    width: 0.5,
-                  ),
-                ),
-                prefix: Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: Icon(
-                    CupertinoIcons.gauge,
-                    color: CupertinoColors.systemGrey,
-                    size: 20,
-                  ),
-                ),
-                onSubmitted: (_) => _addMedication(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Add Button
-          Container(
-            width: double.infinity,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.blue,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: _addMedication,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    CupertinoIcons.add,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Add to List',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Quick Selection Section
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    CupertinoIcons.bolt_fill,
-                    size: 16,
-                    color: CupertinoColors.systemOrange,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Quick Selection',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: CupertinoColors.systemGrey,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _commonMedications.take(10).map((medication) {
-                  return GestureDetector(
-                    onTap: () {
-                      _medicationController.text = medication;
-                      _addMedication();
-                      HapticFeedback.lightImpact();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.systemGrey6,
-                        border: Border.all(
-                          color: CupertinoColors.systemGrey4,
-                          width: 0.5,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        medication,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: CupertinoColors.systemGrey,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMedicationsList() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: CupertinoColors.systemGrey5,
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.systemIndigo.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  CupertinoIcons.list_bullet,
-                  color: CupertinoColors.systemIndigo,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: AppTheme.md),
-              const Text(
-                'Current Medications',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1D1D1F),
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.systemIndigo.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: CupertinoColors.systemIndigo.withValues(alpha: 0.2),
-                    width: 0.5,
-                  ),
-                ),
-                child: Text(
-                  '${_currentMedications.length}',
-                  style: TextStyle(
-                    color: CupertinoColors.systemIndigo,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...List.generate(_currentMedications.length, (index) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: CupertinoColors.systemGrey6,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: CupertinoColors.systemGrey4.withValues(alpha: 0.7),
-                  width: 0.5,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.systemOrange.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      CupertinoIcons.capsule_fill,
-                      color: CupertinoColors.systemOrange,
-                      size: 16,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _currentMedications[index],
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF1D1D1F),
-                      ),
-                    ),
-                  ),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minSize: 32,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.systemRed.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        CupertinoIcons.xmark,
-                        size: 14,
-                        color: CupertinoColors.systemRed,
-                      ),
-                    ),
-                    onPressed: () {
-                      _removeMedication(index);
-                      HapticFeedback.lightImpact();
-                    },
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
 
   Widget _buildCheckSafetyButton() {
-    return Container(
-      height: 54,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: _isAnalyzing
-            ? null
-            : const LinearGradient(
-                colors: [
-                  Color(0xFF34C759), // iOS Green
-                  Color(0xFF28A745),
-                ],
-              ),
-        color: _isAnalyzing ? CupertinoColors.systemGrey4 : null,
-        boxShadow: _isAnalyzing
-            ? null
-            : [
-                BoxShadow(
-                  color: const Color(0xFF34C759).withValues(alpha: 0.4),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-      ),
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
         onPressed: _isAnalyzing ? null : _analyzeMedicationSafety,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (_isAnalyzing) ...[
-              const CupertinoActivityIndicator(
-                color: Colors.white,
-              ),
-              const SizedBox(width: AppTheme.md),
-              const Text(
-                'Analyzing Safety...',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ] else ...[
-              const Icon(
-                CupertinoIcons.shield_lefthalf_fill,
-                color: Colors.white,
-                size: 22,
-              ),
-              const SizedBox(width: AppTheme.md),
-              const Text(
-                'Check Drug Interactions',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ],
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF059669),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
+        icon: _isAnalyzing
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              )
+            : const Icon(Icons.shield_outlined),
+        label: Text(_isAnalyzing ? 'Analyzing interactions…' : 'Check drug interactions'),
       ),
     );
   }
@@ -1166,28 +962,14 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
                           ),
                           Text(
                             '${_currentMedications.length} medications analyzed',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: CupertinoColors.systemGrey,
-                            ),
+                            style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
                           ),
                         ],
                       ),
                     ),
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemGrey5,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          CupertinoIcons.doc_on_clipboard,
-                          color: CupertinoColors.systemGrey,
-                          size: 20,
-                        ),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.copy_outlined),
+                      tooltip: 'Copy analysis',
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: _analysisResult));
                         HapticFeedback.lightImpact();
@@ -1251,78 +1033,52 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
           ),
           // Footer with Save Button
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(AppTheme.lg),
             decoration: BoxDecoration(
-              color: CupertinoColors.systemGrey6,
+              color: const Color(0xFFF8F9FB),
               borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(
-                  CupertinoIcons.info_circle,
-                  size: 16,
-                  color: CupertinoColors.systemGrey,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Always verify with clinical pharmacist',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontStyle: FontStyle.italic,
-                      color: CupertinoColors.systemGrey,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppTheme.sm),
                 Text(
-                  DateFormat('h:mm a').format(DateTime.now()),
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: CupertinoColors.systemGrey,
+                  'Verify with a clinical pharmacist before prescribing.',
+                  style: AppTheme.bodySmall.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: AppTheme.textSecondary,
                   ),
                 ),
-                const SizedBox(width: AppTheme.md),
-                Container(
-                  height: 36,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        CupertinoColors.systemOrange,
-                        CupertinoColors.systemOrange.darkColor,
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: CupertinoButton(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    minSize: 0,
-                    onPressed: _isSaving ? null : _saveMedicationAnalysisToNotes,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_isSaving)
-                          const CupertinoActivityIndicator(
-                            color: Colors.white,
-                          )
-                        else
-                          const Icon(
-                            CupertinoIcons.floppy_disk,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _isSaving ? 'Saving...' : 'Save to Notes',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                          ),
+                const SizedBox(height: AppTheme.sm),
+                Wrap(
+                  spacing: AppTheme.sm,
+                  runSpacing: AppTheme.sm,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    if (_selectedPatient != null)
+                      TextButton.icon(
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          AppRouter.patientDetail,
+                          arguments: _selectedPatient,
                         ),
-                      ],
+                        icon: const Icon(Icons.person_outline, size: 18),
+                        label: const Text('Patient chart'),
+                      ),
+                    FilledButton.icon(
+                      onPressed: _isSaving ? null : _saveMedicationAnalysisToNotes,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.save_outlined, size: 18),
+                      label: Text(_isSaving ? 'Saving…' : 'Save to notes'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.orange.shade700,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -1335,127 +1091,39 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
   Color _getSeverityColor(String severity) {
     switch (severity) {
       case 'CRITICAL':
-        return CupertinoColors.systemRed;
+        return AppTheme.dangerColor;
       case 'HIGH':
-        return CupertinoColors.systemOrange;
+        return AppTheme.warningColor;
       case 'MODERATE':
-        return CupertinoColors.systemBlue;
+        return AppTheme.primaryColor;
       case 'LOW':
       default:
-        return CupertinoColors.systemGreen;
+        return AppTheme.successColor;
     }
   }
 
   IconData _getSeverityIcon(String severity) {
     switch (severity) {
       case 'CRITICAL':
-        return CupertinoIcons.exclamationmark_triangle_fill;
+        return Icons.warning_amber_rounded;
       case 'HIGH':
-        return CupertinoIcons.exclamationmark_circle_fill;
+        return Icons.error_outline;
       case 'MODERATE':
-        return CupertinoIcons.info_circle_fill;
+        return Icons.info_outline;
       case 'LOW':
       default:
-        return CupertinoIcons.checkmark_shield_fill;
+        return Icons.check_circle_outline;
     }
   }
 
-  Widget _buildEmptyState() {
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.xl * 2),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  CupertinoColors.systemOrange.withValues(alpha: 0.15),
-                  CupertinoColors.systemOrange.withValues(alpha: 0.05),
-                ],
-              ),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              CupertinoIcons.capsule,
-              size: 48,
-              color: CupertinoColors.systemOrange,
-            ),
-          ),
-          const SizedBox(height: AppTheme.lg),
-          const Text(
-            'No Medications Added',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1D1D1F),
-            ),
-          ),
-          const SizedBox(height: AppTheme.sm),
-          Text(
-            'Add medications above to check for\ndrug interactions and safety concerns',
-            style: TextStyle(
-              fontSize: 15,
-              color: CupertinoColors.systemGrey,
-              fontWeight: FontWeight.w400,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDosageCalculatorButton() {
-    return OutlinedButton.icon(
-      onPressed: () {
-        setState(() {
-          _showDosageCalculator = !_showDosageCalculator;
-          if (!_showDosageCalculator) {
-            _calculatedDosage = '';
-            _weightController.clear();
-            _ageController.clear();
-            _selectedMedForDosage = '';
-          }
-        });
-      },
-      icon: Icon(
-        _showDosageCalculator ? Icons.calculate_outlined : Icons.calculate,
-        color: AppTheme.primaryColor,
-      ),
-      label: Text(
-        _showDosageCalculator ? 'Hide Calculator' : 'Dosage Calculator',
-        style: const TextStyle(
-          color: AppTheme.primaryColor,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: AppTheme.primaryColor, width: 2),
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
-  }
 
   Widget _buildDosageCalculatorCard() {
     return Container(
-      padding: const EdgeInsets.all(AppTheme.lg),
+      padding: const EdgeInsets.all(AppTheme.md),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.primaryColor.withValues(alpha: 0.05),
-            AppTheme.primaryColor.withValues(alpha: 0.02),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppTheme.primaryColor.withValues(alpha: 0.2),
-        ),
+        color: const Color(0xFFF8F9FB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
