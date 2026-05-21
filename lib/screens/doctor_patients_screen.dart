@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../services/firebase/storage_service.dart';
 import '../theme/app_animations.dart';
 import '../widgets/patient/patient_avatar.dart';
+import '../services/fhir/fhir_sync_service.dart';
 import 'doctor_patient_create_edit_screen.dart';
 import 'doctor_patient_detail_screen.dart';
 
@@ -24,8 +25,10 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
   final HealthcareServicesManager _services = HealthcareServicesManager();
+  final FhirSyncService _fhirSyncService = FhirSyncService();
   final Set<String> _deletingPatientIds = {};
   final Set<String> _optimisticallyRemovedIds = {};
+  bool _isSyncingEhr = false;
 
   String? get _doctorId => _authService.currentUser?.uid;
 
@@ -33,6 +36,34 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
   void initState() {
     super.initState();
     StorageService().warmPatientPhotosCache();
+    _syncFromEhr(showSnackbar: false);
+  }
+
+  Future<void> _syncFromEhr({required bool showSnackbar}) async {
+    final doctorId = _doctorId;
+    if (doctorId == null || _isSyncingEhr) return;
+
+    setState(() => _isSyncingEhr = true);
+    try {
+      final result = await _fhirSyncService.syncPatientsForDoctor(doctorId);
+      if (!mounted) return;
+      if (showSnackbar) {
+        final message = result == null
+            ? 'EHR sync not configured'
+            : 'Synced ${result.patientsSynced} patients from EHR';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+        );
+      }
+    } catch (e) {
+      if (mounted && showSnackbar) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('EHR sync failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncingEhr = false);
+    }
   }
 
   Future<void> _addQuickSamplePatient() async {
@@ -148,6 +179,19 @@ class _DoctorPatientsScreenState extends State<DoctorPatientsScreen> {
         title: const Text('My Patients'),
         backgroundColor: AppTheme.surfaceColor,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Sync from EHR',
+            onPressed: _isSyncingEhr ? null : () => _syncFromEhr(showSnackbar: true),
+            icon: _isSyncingEhr
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync),
+          ),
+        ],
       ),
       floatingActionButton: ScaleAnimation(
         delay: const Duration(milliseconds: 300),

@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:async';
+import 'package:uuid/uuid.dart';
 import '../core/errors/app_error_handler.dart';
 import '../theme/app_theme.dart';
 import '../models/health_models.dart';
 import '../services/chatbot_service.dart';
 import '../services/firebase/firestore_service.dart';
+import '../services/firebase/storage_service.dart';
+import '../widgets/clinical_md.dart';
+import '../widgets/workflow/workflow_header_card.dart';
 
 class DocumentScannerScreen extends StatefulWidget {
   final String patientId;
@@ -24,10 +28,13 @@ class _DocumentScannerScreenState extends State<DocumentScannerScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   final ChatbotService _chatbotService = ChatbotService();
   final FirestoreService _firestoreService = FirestoreService();
+  final StorageService _storageService = StorageService();
+  final Uuid _uuid = const Uuid();
   
   final List<DocumentScan> _scans = [];
   bool _isAnalyzing = false;
   String _selectedDocType = 'lab_report';
+  bool _isReanalyzing = false;
   File? _selectedImage;
   StreamSubscription<List<DocumentScan>>? _cloudSubscription;
 
@@ -73,6 +80,26 @@ class _DocumentScannerScreenState extends State<DocumentScannerScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.lg, AppTheme.lg, 0),
+              child: WorkflowHeaderCard(
+                title: 'Document Scanner',
+                subtitle: 'Capture, classify, and analyze medical documents.',
+                icon: Icons.document_scanner_outlined,
+                accentColor: const Color(0xFF9333EA),
+                stats: [
+                  WorkflowHeaderStat(
+                    icon: Icons.folder_copy_outlined,
+                    label: '${_scans.length} scans',
+                  ),
+                  WorkflowHeaderStat(
+                    icon: Icons.auto_awesome_outlined,
+                    label: _isAnalyzing ? 'Analyzing' : 'AI ready',
+                  ),
+                ],
+                helperText: 'Use camera or gallery to capture a document and extract key details.',
+              ),
+            ),
             // Upload Section
             _buildUploadSection(),
             const SizedBox(height: AppTheme.lg),
@@ -137,8 +164,12 @@ class _DocumentScannerScreenState extends State<DocumentScannerScreen> {
                   children: [
                     _buildDocTypeChip('lab_report', 'Lab Report', Icons.biotech),
                     _buildDocTypeChip('xray', 'X-Ray', Icons.image),
-                    _buildDocTypeChip('scan', 'Scan', Icons.document_scanner),
+                    _buildDocTypeChip('scan', 'Scan/MRI', Icons.document_scanner),
                     _buildDocTypeChip('prescription', 'Prescription', Icons.medication),
+                    _buildDocTypeChip('discharge', 'Discharge', Icons.local_hospital_outlined),
+                    _buildDocTypeChip('ecg', 'ECG/EKG', Icons.monitor_heart_outlined),
+                    _buildDocTypeChip('referral', 'Referral', Icons.assignment_outlined),
+                    _buildDocTypeChip('other', 'Other', Icons.description_outlined),
                   ],
                 ),
               ],
@@ -284,17 +315,14 @@ class _DocumentScannerScreenState extends State<DocumentScannerScreen> {
                 ),
             ],
           ),
-          if (scan.analysis != null) ...[
+          if (scan.analysis.isNotEmpty) ...[
             const SizedBox(height: AppTheme.md),
             const Divider(color: AppTheme.dividerColor, height: 1),
             const SizedBox(height: AppTheme.md),
-            Text(
-              'Analysis',
-              style: AppTheme.labelMedium,
-            ),
+            Text('Analysis', style: AppTheme.labelMedium),
             const SizedBox(height: AppTheme.xs),
             Text(
-              scan.analysis!,
+              _stripMdPreview(scan.analysis),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: AppTheme.bodySmall,
@@ -303,6 +331,11 @@ class _DocumentScannerScreenState extends State<DocumentScannerScreen> {
         ],
       ),
     );
+  }
+
+  bool _isRemotePath(String path) {
+    final trimmed = path.trim();
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
   }
 
   Widget _buildEmptyState() {
@@ -352,19 +385,10 @@ class _DocumentScannerScreenState extends State<DocumentScannerScreen> {
 
   Future<void> _analyzeDocument() async {
     if (_selectedImage == null) return;
-
     setState(() => _isAnalyzing = true);
 
     try {
-      // Create analysis prompt
-      final prompt = '''Analyze this medical document image and provide:
-1. Document Type Confirmation
-2. Key Health Metrics/Values
-3. Important Findings
-4. Recommended Actions
-5. Risk Assessment
-
-Provide the analysis in a structured format.''';
+      final prompt = _buildPromptForDocType(_selectedDocType);
 
       final analysis = await _chatbotService.getGeminiVisionResponse(
         prompt: prompt,
@@ -373,11 +397,28 @@ Provide the analysis in a structured format.''';
 
       if (!mounted) return;
 
-      final scan = DocumentScan(
+      // Reject error-shaped responses so they are never saved as clinical content.
+      final lower = analysis.trim().toLowerCase();
+      if (lower.startsWith('error:') ||
+          lower.contains('could not connect') ||
+          lower.contains('api key') ||
+          lower.isEmpty) {
+        throw Exception('AI analysis failed — please check your Gemini API key in Firebase.');
+      }
+
+      final scanId = 'scan_${_uuid.v4()}';
+      final remoteUrl = await _storageService.uploadDocumentImage(
+        filePath: _selectedImage!.path,
         patientId: widget.patientId,
-        imagePath: _selectedImage!.path,
+        scanId: scanId,
+      );
+
+      final scan = DocumentScan(
+        id: scanId,
+        patientId: widget.patientId,
+        imagePath: remoteUrl ?? _selectedImage!.path,
         documentType: _selectedDocType,
-        analysis: analysis,
+        analysis: analysis.trim(),
         isProcessed: true,
       );
 
@@ -395,11 +436,11 @@ Provide the analysis in a structured format.''';
       }
 
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Document analyzed successfully'),
+          content: Text('Document analyzed and saved'),
           backgroundColor: AppTheme.successColor,
+          duration: Duration(seconds: 2),
         ),
       );
     } catch (e) {
@@ -409,9 +450,115 @@ Provide the analysis in a structured format.''';
     }
   }
 
+  String _buildPromptForDocType(String docType) {
+    final typeLabel = _formatDocType(docType);
+    switch (docType) {
+      case 'lab_report':
+        return '''You are a clinical pathology assistant. Analyze this lab report image.
+
+Extract and structure the following:
+
+Test Results:
+- List each test name, value, unit, and reference range
+- Flag any values outside the reference range with ⚠️
+
+Key Findings:
+- Summarize the clinically significant abnormal values
+
+Clinical Interpretation:
+- What these results suggest (e.g. anaemia, infection, renal impairment)
+
+Recommended Actions:
+- Any urgent follow-up or repeat tests indicated
+
+Rules: Use only what is visible in the image. Do not guess values. If text is unclear, say "unreadable".''';
+
+      case 'xray':
+        return '''You are a radiologist assistant. Analyze this X-ray image.
+
+Provide:
+
+Anatomical Region:
+- What part of the body and projection (PA/AP/lateral etc.)
+
+Visible Structures:
+- Describe the key structures visible
+
+Findings:
+- Note any abnormalities, opacities, fractures, effusions, or masses
+- Describe size, location, and character
+
+Impression:
+- Likely diagnosis or differential
+
+Limitations:
+- Any quality issues or what cannot be assessed from this image
+
+Rules: Be precise. If this is not a medical image, say so clearly.''';
+
+      case 'scan':
+        return '''You are a radiologist assistant. Analyze this medical scan/imaging report.
+
+Provide:
+
+Scan Type & Region:
+- Modality (CT/MRI/Ultrasound etc.) and body region
+
+Key Findings:
+- Describe each significant finding with location and measurements if visible
+
+Impression:
+- Primary diagnosis or differential diagnoses
+
+Urgency:
+- Is urgent follow-up needed?
+
+Rules: Base analysis only on visible content. Flag anything that requires immediate attention.''';
+
+      case 'prescription':
+        return '''You are a clinical pharmacist assistant. Analyze this prescription image.
+
+Extract and provide:
+
+Medications Prescribed:
+- Drug name, dose, frequency, duration for each item
+
+Patient Instructions:
+- Any special instructions visible
+
+Safety Check:
+- Flag any unusual doses, potential interactions (if multiple drugs), or missing information
+
+Missing Information:
+- List any fields that are blank or unreadable (date, prescriber, patient name etc.)
+
+Rules: Extract only what is clearly visible. Do not infer or guess medication names if unclear.''';
+
+      default:
+        return '''You are a clinical documentation assistant. Analyze this $typeLabel medical document.
+
+Provide:
+
+Document Summary:
+- Type and purpose of this document
+
+Key Clinical Information:
+- All clinically relevant data, values, diagnoses, or instructions present
+
+Important Findings:
+- Any abnormalities, warnings, or action items
+
+Recommended Actions:
+- What should be done based on this document
+
+Rules: Use only what is visible in the image. Be concise and clinically precise.''';
+    }
+  }
+
   Future<void> _showScanDetails(DocumentScan scan) async {
-    final imageFile = File(scan.imagePath);
-    final imageExists = await imageFile.exists();
+    final isRemote = _isRemotePath(scan.imagePath);
+    final imageFile = isRemote ? null : File(scan.imagePath);
+    final imageExists = imageFile != null && await imageFile.exists();
 
     if (!mounted) return;
 
@@ -454,18 +601,35 @@ Provide the analysis in a structured format.''';
                           width: double.infinity,
                           fit: BoxFit.cover,
                         )
-                      : Container(
-                          height: 180,
-                          width: double.infinity,
-                          color: AppTheme.backgroundColor,
-                          alignment: Alignment.center,
-                          child: Text(
-                            'Image preview unavailable on this device.',
-                            style: AppTheme.bodySmall,
-                          ),
-                        ),
+                      : isRemote
+                          ? Image.network(
+                              scan.imagePath,
+                              height: 300,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                height: 180,
+                                width: double.infinity,
+                                color: AppTheme.backgroundColor,
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'Image preview unavailable on this device.',
+                                  style: AppTheme.bodySmall,
+                                ),
+                              ),
+                            )
+                          : Container(
+                              height: 180,
+                              width: double.infinity,
+                              color: AppTheme.backgroundColor,
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Image preview unavailable on this device.',
+                                style: AppTheme.bodySmall,
+                              ),
+                            ),
                 ),
-                if (!imageExists) ...[
+                if (!imageExists && !isRemote) ...[
                   const SizedBox(height: AppTheme.sm),
                   Text(
                     'The scan record was synced from cloud, but local image file path is not present here.',
@@ -473,7 +637,7 @@ Provide the analysis in a structured format.''';
                   ),
                 ],
                 const SizedBox(height: AppTheme.lg),
-                if (scan.extractedText != null) ...[
+                if (scan.extractedText.isNotEmpty) ...[
                   Text('Extracted Text', style: AppTheme.labelLarge),
                   const SizedBox(height: AppTheme.md),
                   Container(
@@ -482,28 +646,57 @@ Provide the analysis in a structured format.''';
                       color: AppTheme.backgroundColor,
                       borderRadius: AppTheme.mediumRadius,
                     ),
-                    child: Text(
-                      scan.extractedText!,
-                      style: AppTheme.bodySmall,
-                    ),
+                    child: Text(scan.extractedText, style: AppTheme.bodySmall),
                   ),
                   const SizedBox(height: AppTheme.lg),
                 ],
-                if (scan.analysis != null) ...[
-                  Text('AI Analysis', style: AppTheme.labelLarge),
+                if (scan.analysis.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Expanded(child: Text('AI Analysis', style: AppTheme.labelLarge)),
+                      TextButton.icon(
+                        onPressed: _isReanalyzing
+                            ? null
+                            : () => _reanalyze(context, scan),
+                        icon: _isReanalyzing
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh, size: 16),
+                        label: Text(_isReanalyzing ? 'Analyzing…' : 'Re-analyze'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.primaryColor,
+                          textStyle: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: AppTheme.md),
                   Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.all(AppTheme.md),
                     decoration: BoxDecoration(
-                      color: AppTheme.successColor.withValues(alpha: 0.1),
+                      color: AppTheme.successColor.withValues(alpha: 0.08),
                       borderRadius: AppTheme.mediumRadius,
                       border: Border.all(
                         color: AppTheme.successColor.withValues(alpha: 0.3),
                       ),
                     ),
-                    child: Text(
-                      scan.analysis!,
-                      style: AppTheme.bodySmall,
+                    child: ClinicalMd(
+                      scan.analysis,
+                      fontSize: 13,
+                      selectable: true,
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: AppTheme.md),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: _isReanalyzing ? null : () => _reanalyze(context, scan),
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      label: const Text('Analyze this document'),
                     ),
                   ),
                 ],
@@ -517,31 +710,27 @@ Provide the analysis in a structured format.''';
 
   Color _getDocTypeColor(String type) {
     switch (type) {
-      case 'lab_report':
-        return AppTheme.primaryColor;
-      case 'xray':
-        return AppTheme.secondaryColor;
-      case 'scan':
-        return AppTheme.warningColor;
-      case 'prescription':
-        return AppTheme.successColor;
-      default:
-        return AppTheme.textSecondary;
+      case 'lab_report':   return AppTheme.primaryColor;
+      case 'xray':         return AppTheme.secondaryColor;
+      case 'scan':         return AppTheme.warningColor;
+      case 'prescription': return AppTheme.successColor;
+      case 'discharge':    return AppTheme.infoColor;
+      case 'ecg':          return AppTheme.cardiologyColor;
+      case 'referral':     return AppTheme.neurologyColor;
+      default:             return AppTheme.textSecondary;
     }
   }
 
   IconData _getDocTypeIcon(String type) {
     switch (type) {
-      case 'lab_report':
-        return Icons.biotech;
-      case 'xray':
-        return Icons.image;
-      case 'scan':
-        return Icons.document_scanner;
-      case 'prescription':
-        return Icons.medication;
-      default:
-        return Icons.description;
+      case 'lab_report':   return Icons.biotech;
+      case 'xray':         return Icons.image;
+      case 'scan':         return Icons.document_scanner;
+      case 'prescription': return Icons.medication;
+      case 'discharge':    return Icons.local_hospital_outlined;
+      case 'ecg':          return Icons.monitor_heart_outlined;
+      case 'referral':     return Icons.assignment_outlined;
+      default:             return Icons.description_outlined;
     }
   }
 
@@ -567,18 +756,101 @@ Provide the analysis in a structured format.''';
     );
   }
 
+  /// Strips markdown for the compact card preview (no markdown renderer in
+  /// a truncating Text widget). Removes `**bold**`, `*italic*`, `# headers`,
+  /// leading `- ` bullets, and collapses whitespace.
+  String _stripMdPreview(String raw) => raw
+      .replaceAll(RegExp(r'\*{1,2}([^*]+)\*{1,2}'), r'$1')
+      .replaceAll(RegExp(r'^#{1,6}\s*', multiLine: true), '')
+      .replaceAll(RegExp(r'^-\s+', multiLine: true), '• ')
+      .replaceAll(RegExp(r'\n{2,}'), '\n')
+      .trim();
+
   String _formatDocType(String type) {
     switch (type) {
-      case 'lab_report':
-        return 'Lab Report';
-      case 'xray':
-        return 'X-Ray';
-      case 'scan':
-        return 'Medical Scan';
-      case 'prescription':
-        return 'Prescription';
-      default:
-        return 'Document';
+      case 'lab_report':   return 'Lab Report';
+      case 'xray':         return 'X-Ray';
+      case 'scan':         return 'Medical Scan / MRI';
+      case 'prescription': return 'Prescription';
+      case 'discharge':    return 'Discharge Summary';
+      case 'ecg':          return 'ECG / EKG';
+      case 'referral':     return 'Referral Letter';
+      default:             return 'Medical Document';
+    }
+  }
+
+  Future<void> _reanalyze(BuildContext sheetContext, DocumentScan scan) async {
+    final isRemote = _isRemotePath(scan.imagePath);
+    if (isRemote) {
+      // Can't re-send a remote URL to vision — need the original bytes.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Re-analysis requires the original image. Pick the document again from the upload section.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    final file = File(scan.imagePath);
+    if (!await file.exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Original image not found. Please re-scan the document.')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _isReanalyzing = true);
+
+    try {
+      final prompt = _buildPromptForDocType(scan.documentType);
+      final analysis = await _chatbotService.getGeminiVisionResponse(
+        prompt: prompt,
+        imagePath: scan.imagePath,
+      );
+
+      final lower = analysis.trim().toLowerCase();
+      if (lower.startsWith('error:') || lower.contains('could not connect') || lower.isEmpty) {
+        throw Exception('AI analysis failed — please check your Gemini API key.');
+      }
+
+      final updated = DocumentScan(
+        id: scan.id,
+        patientId: scan.patientId,
+        imagePath: scan.imagePath,
+        documentType: scan.documentType,
+        extractedText: scan.extractedText,
+        analysis: analysis.trim(),
+        isProcessed: true,
+        dateScanned: scan.dateScanned,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        final idx = _scans.indexWhere((s) => s.id == scan.id);
+        if (idx != -1) _scans[idx] = updated;
+        _isReanalyzing = false;
+      });
+
+      try {
+        await _firestoreService.saveDocumentScan(updated);
+      } catch (_) {}
+
+      if (!mounted) return;
+      // ignore: use_build_context_synchronously
+      Navigator.pop(sheetContext);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Re-analysis complete'),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isReanalyzing = false);
+      AppErrorHandler.showSnackBar(context, e);
     }
   }
 

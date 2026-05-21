@@ -1,7 +1,7 @@
 class AppBranding {
-  static const String appName = 'DocPilot';
+    static const String appName = 'Clinix AI';
   static const String appDescription =
-      'Medical documentation assistant for fast and structured clinical workflows.';
+            'Clinical command center for documentation, triage, rounds, and care coordination.';
   static const String privacyDisclaimer =
-      'By continuing, you agree to secure handling of clinical content.';
+            'By continuing, you agree to secure handling of clinical content.';
 }

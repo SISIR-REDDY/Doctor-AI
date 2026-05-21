@@ -45,7 +45,7 @@ abstract final class EmergencyTriageShare {
 
     buffer
       ..writeln()
-      ..writeln('— Open in DocPilot —')
+      ..writeln('— Open in Clinix AI —')
       ..writeln('Share code: ${record.shareCode}')
       ..writeln('Triage ID: ${record.id}');
     if (record.patientId.isNotEmpty) {
@@ -54,7 +54,7 @@ abstract final class EmergencyTriageShare {
     buffer
       ..writeln('Link: ${triageDeepLink(record.id)}')
       ..writeln()
-      ..writeln('In DocPilot: Emergency Triage → Import Case → enter share code')
+      ..writeln('In Clinix AI: Emergency Triage → Import Case → enter share code')
       ..writeln('Assessed by: $doctorName')
       ..writeln('Time: ${record.createdAt.toIso8601String()}');
 

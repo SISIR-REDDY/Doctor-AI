@@ -14,6 +14,8 @@ import '../services/firebase/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
 import '../widgets/patient/patient_log_selector.dart';
+import '../widgets/workflow/workflow_header_card.dart';
+import '../services/meds/openfda_service.dart';
 
 class MedicationSafetyScreen extends StatefulWidget {
   final String? patientId;
@@ -32,6 +34,7 @@ class _MedicationSafetyScreenState extends State<MedicationSafetyScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
   final Uuid _uuid = const Uuid();
+  final OpenFdaService _openFdaService = OpenFdaService();
 
   ProviderPatientRecord? _selectedPatient;
   final List<ProviderPatientRecord> _patients = [];
@@ -294,6 +297,8 @@ Format each section clearly with severity indicators (🔴 CRITICAL, 🟠 HIGH, 
 ''';
 
       final result = await _chatbotService.getGeminiResponse(prompt);
+      final fdaAppendix = await _openFdaService.buildSafetyAppendix(_currentMedications);
+      final combined = fdaAppendix.isNotEmpty ? '$result\n\n$fdaAppendix' : result;
 
       if (!mounted) return;
 
@@ -301,7 +306,7 @@ Format each section clearly with severity indicators (🔴 CRITICAL, 🟠 HIGH, 
       _extractSeverityInfo(result);
 
       setState(() {
-        _analysisResult = result;
+        _analysisResult = combined;
         _isAnalyzing = false;
       });
       HapticFeedback.mediumImpact();
@@ -558,6 +563,28 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  SlideUpAnimation(
+                    child: WorkflowHeaderCard(
+                      title: 'Medication Safety',
+                      subtitle: 'Check interactions, dosing risks, and contraindications.',
+                      icon: Icons.shield_outlined,
+                      accentColor: const Color(0xFFEA580C),
+                      stats: [
+                        WorkflowHeaderStat(
+                          icon: Icons.medication_outlined,
+                          label: '${_currentMedications.length} meds',
+                        ),
+                        WorkflowHeaderStat(
+                          icon: Icons.person_outline,
+                          label: _selectedPatient == null ? 'No patient' : 'Patient selected',
+                        ),
+                      ],
+                      helperText: _selectedPatient == null
+                          ? 'Select a patient to prefill chart medications.'
+                          : 'Use quick add chips or import from chart to start.',
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.md),
                   _buildDisclaimerBanner(),
                   const SizedBox(height: AppTheme.md),
                   SlideUpAnimation(child: _buildUnifiedMedicationCard()),

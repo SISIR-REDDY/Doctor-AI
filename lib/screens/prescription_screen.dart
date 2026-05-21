@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../core/healthcare/clinical_text_parser.dart';
 import '../core/healthcare/consultation_ui_theme.dart';
 import '../theme/app_theme.dart';
+import '../widgets/clinical_md.dart';
 
 class PrescriptionScreen extends StatefulWidget {
   final String prescription;
@@ -319,7 +320,7 @@ class _MedTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(text, style: const TextStyle(height: 1.45, fontSize: 14))),
+          Expanded(child: ClinicalMd(text, fontSize: 14)),
           if (isOtc)
             Container(
               margin: const EdgeInsets.only(left: AppTheme.sm),
@@ -387,7 +388,7 @@ class _SectionCard extends StatelessWidget {
                       decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: AppTheme.sm),
-                    Expanded(child: Text(item, style: const TextStyle(height: 1.45, fontSize: 14))),
+                    Expanded(child: ClinicalMd(item, fontSize: 14)),
                   ],
                 ),
               ),
@@ -418,7 +419,7 @@ class _RawExpansion extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(AppTheme.lg, 0, AppTheme.lg, AppTheme.lg),
-              child: SelectableText(raw, style: const TextStyle(fontSize: 13, height: 1.5, color: ConsultationPalette.muted)),
+              child: ClinicalMd(raw, fontSize: 13, color: ConsultationPalette.muted, selectable: true),
             ),
           ],
         ),

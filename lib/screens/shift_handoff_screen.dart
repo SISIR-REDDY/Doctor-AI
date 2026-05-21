@@ -17,6 +17,7 @@ import '../services/firebase/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
+import '../widgets/workflow/workflow_header_card.dart';
 
 class ShiftHandoffScreen extends StatefulWidget {
   final String? patientId;
@@ -276,7 +277,7 @@ Patient: ${hasPatient ? getPatientDisplayName() : 'No patient selected'}
 $_handoffReport
 
 ---
-Generated with DocPilot AI Assistant
+Generated with Clinix AI Assistant
 ''';
 
     try {
@@ -482,148 +483,21 @@ Generated with DocPilot AI Assistant
   }
 
   Widget _buildHeaderCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: CupertinoColors.systemTeal.withValues(alpha: 0.2),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.systemTeal.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  CupertinoIcons.clock,
-                  color: CupertinoColors.systemTeal,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1D1D1F),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Shift Time: ${DateFormat('h:mm a').format(DateTime.now())}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: CupertinoColors.systemGrey,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (hasPatient) ...[
-            const SizedBox(height: 20),
-            Container(
-              height: 0.5,
-              color: CupertinoColors.systemGrey4,
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF30D5C8),
-                        Color(0xFF0891B2),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Center(
-                    child: Text(
-                      getPatientDisplayName().substring(0, 1).toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppTheme.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        getPatientDisplayName(),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1D1D1F),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        getPatientInfo(),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: CupertinoColors.systemGrey,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGreen.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: CupertinoColors.systemGreen.withValues(alpha: 0.2),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: const Text(
-                    'Active',
-                    style: TextStyle(
-                      color: Color(0xFF34C759),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
+    final dateLabel = DateFormat('EEE, MMM d').format(DateTime.now());
+    final timeLabel = DateFormat('h:mm a').format(DateTime.now());
+
+    return WorkflowHeaderCard(
+      title: 'Shift Handoff',
+      subtitle: 'I-PASS structure for safer, clearer handoffs.',
+      icon: CupertinoIcons.arrow_swap,
+      accentColor: const Color(0xFF14B8A6),
+      stats: [
+        WorkflowHeaderStat(icon: Icons.calendar_today_outlined, label: dateLabel),
+        WorkflowHeaderStat(icon: Icons.schedule, label: timeLabel),
+      ],
+      helperText: hasPatient
+          ? 'Active patient: ${getPatientDisplayName()} • ${getPatientInfo()}'
+          : 'Select a patient to load chart summary and handoff history.',
     );
   }
 

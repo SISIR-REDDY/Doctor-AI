@@ -902,90 +902,84 @@ class _InteractiveVoiceAssistantScreenState
     );
   }
 
-  /// Generate consultation summary prompt WITH the actual transcript included
   String _buildConsultationSummaryPromptWithTranscript(String transcript) {
-    final patientContext = patient != null
-        ? '''
-**Patient Information:**
-- Name: ${patient!.fullName}
-- Age: ${patient!.age}
-- Medical History: ${patient!.medicalHistory.isEmpty ? 'None documented' : patient!.medicalHistory.join(', ')}
-'''
+    final ctx = patient != null
+        ? 'Patient: ${patient!.fullName}, age ${patient!.age}'
+            '${patient!.medicalHistory.isNotEmpty ? ', Hx: ${patient!.medicalHistory.join(", ")}' : ''}.'
         : '';
 
-    return '''As a clinical documentation assistant, analyze this consultation transcript.
-
-$patientContext
-
-Transcript:
+    return '''You are a senior clinician documenting a consultation. Produce complete, clinically useful SOAP notes.
+${ctx.isNotEmpty ? '\n$ctx\n' : ''}
+TRANSCRIPT:
 $transcript
 
-Use EXACTLY these section headers (with bullets under each):
+SECTION RULES:
+- Chief complaint + HPI: extract directly from transcript. Factual only.
+- Assessment + Plan + Follow-up: use clinical reasoning based on the symptoms. Be thorough and genuinely useful.
+- Safety flags: allergies, red flags, drug risks, or urgent warning signs relevant to these symptoms.
+- Findings/Observations: only if physical exam findings were mentioned.
+
+Use these headers exactly (plain text only — no #, no **):
 
 Chief complaint:
-- ...
-
 HPI:
-- ...
-
 Findings/Observations:
-- ...
-
 Assessment:
-- ...
-
 Plan:
-- ...
-
 Safety flags:
-- ...
-
 Follow-up:
-- ...
 
-Rules: Facts from transcript only. If unknown write "Not available from transcript". No # markdown headers.''';
+FORMAT:
+- 2-4 bullets per section, each starting with -
+- Assessment: probable diagnoses with confidence (e.g. "- Likely gastritis (epigastric pain)")
+- Plan: specific drugs with doses, investigations, referrals
+- Never write "Not available" or placeholder text
+- Omit only "Findings/Observations" if truly no exam was done''';
   }
 
-  /// Generate prescription prompt WITH the actual transcript included
   String _buildPrescriptionPromptWithTranscript(String transcript) {
-    final patientContext = patient != null
-        ? '''
-**Patient Information:**
-- Name: ${patient!.fullName}
-- Age: ${patient!.age}
-- Medical History: ${patient!.medicalHistory.isEmpty ? 'None documented' : patient!.medicalHistory.join(', ')}
-'''
+    final ctx = patient != null
+        ? 'Patient: ${patient!.fullName}, age ${patient!.age}'
+            '${patient!.medicalHistory.isNotEmpty ? ', Hx: ${patient!.medicalHistory.join(", ")}' : ''}.'
         : '';
 
-    return '''As a clinical prescribing assistant, review this consultation.
-
-$patientContext
-
-Transcript:
+    return '''You are an experienced clinical prescriber. Generate a complete, safe treatment plan.
+${ctx.isNotEmpty ? '\n$ctx\n' : ''}
+TRANSCRIPT:
 $transcript
 
-Use EXACTLY these section headers:
+Generate ALL four sections. Use clinical knowledge to recommend evidence-based treatment for reported symptoms.
+Mark explicitly prescribed drugs as "Prescribed:" and AI suggestions as "Suggested:".
+
+Use these headers exactly (plain text — no #, no **):
 
 Medications:
-- drug, dose, frequency, duration (mark OTC items with "(OTC)")
-
 Tests and diagnostics:
-- labs/imaging only if indicated
+Patient instructions:
+Warnings:
 
-Patient education:
-- self-care and return precautions
-
-Warnings and cautions:
-- allergies, interactions, red flags
-
-Missing details:
-- critical gaps for safe prescribing
-
-Rules: Do not put drugs under Tests. Facts from transcript only. No # headers.''';
+FORMAT:
+- Medications: Drug · dose · route · frequency · duration — one per bullet. OTC: add (OTC)
+- Tests: test name [reason] — one per bullet
+- Patient instructions: actionable self-care for these specific symptoms
+- Warnings: interactions, red flags, emergency signs
+- Minimum 2 bullets per section
+- If no clinical content: write "Insufficient clinical content — please record a real consultation."''';
   }
 
   String _sanitizeClinicalAiText(String raw) {
     var text = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
+
+    // Strip out any leaked AI error strings persisted by older builds —
+    // these should never have been saved into a patient record, but if
+    // they were, don't display them as clinical content.
+    final lower = text.toLowerCase();
+    if (lower.startsWith('error:') ||
+        lower.contains('could not connect to gemini') ||
+        (lower.contains('model gemini-') && lower.contains('not found')) ||
+        lower.contains('exception: model')) {
+      return '';
+    }
 
     // Models sometimes wrap markdown in fenced code blocks.
     text = text.replaceAll(

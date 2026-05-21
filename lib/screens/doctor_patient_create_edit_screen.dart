@@ -30,6 +30,7 @@ class _DoctorPatientCreateEditScreenState
   late TextEditingController _dateOfBirthController;
   late TextEditingController _contactNumberController;
   late TextEditingController _emailController;
+  late TextEditingController _ehrIdController;
   late TextEditingController _lastVisitSummaryController;
   late TextEditingController _prescriptionController;
   late TextEditingController _reportController;
@@ -63,6 +64,7 @@ class _DoctorPatientCreateEditScreenState
       _contactNumberController =
           TextEditingController(text: patient.contactNumber);
       _emailController = TextEditingController(text: patient.email);
+        _ehrIdController = TextEditingController(text: patient.ehrId);
       _lastVisitSummaryController =
           TextEditingController(text: patient.lastVisitSummary);
       _selectedGender = patient.gender;
@@ -78,6 +80,7 @@ class _DoctorPatientCreateEditScreenState
       _dateOfBirthController = TextEditingController();
       _contactNumberController = TextEditingController();
       _emailController = TextEditingController();
+      _ehrIdController = TextEditingController();
       _lastVisitSummaryController = TextEditingController();
       _prescriptions = [];
       _reports = [];
@@ -100,6 +103,7 @@ class _DoctorPatientCreateEditScreenState
     _dateOfBirthController.dispose();
     _contactNumberController.dispose();
     _emailController.dispose();
+    _ehrIdController.dispose();
     _lastVisitSummaryController.dispose();
     _prescriptionController.dispose();
     _reportController.dispose();
@@ -132,6 +136,7 @@ class _DoctorPatientCreateEditScreenState
             bloodType: _selectedBloodType,
             contactNumber: _contactNumberController.text,
             email: _emailController.text,
+            ehrId: _ehrIdController.text.trim(),
             lastVisitSummary: _lastVisitSummaryController.text,
             prescriptions: _prescriptions,
             reports: _reports,
@@ -150,6 +155,7 @@ class _DoctorPatientCreateEditScreenState
             bloodType: _selectedBloodType,
             contactNumber: _contactNumberController.text,
             email: _emailController.text,
+            ehrId: _ehrIdController.text.trim(),
             lastVisitSummary: _lastVisitSummaryController.text,
             prescriptions: _prescriptions,
             reports: _reports,
@@ -264,6 +270,12 @@ class _DoctorPatientCreateEditScreenState
                     setState(() => _selectedBloodType = value);
                   }
                 },
+              ),
+              const SizedBox(height: 12),
+              _buildTextField(
+                controller: _ehrIdController,
+                label: 'EHR Patient ID (optional)',
+                hint: 'FHIR Patient.id from Epic',
               ),
               const SizedBox(height: 12),
               _buildTextField(

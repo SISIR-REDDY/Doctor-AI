@@ -12,7 +12,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Doc Pilot</string>
+	<string>Clinix AI</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -20,7 +20,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Doc Pilot</string>
+	<string>Clinix AI</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -52,13 +52,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Doc Pilot needs camera access to capture and process medical documents.</string>
+	<string>Clinix AI needs camera access to capture and process medical documents.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Doc Pilot needs microphone access to record voice notes and audio for transcription.</string>
+	<string>Clinix AI needs microphone access to record voice notes and audio for transcription.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Doc Pilot needs permission to save generated document images to your photo library.</string>
+	<string>Clinix AI needs permission to save generated document images to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Doc Pilot needs access to your photo library to import document images.</string>
+	<string>Clinix AI needs access to your photo library to import document images.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

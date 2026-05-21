@@ -17,6 +17,7 @@ import '../services/firebase/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_animations.dart';
 import '../widgets/emergency/emergency_patient_panel.dart';
+import '../widgets/workflow/workflow_header_card.dart';
 
 class EmergencyTriageScreen extends StatefulWidget {
   final String? patientId;
@@ -648,6 +649,9 @@ $_triageAssessment''',
 
   @override
   Widget build(BuildContext context) {
+    final priorityLabel = _priorityLevel.isNotEmpty ? _priorityLevel : 'Not assessed';
+    final esiLabel = _esiLevel > 0 ? 'ESI-$_esiLevel' : 'ESI pending';
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       body: _isLoadingPatient
@@ -664,6 +668,28 @@ $_triageAssessment''',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        SlideUpAnimation(
+                          child: WorkflowHeaderCard(
+                            title: 'Emergency Triage',
+                            subtitle: 'Rapid assessment for acuity and immediate next steps.',
+                            icon: Icons.emergency_outlined,
+                            accentColor: const Color(0xFFDC2626),
+                            stats: [
+                              WorkflowHeaderStat(
+                                icon: Icons.shield_outlined,
+                                label: priorityLabel,
+                              ),
+                              WorkflowHeaderStat(
+                                icon: Icons.insights_outlined,
+                                label: esiLabel,
+                              ),
+                            ],
+                            helperText: _currentPatient == null
+                                ? 'Select a patient or assess as unknown.'
+                                : 'Patient selected. Capture complaint, vitals, and pain score.',
+                          ),
+                        ),
+                        const SizedBox(height: AppTheme.md),
                         SlideUpAnimation(child: _buildUnifiedTriageCard()),
                         if (_triageAssessment.isNotEmpty) ...[
                           const SizedBox(height: AppTheme.lg),

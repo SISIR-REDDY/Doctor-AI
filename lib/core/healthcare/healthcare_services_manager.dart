@@ -105,31 +105,48 @@ class HealthcareServicesManager {
     required String source,
     String? audioUrl,
     int durationSeconds = 0,
+    // Optional intake fields collected before recording starts.
+    String gender = '',
+    String dateOfBirth = '',
+    List<String> foodAllergies = const [],
+    List<String> medicinalAllergies = const [],
+    List<String> extraHistory = const [],  // surgeries, BP, height, weight, etc.
+    // Pass a pre-existing patient to attach the session to them directly.
+    ProviderPatientRecord? existingPatient,
   }) async {
     final doctorId = currentDoctorId;
     if (doctorId.isEmpty) return null;
 
-    final resolvedName = _normalizeName(patientName).trim();
-    final safeName = resolvedName.isEmpty ? 'Unknown Patient' : resolvedName;
-    final nameParts = _splitName(safeName);
     final now = DateTime.now();
 
-    final patient = ProviderPatientRecord(
-      id: const Uuid().v4(),
-      doctorId: doctorId,
-      firstName: nameParts.first,
-      lastName: nameParts.last,
-      lastVisitSummary: _firstLine(summary, fallback: transcript),
-      prescriptions: _extractPrescriptionItems(prescription),
-      reports: const <String>[],
-      foodAllergies: const <String>[],
-      medicinalAllergies: const <String>[],
-      medicalHistory: const <String>[],
-      createdAt: now,
-      updatedAt: now,
-    );
+    // ── Use existing patient record if selected, otherwise create a new one ──
+    ProviderPatientRecord patient;
+    if (existingPatient != null) {
+      patient = existingPatient;
+    } else {
+      final resolvedName = _normalizeName(patientName).trim();
+      final safeName = resolvedName.isEmpty ? 'Unknown Patient' : resolvedName;
+      final nameParts = _splitName(safeName);
 
-    await firestore.savePatientRecord(patient);
+      patient = ProviderPatientRecord(
+        id: const Uuid().v4(),
+        doctorId: doctorId,
+        firstName: nameParts.first,
+        lastName: nameParts.last,
+        gender: gender.isEmpty ? 'Unknown' : gender,
+        dateOfBirth: dateOfBirth,
+        lastVisitSummary: _firstLine(summary, fallback: transcript),
+        prescriptions: _extractPrescriptionItems(prescription),
+        reports: const <String>[],
+        foodAllergies: foodAllergies,
+        medicinalAllergies: medicinalAllergies,
+        medicalHistory: extraHistory,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await firestore.savePatientRecord(patient);
+    }
 
     final session = ConsultationSession(
       id: 'session_${now.microsecondsSinceEpoch}',

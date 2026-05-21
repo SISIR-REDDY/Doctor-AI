@@ -8,6 +8,12 @@ mixin AIAnalysisMixin<T extends StatefulWidget> on State<T> {
 
   bool isAnalyzing = false;
 
+  /// Runs a Gemini prompt and returns the response, or null on failure.
+  ///
+  /// Treats any response shaped like an error sentence (e.g. starts with
+  /// "Error:" or mentions a Gemini exception) as a failure too — so we
+  /// never persist a stack-trace string into a patient record even if an
+  /// older build leaked one through.
   Future<String?> performAIAnalysis({
     required String prompt,
     ProviderPatientRecord? patient,
@@ -25,10 +31,18 @@ mixin AIAnalysisMixin<T extends StatefulWidget> on State<T> {
       final enrichedPrompt = _withPatientContext(prompt, patient);
       final result = await _chatbotService.getGeminiResponse(enrichedPrompt);
 
+      if (_looksLikeAiError(result)) {
+        debugPrint('[AIAnalysisMixin] AI returned error-shaped response, discarding.');
+        return null;
+      }
+
       if (onSuccess != null) {
         onSuccess(result);
       }
       return result;
+    } catch (e) {
+      debugPrint('[AIAnalysisMixin] AI request failed: $e');
+      return null;
     } finally {
       if (mounted) {
         setState(() {
@@ -36,6 +50,20 @@ mixin AIAnalysisMixin<T extends StatefulWidget> on State<T> {
         });
       }
     }
+  }
+
+  /// True if the AI response is actually an error message (legacy
+  /// `getGeminiResponse` used to return strings starting with "Error:").
+  bool _looksLikeAiError(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return true;
+    final lower = trimmed.toLowerCase();
+    return lower.startsWith('error:') ||
+        lower.contains('could not connect to gemini') ||
+        lower.contains('model gemini-') && lower.contains('not found') ||
+        lower.contains('exception: model') ||
+        lower.contains('gemini api key is invalid') ||
+        lower.contains('rate limit reached');
   }
 
   String _withPatientContext(String prompt, ProviderPatientRecord? patient) {

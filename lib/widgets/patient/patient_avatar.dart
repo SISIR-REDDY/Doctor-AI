@@ -85,16 +85,26 @@ class PatientAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = backgroundColor ?? AppTheme.primaryColor.withValues(alpha: 0.12);
     final path = _resolvedPhotoPath;
-    final hasPhoto = path != null;
+    final remoteUrl = (photoUrl ?? patient?.photoUrl ?? '').trim();
+    final hasLocalPhoto = path != null;
+    final hasRemotePhoto = remoteUrl.startsWith('http://') || remoteUrl.startsWith('https://');
 
     Widget content;
-    if (hasPhoto) {
+    if (hasLocalPhoto) {
       content = Image.file(
         File(path),
         fit: BoxFit.cover,
         width: size,
         height: size,
         gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => _initialsPlaceholder(bg),
+      );
+    } else if (hasRemotePhoto) {
+      content = Image.network(
+        remoteUrl,
+        fit: BoxFit.cover,
+        width: size,
+        height: size,
         errorBuilder: (_, __, ___) => _initialsPlaceholder(bg),
       );
     } else {

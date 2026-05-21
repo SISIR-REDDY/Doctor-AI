@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../core/healthcare/clinical_text_parser.dart';
 import '../core/healthcare/consultation_ui_theme.dart';
 import '../theme/app_theme.dart';
+import '../widgets/clinical_md.dart';
 
 class SummaryScreen extends StatelessWidget {
   final String summary;
@@ -238,7 +239,7 @@ class _NarrativeCard extends StatelessWidget {
         children: [
           const Text('Narrative summary', style: TextStyle(fontWeight: FontWeight.w700, color: ConsultationPalette.ink)),
           const SizedBox(height: AppTheme.sm),
-          Text(text, style: const TextStyle(height: 1.5, color: ConsultationPalette.ink, fontSize: 14)),
+          ClinicalMd(text, color: ConsultationPalette.ink, selectable: true),
         ],
       ),
     );
@@ -297,15 +298,17 @@ class _SoapSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppTheme.md),
-            Text(
-              hasContent ? body.trim() : 'Not documented in this visit — tap to add in patient record.',
-              style: TextStyle(
-                height: 1.5,
-                fontSize: 14,
-                color: hasContent ? ConsultationPalette.ink : ConsultationPalette.muted,
-                fontStyle: hasContent ? FontStyle.normal : FontStyle.italic,
+            if (hasContent)
+              ClinicalMd(body.trim(), color: ConsultationPalette.ink, selectable: true)
+            else
+              const Text(
+                'Not documented in this visit — tap to add in patient record.',
+                style: TextStyle(
+                  height: 1.5, fontSize: 14,
+                  color: ConsultationPalette.muted,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -364,7 +367,7 @@ class _BulletSection extends StatelessWidget {
                     decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: AppTheme.sm),
-                  Expanded(child: Text(item, style: const TextStyle(height: 1.45, fontSize: 14))),
+                  Expanded(child: ClinicalMd(item, fontSize: 14, color: ConsultationPalette.ink)),
                 ],
               ),
             ),

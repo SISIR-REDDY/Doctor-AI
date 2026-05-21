@@ -234,7 +234,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               const Row(children: [
                 Icon(Icons.medical_services_rounded, color: Colors.white, size: 20),
                 SizedBox(width: 8),
-                Text('DocPilot',
+                Text('Clinix AI',
                     style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
               ]),
               Container(
@@ -343,7 +343,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 14),
       _infoBox(Icons.auto_awesome_outlined,
-          'Your specialty, country and practice type help DocPilot tailor AI '
+          'Your specialty, country and practice type help Clinix AI tailor AI '
           'responses, drug dosing protocols, and clinical report formatting.'),
     ]);
   }
@@ -413,7 +413,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const SizedBox(height: 14),
       _infoBox(Icons.lock_outline,
-          'Data stored securely in Firebase. DocPilot never shares your '
+          'Data stored securely in Firebase. Clinix AI never shares your '
           'information with third parties.'),
     ]);
   }

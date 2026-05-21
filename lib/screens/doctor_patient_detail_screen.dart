@@ -34,6 +34,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
   late TextEditingController _dateOfBirthController;
   late TextEditingController _contactController;
   late TextEditingController _emailController;
+  late TextEditingController _ehrIdController;
   late TextEditingController _lastVisitController;
 
   late String _gender;
@@ -58,6 +59,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
     _dateOfBirthController.dispose();
     _contactController.dispose();
     _emailController.dispose();
+    _ehrIdController.dispose();
     _lastVisitController.dispose();
     super.dispose();
   }
@@ -68,6 +70,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
     _dateOfBirthController = TextEditingController(text: p.dateOfBirth);
     _contactController = TextEditingController(text: p.contactNumber);
     _emailController = TextEditingController(text: p.email);
+    _ehrIdController = TextEditingController(text: p.ehrId);
     _lastVisitController = TextEditingController(text: p.lastVisitSummary);
     _syncListsFromPatient(p);
   }
@@ -88,6 +91,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
     _dateOfBirthController.text = p.dateOfBirth;
     _contactController.text = p.contactNumber;
     _emailController.text = p.email;
+    _ehrIdController.text = p.ehrId;
     _lastVisitController.text = p.lastVisitSummary;
     _syncListsFromPatient(p);
   }
@@ -184,6 +188,7 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
         bloodType: _bloodType,
         contactNumber: _contactController.text.trim(),
         email: email,
+        ehrId: _ehrIdController.text.trim(),
         lastVisitSummary: _lastVisitController.text.trim(),
         prescriptions: _trimmedList(_prescriptions),
         reports: _trimmedList(_reports),
@@ -309,6 +314,22 @@ class _DoctorPatientDetailScreenState extends State<DoctorPatientDetailScreen> {
                 _patient = u;
                 _syncControllersFromPatient(u);
               }),
+            ),
+
+            PatientRecordSection(
+              config: PatientRecordSectionConfig(
+                sectionId: PatientSectionIds.ehrId,
+                title: 'EHR Patient ID',
+                icon: Icons.link,
+                accent: PatientDetailPalette.ehr,
+                values: [_patient.ehrId],
+                emptyMessage: 'Tap to link an Epic FHIR patient ID',
+                isActive: _activeSection == PatientSectionIds.ehrId,
+                onTapSection: () => _activateSection(PatientSectionIds.ehrId),
+                onSaveSection: _saveActive,
+                editController: _ehrIdController,
+                editMaxLines: 1,
+              ),
             ),
 
             _sectionLabel('Quick Actions', PatientDetailPalette.gold),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -7,8 +9,12 @@ import '../models/health_models.dart';
 import '../services/chatbot_service.dart';
 import '../services/firebase/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
+import '../services/fhir/fhir_observation_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_animations.dart';
 import '../core/errors/app_error_handler.dart';
+import '../widgets/workflow/workflow_header_card.dart';
+import '../widgets/patient/patient_log_selector.dart';
 
 class LabValuesScreen extends StatefulWidget {
   const LabValuesScreen({super.key});
@@ -21,6 +27,13 @@ class _LabValuesScreenState extends State<LabValuesScreen> {
   final ChatbotService _chatbot = ChatbotService();
   final FirestoreService _firestore = FirestoreService();
   final AuthService _auth = AuthService();
+  final FhirObservationService _fhirObs = FhirObservationService();
+
+  final List<ProviderPatientRecord> _patients = [];
+  ProviderPatientRecord? _selectedPatient;
+  bool _isLoadingPatients = true;
+  StreamSubscription<List<ProviderPatientRecord>>? _patientsSubscription;
+  bool _isLoadingFromEhr = false;
 
   final _labInputCtrl = TextEditingController();
   final _clinicalContextCtrl = TextEditingController();
@@ -63,10 +76,88 @@ class _LabValuesScreenState extends State<LabValuesScreen> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _watchPatients();
+  }
+
+  @override
   void dispose() {
+    _patientsSubscription?.cancel();
     _labInputCtrl.dispose();
     _clinicalContextCtrl.dispose();
     super.dispose();
+  }
+
+  void _watchPatients() {
+    final doctorId = _auth.currentUser?.uid;
+    if (doctorId == null || doctorId.isEmpty) {
+      setState(() => _isLoadingPatients = false);
+      return;
+    }
+    _patientsSubscription?.cancel();
+    _patientsSubscription = _firestore.watchDoctorPatients(doctorId).listen((list) {
+      if (!mounted) return;
+      setState(() {
+        _patients
+          ..clear()
+          ..addAll(list);
+      });
+    });
+    setState(() => _isLoadingPatients = false);
+  }
+
+  Future<void> _refreshPatients() async {
+    final doctorId = _auth.currentUser?.uid;
+    if (doctorId == null || doctorId.isEmpty) return;
+    try {
+      final list = await _firestore.getDoctorPatients(doctorId);
+      if (!mounted) return;
+      setState(() {
+        _patients
+          ..clear()
+          ..addAll(list);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _loadFromEhr() async {
+    final patient = _selectedPatient;
+    if (patient == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a patient to import labs')),
+      );
+      return;
+    }
+    if (patient.ehrId.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Patient has no EHR ID linked')),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingFromEhr = true);
+    try {
+      final text = await _fhirObs.buildLabText(ehrPatientId: patient.ehrId);
+      if (!mounted) return;
+      if (text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No lab observations found in EHR')),
+        );
+      } else {
+        setState(() {
+          _labInputCtrl.text = text;
+          _sections = [];
+          _rawResult = '';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        AppErrorHandler.showSnackBar(context, e);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingFromEhr = false);
+    }
   }
 
   Future<void> _interpret() async {
@@ -208,6 +299,10 @@ Be clinically precise. Use SI units where appropriate. Flag any critical values 
 
   @override
   Widget build(BuildContext context) {
+    final panelLabel = _selectedPanel.split('(').first.trim();
+    final patientLabel = _selectedPatient == null ? 'No patient' : 'Patient linked';
+    final ehrLabel = _selectedPatient?.ehrId.trim().isNotEmpty == true ? 'EHR linked' : 'EHR not linked';
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: CustomScrollView(
@@ -219,6 +314,69 @@ Be clinically precise. Use SI units where appropriate. Flag any critical values 
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  SlideUpAnimation(
+                    child: WorkflowHeaderCard(
+                      title: 'Lab Values Interpreter',
+                      subtitle: 'AI-powered interpretation with clear action items.',
+                      icon: Icons.biotech_outlined,
+                      accentColor: const Color(0xFF0891B2),
+                      stats: [
+                        WorkflowHeaderStat(
+                          icon: Icons.science_outlined,
+                          label: panelLabel.isEmpty ? 'Panel' : panelLabel,
+                        ),
+                        WorkflowHeaderStat(
+                          icon: Icons.fact_check_outlined,
+                          label: _labInputCtrl.text.trim().isEmpty ? 'No values' : 'Values ready',
+                        ),
+                        WorkflowHeaderStat(
+                          icon: Icons.person_outline,
+                          label: patientLabel,
+                        ),
+                      ],
+                      helperText: 'Paste values, add context, then run interpretation.',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  if (_patients.isNotEmpty || _isLoadingPatients) ...[
+                    Text('Patient (optional)', style: AppTheme.labelLarge),
+                    const SizedBox(height: AppTheme.sm),
+                    PatientLogSelector(
+                      patients: _patients,
+                      selectedPatient: _selectedPatient,
+                      isLoading: _isLoadingPatients,
+                      onSelected: (p) => setState(() => _selectedPatient = p),
+                      onRefresh: _refreshPatients,
+                      showSummary: false,
+                    ),
+                    const SizedBox(height: AppTheme.sm),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _isLoadingFromEhr ? null : _loadFromEhr,
+                            icon: _isLoadingFromEhr
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.download_outlined, size: 18),
+                            label: Text(_isLoadingFromEhr ? 'Importing...' : 'Load labs from EHR'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF0891B2),
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppTheme.sm),
+                        Chip(
+                          label: Text(ehrLabel, style: AppTheme.labelSmall),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppTheme.lg),
+                  ],
                   _buildDisclaimerBanner(),
                   const SizedBox(height: 14),
                   _buildInputCard(),

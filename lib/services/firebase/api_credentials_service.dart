@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../../core/config/firebase_config.dart';
-import '../../core/errors/app_exception.dart';
 import 'auth_service.dart';
 import 'firebase_bootstrap_service.dart';
 
@@ -26,7 +26,7 @@ class ApiCredentialsService {
   ApiCredentials? _cached;
   String? _cachedUserId;
 
-  // All possible field names for Gemini API key
+  // All possible field names for Gemini API key (Firestore document fields)
   static const List<String> _geminiKeyFields = [
     'geminiApiKey',
     'gemini_api_key',
@@ -37,7 +37,7 @@ class ApiCredentialsService {
     'ai_api_key',
   ];
 
-  // All possible field names for Deepgram API key
+  // All possible field names for Deepgram API key (Firestore document fields)
   static const List<String> _deepgramKeyFields = [
     'deepgramApiKey',
     'deepgram_api_key',
@@ -46,6 +46,18 @@ class ApiCredentialsService {
     'deepgram_key',
     'speechApiKey',
     'speech_api_key',
+  ];
+
+  // .env variable names (checked as fallback when Firestore is unavailable)
+  static const List<String> _geminiEnvKeys = [
+    'GEMINI_API_KEY',
+    'GEMINI_KEY',
+    'AI_API_KEY',
+  ];
+  static const List<String> _deepgramEnvKeys = [
+    'DEEPGRAM_API_KEY',
+    'DEEPGRAM_KEY',
+    'SPEECH_API_KEY',
   ];
 
   void clearCache() {
@@ -59,17 +71,17 @@ class ApiCredentialsService {
     } catch (_) {}
   }
 
-  Future<String> getGeminiApiKey({bool forceRefresh = true}) async {
+  Future<String> getGeminiApiKey({bool forceRefresh = false}) async {
     final creds = await _load(forceRefresh: forceRefresh);
     return creds.geminiApiKey;
   }
 
-  Future<String> getDeepgramApiKey({bool forceRefresh = true}) async {
+  Future<String> getDeepgramApiKey({bool forceRefresh = false}) async {
     final creds = await _load(forceRefresh: forceRefresh);
     return creds.deepgramApiKey;
   }
 
-  Future<bool> hasKeys({bool forceRefresh = true}) async {
+  Future<bool> hasKeys({bool forceRefresh = false}) async {
     try {
       final creds = await _load(forceRefresh: forceRefresh);
       return creds.geminiApiKey.isNotEmpty && creds.deepgramApiKey.isNotEmpty;
@@ -80,133 +92,140 @@ class ApiCredentialsService {
 
   Future<ApiCredentials> _load({bool forceRefresh = false}) async {
     final userId = AuthService().currentUser?.uid;
-    if (userId == null || userId.isEmpty) {
+
+    // Return in-memory cache if valid (same user, no forced refresh)
+    if (!forceRefresh && _cached != null) {
+      if (userId == null || _cachedUserId == userId) {
+        return _cached!;
+      }
+      // Different user logged in — clear stale cache
       clearCache();
-      throw AppException(
-        code: 'not-authenticated',
-        message: 'Sign in is required before loading runtime API keys.',
-      );
     }
 
-    if (!forceRefresh) {
-      if (_cached != null && _cachedUserId == userId) {
-        return _cached!; // Still allow explicit cache use when requested.
-      }
-
-      if (_cachedUserId != null && _cachedUserId != userId) {
-        clearCache();
+    // ── Priority 1: Firestore (when signed in and Firebase available) ─────
+    if (userId != null && userId.isNotEmpty) {
+      final firestoreCreds = await _loadFromFirestore();
+      if (firestoreCreds != null) {
+        _cached = firestoreCreds;
+        _cachedUserId = userId;
+        if (kDebugMode) {
+          debugPrint('[ApiCredentialsService] ✅ Keys from Firestore: ${firestoreCreds.source}');
+        }
+        return firestoreCreds;
       }
     }
 
-    // Always load from Firestore (no local key sources).
-    final primaryCreds = await _loadFromAllPossibleLocations();
-    if (primaryCreds != null) {
-      _cached = primaryCreds;
+    // ── Priority 2: .env file (local dev / fallback) ───────────────────────
+    final envCreds = _loadFromEnv();
+    if (envCreds != null) {
+      // Cache env-based creds too so we don't re-read dotenv every call
+      _cached = envCreds;
       _cachedUserId = userId;
       if (kDebugMode) {
-        debugPrint('[ApiCredentialsService] ✅ Keys loaded from: ${primaryCreds.source}');
+        debugPrint('[ApiCredentialsService] ✅ Keys from .env');
       }
-      return primaryCreds;
+      return envCreds;
     }
 
-    throw AppException(
-      code: 'api-keys-unavailable',
-      message:
-          'API keys not configured in Firebase. Please add geminiApiKey and deepgramApiKey to collection: app_runtime, document: api_keys.',
+    // ── No keys found anywhere ────────────────────────────────────────────
+    throw Exception(
+      'API keys not found.\n\n'
+      'Add them to Firebase Firestore:\n'
+      '  Collection: app_runtime\n'
+      '  Document:   api_keys\n'
+      '  Fields:     geminiApiKey, deepgramApiKey\n\n'
+      'OR add them to your .env file:\n'
+      '  GEMINI_API_KEY=your_key_here\n'
+      '  DEEPGRAM_API_KEY=your_key_here',
     );
   }
 
-  Future<ApiCredentials?> _loadFromAllPossibleLocations() async {
+  // ── Firestore loader ──────────────────────────────────────────────────────
+
+  Future<ApiCredentials?> _loadFromFirestore() async {
     if (!FirebaseConfig.isEnabled || !FirebaseBootstrapService.isInitialized) {
       return null;
     }
 
-    final firestore = _primaryFirestore;
+    final firestore = _firestoreInstance;
     if (firestore == null) return null;
 
-    // Only use the configured Firestore location.
-    final envCreds = await _tryLoadFromPath(
-      firestore,
-      FirebaseConfig.apiKeysCollection,
-      FirebaseConfig.apiKeysDocument,
-    );
-    if (envCreds != null) return envCreds;
-
-    return null;
-  }
-
-  Future<ApiCredentials?> _tryLoadFromPath(
-    FirebaseFirestore firestore,
-    String collection,
-    String document,
-  ) async {
     try {
-        final snapshot = await firestore
-          .collection(collection)
-          .doc(document)
-          .get(const GetOptions(source: Source.server));
+      // Use serverAndCache so it works offline (cache fallback) and online.
+      final snapshot = await firestore
+          .collection(FirebaseConfig.apiKeysCollection)
+          .doc(FirebaseConfig.apiKeysDocument)
+          .get(const GetOptions(source: Source.serverAndCache));
 
       final data = snapshot.data();
       if (data == null) return null;
 
-      // Try all possible field names for Gemini key
       String? gemini;
       for (final field in _geminiKeyFields) {
-        final value = _sanitizeKey(data[field] as String?);
-        if (value.isNotEmpty) {
-          gemini = value;
-          break;
-        }
+        final v = _sanitize(data[field] as String?);
+        if (v.isNotEmpty) { gemini = v; break; }
       }
 
-      // Try all possible field names for Deepgram key
       String? deepgram;
       for (final field in _deepgramKeyFields) {
-        final value = _sanitizeKey(data[field] as String?);
-        if (value.isNotEmpty) {
-          deepgram = value;
-          break;
-        }
+        final v = _sanitize(data[field] as String?);
+        if (v.isNotEmpty) { deepgram = v; break; }
       }
 
-      if (gemini == null || gemini.isEmpty || deepgram == null || deepgram.isEmpty) {
-        return null;
-      }
-
-      if (kDebugMode) {
-        debugPrint('[ApiCredentialsService] Found keys at $collection/$document');
-      }
+      if (gemini == null || deepgram == null) return null;
 
       return ApiCredentials(
         geminiApiKey: gemini,
         deepgramApiKey: deepgram,
-        source: 'firestore:$collection/$document',
+        source: 'firestore:${FirebaseConfig.apiKeysCollection}/${FirebaseConfig.apiKeysDocument}',
       );
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[ApiCredentialsService] Error reading $collection/$document: $e');
-      }
+      if (kDebugMode) debugPrint('[ApiCredentialsService] Firestore error: $e');
       return null;
     }
   }
 
-  FirebaseFirestore? get _primaryFirestore {
-    try {
-      return FirebaseFirestore.instance;
-    } catch (_) {
-      return null;
+  // ── .env loader ───────────────────────────────────────────────────────────
+
+  ApiCredentials? _loadFromEnv() {
+    String? gemini;
+    for (final key in _geminiEnvKeys) {
+      final v = _sanitize(dotenv.env[key]);
+      if (v.isNotEmpty) { gemini = v; break; }
     }
+
+    String? deepgram;
+    for (final key in _deepgramEnvKeys) {
+      final v = _sanitize(dotenv.env[key]);
+      if (v.isNotEmpty) { deepgram = v; break; }
+    }
+
+    if (gemini == null || deepgram == null) return null;
+
+    return ApiCredentials(
+      geminiApiKey: gemini,
+      deepgramApiKey: deepgram,
+      source: 'dotenv',
+    );
   }
 
-  String _sanitizeKey(String? raw) {
-    final value = (raw ?? '').trim();
-    if (value.isEmpty) return '';
-    if (value.startsWith('your_')) return '';
-    if (value.contains('placeholder')) return '';
-    if (value.contains('YOUR_')) return '';
-    if (value.contains('PLACEHOLDER')) return '';
-    if (value == 'null') return '';
-    if (value == 'undefined') return '';
-    return value;
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  FirebaseFirestore? get _firestoreInstance {
+    try { return FirebaseFirestore.instance; } catch (_) { return null; }
+  }
+
+  /// Strips whitespace and rejects obvious placeholder values.
+  String _sanitize(String? raw) {
+    final v = (raw ?? '').trim();
+    if (v.isEmpty) return '';
+    final lower = v.toLowerCase();
+    if (lower.startsWith('your_')) return '';
+    if (lower.startsWith('your-')) return '';
+    if (lower.contains('placeholder')) return '';
+    if (lower == 'null' || lower == 'undefined' || lower == 'none') return '';
+    if (v.contains('_api_key_here')) return '';   // catches 'your_api_key_here'
+    if (v.contains('_KEY_HERE')) return '';
+    return v;
   }
 }

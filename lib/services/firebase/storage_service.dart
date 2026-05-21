@@ -1,16 +1,22 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path_provider/path_provider.dart';
+
+import '../../core/config/firebase_config.dart';
+import 'firebase_bootstrap_service.dart';
 
 /// Result of saving a patient photo locally (Firestore stores [fileName] only).
 class PatientPhotoSaveResult {
   final String fileName;
   final String localPath;
+  final String? remoteUrl;
 
   const PatientPhotoSaveResult({
     required this.fileName,
     required this.localPath,
+    this.remoteUrl,
   });
 }
 
@@ -18,6 +24,12 @@ class PatientPhotoSaveResult {
 /// Uses device storage instead of Firebase Storage (works with free plan)
 class StorageService {
   static String? _cachedPatientPhotosDir;
+
+  bool get _isFirebaseAvailable =>
+      FirebaseConfig.isEnabled && FirebaseBootstrapService.isInitialized;
+
+  FirebaseStorage? get _storage =>
+      _isFirebaseAvailable ? FirebaseStorage.instance : null;
 
   /// Warms the local photos directory cache so list avatars can resolve paths synchronously.
   Future<void> warmPatientPhotosCache() async {
@@ -93,7 +105,29 @@ class StorageService {
         await destination.delete();
       }
       await sourceFile.copy(destinationPath);
-      return PatientPhotoSaveResult(fileName: fileName, localPath: destinationPath);
+
+      String? remoteUrl;
+      final storage = _storage;
+      if (storage != null) {
+        try {
+          final ref = storage.ref().child('patient_photos/$fileName');
+          await ref.putFile(
+            destination,
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+          remoteUrl = await ref.getDownloadURL();
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[StorageService] Firebase photo upload failed: $e');
+          }
+        }
+      }
+
+      return PatientPhotoSaveResult(
+        fileName: fileName,
+        localPath: destinationPath,
+        remoteUrl: remoteUrl,
+      );
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[StorageService] Failed to save patient photo: $e');
@@ -105,6 +139,10 @@ class StorageService {
   Future<void> deletePatientPhoto(String photoPath) async {
     if (photoPath.isEmpty) return;
     try {
+      if (_isRemoteUrl(photoPath)) {
+        await _deleteRemoteFile(photoPath);
+        return;
+      }
       final file = File(photoPath);
       if (await file.exists()) {
         await file.delete();
@@ -139,6 +177,22 @@ class StorageService {
         return null;
       }
 
+      final storage = _storage;
+      if (storage != null) {
+        try {
+          final ref = storage.ref().child('consultations/$doctorId/consultation_$sessionId.m4a');
+          await ref.putFile(
+            sourceFile,
+            SettableMetadata(contentType: 'audio/m4a'),
+          );
+          return await ref.getDownloadURL();
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[StorageService] Firebase audio upload failed: $e');
+          }
+        }
+      }
+
       final audioDir = await _getAudioDirectory();
       final fileName = 'consultation_${sessionId}.m4a';
       final destinationPath = '${audioDir.path}/$fileName';
@@ -160,6 +214,10 @@ class StorageService {
     if (audioPath.isEmpty) return;
 
     try {
+      if (_isRemoteUrl(audioPath)) {
+        await _deleteRemoteFile(audioPath);
+        return;
+      }
       final file = File(audioPath);
       if (await file.exists()) {
         await file.delete();
@@ -206,6 +264,49 @@ class StorageService {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[StorageService] Failed to clear all audio files: $e');
+      }
+    }
+  }
+
+  Future<String?> uploadDocumentImage({
+    required String filePath,
+    required String patientId,
+    required String scanId,
+  }) async {
+    try {
+      final sourceFile = File(filePath);
+      if (!await sourceFile.exists()) return null;
+
+      final storage = _storage;
+      if (storage == null) return null;
+
+      final ref = storage.ref().child('document_scans/$patientId/$scanId.jpg');
+      await ref.putFile(
+        sourceFile,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      return await ref.getDownloadURL();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[StorageService] Firebase scan upload failed: $e');
+      }
+      return null;
+    }
+  }
+
+  bool _isRemoteUrl(String value) {
+    final trimmed = value.trim();
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+  }
+
+  Future<void> _deleteRemoteFile(String url) async {
+    final storage = _storage;
+    if (storage == null) return;
+    try {
+      await storage.refFromURL(url).delete();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[StorageService] Firebase delete failed: $e');
       }
     }
   }

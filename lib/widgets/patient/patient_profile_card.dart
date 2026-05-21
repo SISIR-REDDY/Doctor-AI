@@ -160,7 +160,7 @@ class _PatientProfileCardState extends State<PatientProfileCard> {
       if (saved == null) return;
       final oldPath = _patient.photoUrl;
       final updated = _patient.copyWith(
-        photoUrl: saved.localPath,
+        photoUrl: saved.remoteUrl ?? saved.localPath,
         photoFileName: saved.fileName,
         updatedAt: DateTime.now(),
       );

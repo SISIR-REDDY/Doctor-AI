@@ -7,6 +7,7 @@ abstract final class PatientDetailPalette {
   static const Color slate = Color(0xFF334155);
   static const Color gold = Color(0xFFC9A227);
   static const Color goldMuted = Color(0xFFD4AF37);
+  static const Color ehr = Color(0xFF2563EB);
 
   static const Color visit = Color(0xFF64748B);
   static const Color prescription = Color(0xFF047857);
@@ -21,6 +22,7 @@ abstract final class PatientDetailPalette {
 }
 
 abstract final class PatientSectionIds {
+  static const ehrId = 'ehrId';
   static const lastVisit = 'lastVisit';
   static const prescriptions = 'prescriptions';
   static const reports = 'reports';

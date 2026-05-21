@@ -80,7 +80,8 @@ class TranscriptInsights {
 
   int get doctorCount => utterances.where((u) => u.speaker == 'Doctor').length;
   int get patientCount => utterances.where((u) => u.speaker == 'Patient').length;
-  int get otherCount => utterances.where((u) => u.speaker == 'Other').length;
+  // "Other" counts Unknown + Speaker-N labels that weren't classified.
+  int get otherCount => utterances.where((u) => u.speaker != 'Doctor' && u.speaker != 'Patient').length;
 }
 
 class ClinicalTextParser {
@@ -373,6 +374,22 @@ class ClinicalTextParser {
       v.contains('hydration') ||
       v.contains('monitor');
 
+  // Matches both "[Doctor]:" (pipeline output) and plain "Doctor:" formats.
+  // Also handles "Dr.", "pt.", "Unknown", "Speaker N" variants.
+  static final _speakerLineRe = RegExp(
+    r'^\[?(?<label>[^\]:]+?)\]?\s*:\s*(?<text>.+)$',
+    caseSensitive: false,
+  );
+
+  static String _normaliseSpeakerLabel(String raw) {
+    final lower = raw.trim().toLowerCase();
+    if (RegExp(r'^dr\.?$|^doctor$').hasMatch(lower)) return 'Doctor';
+    if (RegExp(r'^pt\.?$|^patient$').hasMatch(lower)) return 'Patient';
+    if (lower == 'unknown') return 'Other';
+    // "Speaker 0", "Speaker 1", etc. — keep as-is so caller can display them
+    return raw.trim();
+  }
+
   static List<TranscriptUtterance> _parseUtterances(String input) {
     final utterances = <TranscriptUtterance>[];
     final lines = _lines(input);
@@ -381,13 +398,22 @@ class ClinicalTextParser {
       final line = raw.trim();
       if (line.isEmpty) continue;
 
-      final doctorMatch = RegExp(r'^(?:doctor|dr\.?)\s*:\s*(.*)$', caseSensitive: false).firstMatch(line);
-      final patientMatch = RegExp(r'^(?:patient|pt\.?)\s*:\s*(.*)$', caseSensitive: false).firstMatch(line);
-
-      if (doctorMatch != null) {
-        utterances.add(TranscriptUtterance(speaker: 'Doctor', text: doctorMatch.group(1)!.trim()));
-      } else if (patientMatch != null) {
-        utterances.add(TranscriptUtterance(speaker: 'Patient', text: patientMatch.group(1)!.trim()));
+      final m = _speakerLineRe.firstMatch(line);
+      if (m != null) {
+        final label = _normaliseSpeakerLabel(m.namedGroup('label') ?? '');
+        final text = (m.namedGroup('text') ?? '').trim();
+        if (label.isNotEmpty && text.isNotEmpty) {
+          utterances.add(TranscriptUtterance(speaker: label, text: text));
+          continue;
+        }
+      }
+      // Line has no speaker prefix — treat as continuation or plain text.
+      if (utterances.isNotEmpty) {
+        // Append to the last speaker's utterance rather than creating an
+        // orphan "Other" line for mid-sentence Deepgram line breaks.
+        final last = utterances.last;
+        utterances[utterances.length - 1] =
+            TranscriptUtterance(speaker: last.speaker, text: '${last.text} $line');
       } else {
         utterances.add(TranscriptUtterance(speaker: 'Other', text: line));
       }
@@ -395,14 +421,38 @@ class ClinicalTextParser {
 
     if (utterances.isEmpty) return utterances;
 
-    final allOther = utterances.every((u) => u.speaker == 'Other');
-    if (!allOther) return utterances;
+    // Merge consecutive lines from the same speaker into one utterance.
+    // Deepgram sometimes splits a single sentence across multiple lines
+    // (e.g. "The patient is having a serious," / "stomachache.") — these
+    // should appear as one chat bubble, not two.
+    final merged = <TranscriptUtterance>[];
+    for (final u in utterances) {
+      if (merged.isNotEmpty && merged.last.speaker == u.speaker) {
+        final last = merged.last;
+        merged[merged.length - 1] = TranscriptUtterance(
+          speaker: last.speaker,
+          text: '${last.text} ${u.text}',
+        );
+      } else {
+        merged.add(u);
+      }
+    }
+    final utterances2 = merged;
 
-    final fullText = utterances.map((u) => u.text).join(' ');
-    final sentences = fullText.split(RegExp(r'(?<=[.!?])\s+')).where((s) => s.trim().length > 8).toList();
+    // If every line parsed as "Other", the transcript has no speaker labels
+    // at all (raw Deepgram fallback). Split by sentence and infer from
+    // clinical language cues.
+    final allOther = utterances2.every((u) => u.speaker == 'Other');
+    if (!allOther) return utterances2;
+
+    final fullText = utterances2.map((u) => u.text).join(' ');
+    final sentences = fullText
+        .split(RegExp(r'(?<=[.!?])\s+'))
+        .where((s) => s.trim().length > 8)
+        .toList();
 
     if (sentences.length <= 1) {
-      return [TranscriptUtterance(speaker: 'Patient', text: fullText.trim())];
+      return [TranscriptUtterance(speaker: 'Other', text: fullText.trim())];
     }
 
     return sentences

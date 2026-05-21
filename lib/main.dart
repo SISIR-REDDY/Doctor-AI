@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 
+import 'core/config/app_branding.dart';
 import 'core/navigation/app_router.dart';
 import 'core/providers/enhanced_connection_provider.dart';
 import 'core/providers/patient_provider.dart';
@@ -24,7 +25,7 @@ Future<void> main() async {
 
       await FirebaseBootstrapService.initialize();
 
-      runApp(const DocPilotApp());
+      runApp(const ClinixAIApp());
     },
     (error, stackTrace) {
       debugPrint('Unhandled app error: $error');
@@ -33,8 +34,8 @@ Future<void> main() async {
   );
 }
 
-class DocPilotApp extends StatelessWidget {
-  const DocPilotApp({super.key});
+class ClinixAIApp extends StatelessWidget {
+  const ClinixAIApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +49,7 @@ class DocPilotApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'DocPilot',
+        title: AppBranding.appName,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         onGenerateRoute: AppRouter.onGenerateRoute,

@@ -8,7 +8,11 @@ class ProviderPatientRecord {
   final String bloodType;
   final String contactNumber;
   final String email;
-  /// Local absolute path (runtime only; not written to Firestore).
+  /// External EHR patient identifier (FHIR Patient.id).
+  final String ehrId;
+  /// Source system for ehrId (e.g., epic_fhir).
+  final String ehrSource;
+  /// Local path for in-app use or remote URL when synced (only remote URLs are stored).
   final String photoUrl;
   /// Filename stored in Firestore, e.g. `patient_<id>.jpg` (efficient, portable).
   final String photoFileName;
@@ -31,6 +35,8 @@ class ProviderPatientRecord {
     this.bloodType = '',
     this.contactNumber = '',
     this.email = '',
+    this.ehrId = '',
+    this.ehrSource = '',
     this.photoUrl = '',
     this.photoFileName = '',
     this.lastVisitSummary = '',
@@ -72,6 +78,8 @@ class ProviderPatientRecord {
     String? bloodType,
     String? contactNumber,
     String? email,
+    String? ehrId,
+    String? ehrSource,
     String? photoUrl,
     String? photoFileName,
     String? lastVisitSummary,
@@ -93,6 +101,8 @@ class ProviderPatientRecord {
       bloodType: bloodType ?? this.bloodType,
       contactNumber: contactNumber ?? this.contactNumber,
       email: email ?? this.email,
+      ehrId: ehrId ?? this.ehrId,
+      ehrSource: ehrSource ?? this.ehrSource,
       photoUrl: photoUrl ?? this.photoUrl,
       photoFileName: photoFileName ?? this.photoFileName,
       lastVisitSummary: lastVisitSummary ?? this.lastVisitSummary,
@@ -117,7 +127,10 @@ class ProviderPatientRecord {
       'bloodType': bloodType,
       'contactNumber': contactNumber,
       'email': email,
+      if (ehrId.trim().isNotEmpty) 'ehrId': ehrId.trim(),
+      if (ehrSource.trim().isNotEmpty) 'ehrSource': ehrSource.trim(),
       if (photoFileName.trim().isNotEmpty) 'photoFileName': photoFileName.trim(),
+      if (_isRemoteUrl(photoUrl)) 'photoUrl': photoUrl.trim(),
       'lastVisitSummary': lastVisitSummary,
       'prescriptions': prescriptions,
       'reports': reports,
@@ -140,7 +153,9 @@ class ProviderPatientRecord {
       bloodType: (map['bloodType'] ?? '').toString(),
       contactNumber: (map['contactNumber'] ?? '').toString(),
       email: (map['email'] ?? '').toString(),
-      photoUrl: '',
+      ehrId: (map['ehrId'] ?? '').toString(),
+      ehrSource: (map['ehrSource'] ?? '').toString(),
+      photoUrl: (map['photoUrl'] ?? '').toString(),
       photoFileName: _resolvePhotoFileName(map),
       lastVisitSummary: (map['lastVisitSummary'] ?? '').toString(),
       prescriptions: _toStringList(map['prescriptions']),
@@ -259,6 +274,11 @@ String _resolvePhotoFileName(Map<String, dynamic> map) {
 
   final parts = legacyPath.replaceAll('\\', '/').split('/');
   return parts.isNotEmpty ? parts.last : '';
+}
+
+bool _isRemoteUrl(String value) {
+  final trimmed = value.trim();
+  return trimmed.startsWith('http://') || trimmed.startsWith('https://');
 }
 
 class ConsultationSession {
