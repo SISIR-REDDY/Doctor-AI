@@ -527,31 +527,51 @@ $_roundsSummary''',
 
   @override
   Widget build(BuildContext context) {
+    final showEmpty = _patients.isEmpty;
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       body: CustomScrollView(
         slivers: [
           _buildSliverAppBar(),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_patients.isEmpty && !_isLoadingPatients)
-                    FadeInAnimation(child: _buildEmptyState())
-                  else ...[
+          if (showEmpty)
+            SliverFillRemaining(
+              hasScrollBody: true,
+              child: LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppTheme.lg),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 520),
+                          child: _buildEmptyState(isLoading: _isLoadingPatients),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     SlideUpAnimation(child: _buildUnifiedRoundsCard()),
                     if (_roundsSummary.isNotEmpty) ...[
                       const SizedBox(height: AppTheme.lg),
                       FadeInAnimation(child: _buildRoundsSummaryCard()),
                     ],
+                    const SizedBox(height: AppTheme.xl),
                   ],
-                  const SizedBox(height: AppTheme.xl),
-                ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -1030,37 +1050,269 @@ $_roundsSummary''',
     return DateFormat('MMM d, y').format(date);
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildMetricPill({required IconData icon, required String label}) {
     return Container(
-      padding: const EdgeInsets.all(AppTheme.xl),
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.sm),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
+          const SizedBox(width: AppTheme.xs),
+          Text(
+            label,
+            style: AppTheme.labelMedium.copyWith(
+              color: Colors.white,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyStep({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.md),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.dividerColor),
       ),
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.local_hospital_outlined, size: 48, color: AppTheme.primaryColor),
-          const SizedBox(height: AppTheme.lg),
-          Text('No patients in your log', style: AppTheme.headingSmall),
-          const SizedBox(height: AppTheme.sm),
-          Text(
-            'Add patients to conduct ward rounds and save SOAP summaries to their chart.',
-            style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
-            textAlign: TextAlign.center,
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppTheme.primaryColor, size: 18),
           ),
-          const SizedBox(height: AppTheme.lg),
-          FilledButton.icon(
-            onPressed: () async {
-              final created = await Navigator.push<ProviderPatientRecord>(
-                context,
-                MaterialPageRoute(builder: (_) => const DoctorPatientCreateEditScreen()),
-              );
-              await _refreshPatients();
-              if (created != null) _applyPatient(created);
-            },
-            icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('Add first patient'),
+          const SizedBox(width: AppTheme.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTheme.labelLarge),
+                const SizedBox(height: AppTheme.xs),
+                Text(
+                  description,
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCaptureChip({
+    required IconData icon,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: AppTheme.xs),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppTheme.primaryColor),
+          const SizedBox(width: AppTheme.xs),
+          Text(label, style: AppTheme.labelSmall.copyWith(color: AppTheme.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({required bool isLoading}) {
+    final total = _patients.length;
+    final doneCount = _completedRoundIds.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.dividerColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.lg, AppTheme.lg, AppTheme.md),
+            decoration: const BoxDecoration(gradient: AppTheme.primaryGradient),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.local_hospital, color: Colors.white, size: 24),
+                    ),
+                    const SizedBox(width: AppTheme.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ready for ward rounds',
+                            style: AppTheme.headingSmall.copyWith(color: Colors.white),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Add patients once, then generate structured SOAP summaries in minutes.',
+                            style: AppTheme.bodySmall.copyWith(
+                              color: Colors.white.withValues(alpha: 0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppTheme.md),
+                Wrap(
+                  spacing: AppTheme.sm,
+                  runSpacing: AppTheme.sm,
+                  children: [
+                    _buildMetricPill(
+                      icon: Icons.people_outline,
+                      label: '$total patients in log',
+                    ),
+                    _buildMetricPill(
+                      icon: Icons.check_circle_outline,
+                      label: '$doneCount completed today',
+                    ),
+                  ],
+                ),
+                if (isLoading) ...[
+                  const SizedBox(height: AppTheme.sm),
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: AppTheme.sm),
+                      Expanded(
+                        child: Text(
+                          'Syncing patient log...',
+                          style: AppTheme.bodySmall.copyWith(
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppTheme.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Quick start', style: AppTheme.labelLarge),
+                const SizedBox(height: AppTheme.sm),
+                _buildEmptyStep(
+                  icon: Icons.person_add_alt_1,
+                  title: 'Add your first patient',
+                  description: 'Create a focused list for today\'s rounds in seconds.',
+                ),
+                const SizedBox(height: AppTheme.sm),
+                _buildEmptyStep(
+                  icon: Icons.history,
+                  title: 'Pull prior notes',
+                  description: 'Prefill from chart history and stay consistent.',
+                ),
+                const SizedBox(height: AppTheme.sm),
+                _buildEmptyStep(
+                  icon: Icons.auto_awesome_outlined,
+                  title: 'Generate SOAP summary',
+                  description: 'Capture objective progress notes with one tap.',
+                ),
+                const SizedBox(height: AppTheme.lg),
+                Text('What you will capture', style: AppTheme.labelLarge),
+                const SizedBox(height: AppTheme.sm),
+                Wrap(
+                  spacing: AppTheme.sm,
+                  runSpacing: AppTheme.sm,
+                  children: [
+                    _buildCaptureChip(
+                      icon: Icons.record_voice_over_outlined,
+                      label: 'Subjective',
+                    ),
+                    _buildCaptureChip(
+                      icon: Icons.monitor_heart_outlined,
+                      label: 'Objective',
+                    ),
+                    _buildCaptureChip(
+                      icon: Icons.rule_outlined,
+                      label: 'Assessment',
+                    ),
+                    _buildCaptureChip(
+                      icon: Icons.task_alt_outlined,
+                      label: 'Plan',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppTheme.lg),
+                FilledButton.icon(
+                  onPressed: () async {
+                    final created = await Navigator.push<ProviderPatientRecord>(
+                      context,
+                      MaterialPageRoute(builder: (_) => const DoctorPatientCreateEditScreen()),
+                    );
+                    await _refreshPatients();
+                    if (created != null) _applyPatient(created);
+                  },
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Add first patient'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+                const SizedBox(height: AppTheme.sm),
+                Text(
+                  'Tip: Add 3-5 patients to keep today\'s round list ready to go.',
+                  style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ],
       ),
