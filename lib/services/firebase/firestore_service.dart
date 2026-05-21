@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/firebase_config.dart';
 import '../../core/errors/app_exception.dart';
@@ -10,13 +13,30 @@ class FirestoreService {
   static final Map<String, List<ClinicalNote>> _clinicalCacheByPatient = {};
   static final Map<String, List<ConsultationSession>> _consultationCacheByKey = {};
   static final Map<String, List<DocumentScan>> _documentScansCacheByPatient = {};
+  // In-memory doctor profile cache by doctorId; mirrored to SharedPreferences
+  // so loads after app restart are instant (no network spinner).
+  static final Map<String, DoctorProfile> _doctorProfileCache = {};
+
+  static const String _kDoctorProfilePrefsPrefix = 'cached_doctor_profile_';
 
   /// Clears all static caches. Call this on user logout to prevent data leakage.
-  static void clearAllCaches() {
+  static Future<void> clearAllCaches() async {
     _patientsCacheByDoctor.clear();
     _clinicalCacheByPatient.clear();
     _consultationCacheByKey.clear();
     _documentScansCacheByPatient.clear();
+    _doctorProfileCache.clear();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys()
+          .where((k) => k.startsWith(_kDoctorProfilePrefsPrefix))
+          .toList();
+      for (final k in keys) {
+        await prefs.remove(k);
+      }
+    } catch (_) {
+      // Best-effort: never block logout on cache cleanup failure.
+    }
   }
 
   bool get _isFirebaseAvailable =>
@@ -405,9 +425,12 @@ class FirestoreService {
     return snapshot.data();
   }
 
-  /// Save doctor profile to Firestore 'doctors' collection
-  /// Uses doctor ID as the document ID for easy retrieval
+  /// Save doctor profile to Firestore 'doctors' collection AND to local cache
+  /// (in-memory + SharedPreferences). Write-through so next load is instant.
   Future<void> saveDoctorProfile(DoctorProfile profile) async {
+    // Write to local cache first so UI feels instant even if network is slow.
+    _writeProfileToCache(profile);
+
     if (!_isFirebaseAvailable) return;
 
     try {
@@ -427,20 +450,92 @@ class FirestoreService {
     }
   }
 
-  /// Load doctor profile from Firestore 'doctors' collection
+  /// Cache-first load. Strategy:
+  ///   1. Check in-memory cache → return immediately
+  ///   2. Check SharedPreferences → return if found, refresh from Firestore in
+  ///      background
+  ///   3. Hit Firestore → cache the result
+  /// This makes the profile screen feel instant on subsequent opens / restarts.
   Future<DoctorProfile?> loadDoctorProfile(String doctorId) async {
-    if (!_isFirebaseAvailable) return null;
+    // 1. In-memory hit
+    final memHit = _doctorProfileCache[doctorId];
+    if (memHit != null) {
+      // Refresh from Firestore in background so cache stays fresh.
+      // Errors are silently ignored — we already have a usable profile.
+      // ignore: discarded_futures
+      _refreshProfileFromFirestore(doctorId);
+      return memHit;
+    }
 
+    // 2. Disk hit (SharedPreferences)
+    final diskHit = await _readProfileFromDisk(doctorId);
+    if (diskHit != null) {
+      _doctorProfileCache[doctorId] = diskHit;
+      // ignore: discarded_futures
+      _refreshProfileFromFirestore(doctorId);
+      return diskHit;
+    }
+
+    // 3. Network — first ever load on this device
+    if (!_isFirebaseAvailable) return null;
     try {
       final snapshot = await _doctorsCollection.doc(doctorId).get();
       if (!snapshot.exists) return null;
-      return DoctorProfile.fromMap(snapshot.data() ?? {});
+      final profile = DoctorProfile.fromMap(snapshot.data() ?? {});
+      _writeProfileToCache(profile);
+      return profile;
     } catch (error) {
       throw AppException(
         code: 'load-doctor-profile-failed',
         message: 'Unable to load doctor profile from cloud.',
         cause: error,
       );
+    }
+  }
+
+  /// Background refresh: pulls latest from Firestore and updates cache.
+  /// Silently swallows errors — this is a cache-warming pass.
+  Future<void> _refreshProfileFromFirestore(String doctorId) async {
+    if (!_isFirebaseAvailable) return;
+    try {
+      final snapshot = await _doctorsCollection.doc(doctorId).get();
+      if (!snapshot.exists) return;
+      final fresh = DoctorProfile.fromMap(snapshot.data() ?? {});
+      _writeProfileToCache(fresh);
+    } catch (_) {
+      // Offline / transient errors are fine — keep using cached value.
+    }
+  }
+
+  void _writeProfileToCache(DoctorProfile profile) {
+    _doctorProfileCache[profile.id] = profile;
+    // Fire-and-forget disk write so UI stays responsive.
+    // ignore: discarded_futures
+    _persistProfileToDisk(profile);
+  }
+
+  Future<void> _persistProfileToDisk(DoctorProfile profile) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = jsonEncode(profile.toMap());
+      await prefs.setString('$_kDoctorProfilePrefsPrefix${profile.id}', json);
+    } catch (_) {
+      // SharedPreferences failures are non-fatal — in-memory cache still works.
+    }
+  }
+
+  Future<DoctorProfile?> _readProfileFromDisk(String doctorId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_kDoctorProfilePrefsPrefix$doctorId');
+      if (raw == null || raw.isEmpty) return null;
+      final map = jsonDecode(raw);
+      if (map is Map<String, dynamic>) {
+        return DoctorProfile.fromMap(map);
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 

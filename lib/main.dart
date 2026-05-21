@@ -12,18 +12,20 @@ import 'services/firebase/firebase_bootstrap_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  try {
-    await dotenv.load(fileName: '.env');
-  } catch (e) {
-    debugPrint('Warning: .env file not found or failed to load: $e');
-  }
-
-  await FirebaseBootstrapService.initialize();
-
   runZonedGuarded(
-    () => runApp(const DocPilotApp()),
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+
+      try {
+        await dotenv.load(fileName: '.env');
+      } catch (e) {
+        debugPrint('Warning: .env file not found or failed to load: $e');
+      }
+
+      await FirebaseBootstrapService.initialize();
+
+      runApp(const DocPilotApp());
+    },
     (error, stackTrace) {
       debugPrint('Unhandled app error: $error');
       debugPrintStack(stackTrace: stackTrace);

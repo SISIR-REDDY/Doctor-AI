@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -387,7 +388,7 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
         actions: [
           if (_isSyncingCloud)
             const Padding(
-              padding: EdgeInsets.only(right: AppTheme.lg),
+              padding: EdgeInsets.only(right: AppTheme.sm),
               child: Center(
                 child: SizedBox(
                   height: 18,
@@ -396,6 +397,12 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
                 ),
               ),
             ),
+          IconButton(
+            tooltip: 'Add note',
+            icon: const Icon(Icons.add_rounded),
+            onPressed: _showAddNoteSheet,
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
@@ -467,28 +474,38 @@ class _ClinicalNotesScreenState extends State<ClinicalNotesScreen> {
             ),
         ],
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'voice_note',
-            onPressed: _startVoiceNote,
-            backgroundColor: ConsultationPalette.transcript,
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.mic_rounded),
-            label: const Text('Voice Note'),
+    );
+  }
+
+  /// iOS-style action sheet for "+" button. Single entry point keeps the
+  /// chrome clean — no duplicate FABs littering the bottom-right corner.
+  void _showAddNoteSheet() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text('New clinical note'),
+        message: const Text('Choose how to capture this note'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _startVoiceNote();
+            },
+            child: const Text('Voice Note (dictate)'),
           ),
-          const SizedBox(height: AppTheme.sm),
-          FloatingActionButton.extended(
-            heroTag: 'new_report',
-            onPressed: () => _createClinicalReport(),
-            backgroundColor: ConsultationPalette.charcoal,
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.note_add_outlined),
-            label: const Text('New Report'),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _createClinicalReport();
+            },
+            child: const Text('Structured Report'),
           ),
         ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
       ),
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
@@ -62,12 +64,15 @@ class _ConsultationHistoryScreenState extends State<ConsultationHistoryScreen> {
 
   @override
   void dispose() {
+    _audioPlayer.stop();
     _audioPlayer.dispose();
     super.dispose();
   }
 
   Future<void> _playAudio(ConsultationSession session) async {
     if (!session.hasAudio) return;
+    final audioUrl = session.audioUrl;
+    if (audioUrl == null || audioUrl.trim().isEmpty) return;
 
     try {
       if (_playingSessionId == session.id && _isPlaying) {
@@ -75,8 +80,16 @@ class _ConsultationHistoryScreenState extends State<ConsultationHistoryScreen> {
       } else if (_playingSessionId == session.id) {
         await _audioPlayer.play();
       } else {
-        // Use setFilePath for local files
-        await _audioPlayer.setFilePath(session.audioUrl!);
+        final isLocal = !audioUrl.startsWith('http');
+        if (isLocal) {
+          final file = File(audioUrl);
+          if (!await file.exists()) {
+            throw Exception('Audio file not found on device');
+          }
+          await _audioPlayer.setFilePath(audioUrl);
+        } else {
+          await _audioPlayer.setUrl(audioUrl);
+        }
         setState(() => _playingSessionId = session.id);
         await _audioPlayer.play();
       }

@@ -189,8 +189,8 @@
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				1E67C4AFDEFABC0EFE57B5C4 /* [firebase_crashlytics] Crashlytics Upload Symbols */,
-				E1A2B3C4D5E6F7A8B9C0D1E2 /* Sanitize Bundle Xattrs */,
 				9C95A200FCA012771B7877D9 /* [CP] Copy Pods Resources */,
+				FA11B0B1C2D3E4F500000001 /* Strip xattrs pre-CodeSign */,
 			);
 			buildRules = (
 			);
@@ -301,7 +301,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
+			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin\n# Strip macOS Sequoia com.apple.provenance xattr that blocks codesign\nxattr -cr \"${CODESIGNING_FOLDER_PATH}\" 2>/dev/null || true\n";
 		};
 		9740EEB61CF901F6004384FC /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -316,7 +316,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export COPYFILE_DISABLE=1\nsanitize_dir() {\n  if [ -d \"$1\" ] || [ -f \"$1\" ]; then\n    xattr -rc \"$1\" 2>/dev/null || true\n  fi\n}\nif [ -f \"$PROJECT_DIR/scripts/prebuild_sanitize.sh\" ]; then\n  /bin/sh \"$PROJECT_DIR/scripts/prebuild_sanitize.sh\" force-code-assets || true\nfi\nsanitize_dir \"$FLUTTER_ROOT/bin/cache/artifacts/engine\"\nsanitize_dir \"$PROJECT_DIR/../build/ios\"\n/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\nstatus=$?\nif [ $status -ne 0 ]; then\n  sanitize_dir \"$TARGET_BUILD_DIR/$WRAPPER_NAME\"\n  sanitize_dir \"$TARGET_BUILD_DIR/App.framework\"\n  sanitize_dir \"$PROJECT_DIR/../build/ios\"\n  /bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\n  status=$?\nfi\nexit $status\n";
+			shellScript = "export COPYFILE_DISABLE=1\n# Prepend codesign xattr-stripping wrapper to PATH so every codesign\n# call (Flutter's install_code_assets, Xcode's CodeSign, etc.) gets\n# xattr-cleaned paths. Required on macOS Sequoia + Xcode 16.\nif [ -x \"$PROJECT_DIR/../scripts/codesign_wrapper/codesign\" ]; then\n  export PATH=\"$PROJECT_DIR/../scripts/codesign_wrapper:$PATH\"\nfi\nsanitize_dir() {\n  if [ -d \"$1\" ] || [ -f \"$1\" ]; then\n    xattr -rc \"$1\" 2>/dev/null || true\n  fi\n}\nif [ -f \"$PROJECT_DIR/../scripts/prebuild_sanitize.sh\" ]; then\n  /bin/sh \"$PROJECT_DIR/../scripts/prebuild_sanitize.sh\" force-code-assets || true\nfi\nsanitize_dir \"$FLUTTER_ROOT/bin/cache/artifacts/engine\"\nsanitize_dir \"$PROJECT_DIR/../build/ios\"\nsanitize_dir \"$PROJECT_DIR/../build/native_assets\"\n/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\nstatus=$?\nif [ $status -ne 0 ]; then\n  sanitize_dir \"$TARGET_BUILD_DIR/$WRAPPER_NAME\"\n  sanitize_dir \"$TARGET_BUILD_DIR/App.framework\"\n  sanitize_dir \"$PROJECT_DIR/../build/ios\"\n  sanitize_dir \"$PROJECT_DIR/../build/native_assets\"\n  /bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\n  status=$?\nfi\nexit $status\n";
 		};
 		9C95A200FCA012771B7877D9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -357,21 +357,20 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		E1A2B3C4D5E6F7A8B9C0D1E2 /* Sanitize Bundle Xattrs */ = {
+		FA11B0B1C2D3E4F500000001 /* Strip xattrs pre-CodeSign */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputPaths = (
-				"${TARGET_BUILD_DIR}/${WRAPPER_NAME}",
 			);
-			name = "Sanitize Bundle Xattrs";
+			name = "Strip xattrs pre-CodeSign";
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ -d \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\" ]; then\n  xattr -rc \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\" 2>/dev/null || true\nfi\n";
-			showEnvVarsInLog = 0;
+			shellScript = "xattr -cr \"${CODESIGNING_FOLDER_PATH}\" 2>/dev/null || true\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -454,6 +453,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -485,6 +485,7 @@
 				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COPYFILE_DISABLE = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
@@ -584,6 +585,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -642,6 +644,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -675,6 +678,7 @@
 				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COPYFILE_DISABLE = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
@@ -706,6 +710,7 @@
 				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				COPYFILE_DISABLE = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = N4VNCW94DN;

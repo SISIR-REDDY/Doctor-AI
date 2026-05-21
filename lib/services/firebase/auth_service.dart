@@ -65,17 +65,13 @@ class AuthService {
         debugPrint('Starting Google Sign-In...');
       }
 
-      try {
-        await _googleSignIn.signOut();
-      } catch (_) {}
-
       final googleUser = await _googleSignIn.authenticate();
 
       if (kDebugMode) {
         debugPrint('Google Sign-In successful: ${googleUser.email}');
       }
 
-      final googleAuth = await googleUser.authentication;
+      final googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
 
       if (idToken == null) {
@@ -155,8 +151,8 @@ class AuthService {
         debugPrint('Signing out...');
       }
 
-      // Clear caches immediately
-      FirestoreService.clearAllCaches();
+      // Clear caches immediately (await disk cleanup too)
+      await FirestoreService.clearAllCaches();
       ApiCredentialsService.instance.clearCache();
 
       // Run Firebase and Google sign out in parallel for speed

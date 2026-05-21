@@ -45,14 +45,58 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  # ── Fix 1: Remove "Sanitize Bundle Xattrs" from Runner on every pod install ──
+  # Xcode 15+ injects this phase automatically and it creates a dependency cycle
+  # with CodeSign. Removing it here ensures it never survives a pod install.
+  runner_project_path = File.expand_path('../Runner.xcodeproj/project.pbxproj', __FILE__)
+  if File.exist?(runner_project_path)
+    content = File.read(runner_project_path)
+    # Remove the phase reference from buildPhases list
+    content.gsub!(/\s*[A-F0-9]{24} \/\* Sanitize Bundle Xattrs \*\/,?\n/, "\n")
+    # Remove the full phase definition block
+    content.gsub!(/\s*[A-F0-9]{24} \/\* Sanitize Bundle Xattrs \*\/ = \{[^}]+\};\n/, "")
+    File.write(runner_project_path, content)
+    puts "✅ Removed 'Sanitize Bundle Xattrs' build phase (prevents Xcode 15 cycle)"
+  end
+
+  # ── Fix 2: Ensure ad-hoc signing for simulator on Runner via xcodeproj API ──
+  # macOS Sequoia adds `com.apple.provenance` xattr during builds. The Thin
+  # Binary phase strips it immediately after embed_and_thin so codesign can
+  # proceed. We use ad-hoc signing (identity = "-") so no provisioning profile
+  # is needed; entitlements are still injected so keychain / Apple Sign-In work.
+  # We do NOT disable signing entirely (CODE_SIGNING_ALLOWED=NO) because that
+  # would prevent entitlements from being applied, breaking Google/Apple Sign-In.
+  require 'xcodeproj'
+  runner_xcodeproj_path = File.expand_path('../Runner.xcodeproj', __FILE__)
+  if File.directory?(runner_xcodeproj_path)
+    runner_project = Xcodeproj::Project.open(runner_xcodeproj_path)
+    runner_target = runner_project.targets.find { |t| t.name == 'Runner' }
+    if runner_target
+      runner_target.build_configurations.each do |config|
+        config.build_settings['CODE_SIGN_IDENTITY[sdk=iphonesimulator*]'] = '-'
+        # Remove any stale NO overrides left from older fixes
+        config.build_settings.delete('CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]')
+        config.build_settings.delete('CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]')
+      end
+      runner_project.save
+      puts "✅ Applied ad-hoc simulator signing to Runner (Debug/Profile/Release)"
+    end
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
-    
+
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
       config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+      config.build_settings['CODE_SIGN_IDENTITY[sdk=iphonesimulator*]'] = '-'
+      # ── Fix 2: Speed up xcodebuild -showBuildSettings (stops flutter run hang) ──
+      config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+      config.build_settings['SWIFT_COMPILATION_MODE'] = 'singlefile'
+      config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf'
+      # Disable indexing on pods to reduce settings parsing time
+      config.build_settings['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = ''
     end
   end
-
 end

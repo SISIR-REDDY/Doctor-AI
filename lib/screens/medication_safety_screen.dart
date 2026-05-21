@@ -424,10 +424,12 @@ $_analysisResult''',
     final weight = double.tryParse(_weightController.text);
     final age = int.tryParse(_ageController.text);
 
-    if (weight == null || _selectedMedForDosage.isEmpty) {
+    if (weight == null || weight <= 0 || weight > 300 || _selectedMedForDosage.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter weight and select medication'),
+        SnackBar(
+          content: Text(weight != null && (weight <= 0 || weight > 300)
+              ? 'Please enter a valid weight (1–300 kg)'
+              : 'Please enter weight and select medication'),
           backgroundColor: AppTheme.warningColor,
         ),
       );
@@ -513,6 +515,36 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
         child: Divider(height: 1, color: AppTheme.dividerColor),
       );
 
+  Widget _buildDisclaimerBanner() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3CD),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFE082)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Color(0xFFE65100), size: 20),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'AI-generated analysis only — not validated against a clinical drug database. '
+              'Always verify interactions and dosages with a licensed pharmacist before prescribing or administering.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF5D4037),
+                height: 1.45,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -526,6 +558,8 @@ Weight: ${weight}kg${age != null ? ', Age: ${age}y' : ''}
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _buildDisclaimerBanner(),
+                  const SizedBox(height: AppTheme.md),
                   SlideUpAnimation(child: _buildUnifiedMedicationCard()),
                   if (_analysisResult.isNotEmpty) ...[
                     const SizedBox(height: AppTheme.lg),

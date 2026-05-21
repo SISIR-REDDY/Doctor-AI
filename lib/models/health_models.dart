@@ -528,6 +528,17 @@ class DoctorProfile {
   final String email;
   final String? departmentName;
   final String? degree;
+  // Extended fields
+  final String? country;
+  final String? medicalCouncil;
+  final String? registrationNumber;
+  final String? subSpecialty;
+  final String? practiceType;
+  final int? yearsOfExperience;
+  final List<String> languages;
+  // Workflow context — helps AI tailor responses, ordering, and dosing.
+  final String? emrSystem;            // Epic, Cerner, Athena, etc.
+  final int? avgPatientsPerDay;       // Average daily patient load
 
   DoctorProfile({
     required this.id,
@@ -540,6 +551,15 @@ class DoctorProfile {
     required this.email,
     this.departmentName,
     this.degree,
+    this.country,
+    this.medicalCouncil,
+    this.registrationNumber,
+    this.subSpecialty,
+    this.practiceType,
+    this.yearsOfExperience,
+    this.languages = const [],
+    this.emrSystem,
+    this.avgPatientsPerDay,
   });
 
   String get fullName => '$firstName $lastName'.trim();
@@ -555,6 +575,15 @@ class DoctorProfile {
     String? email,
     String? departmentName,
     String? degree,
+    String? country,
+    String? medicalCouncil,
+    String? registrationNumber,
+    String? subSpecialty,
+    String? practiceType,
+    int? yearsOfExperience,
+    List<String>? languages,
+    String? emrSystem,
+    int? avgPatientsPerDay,
   }) {
     return DoctorProfile(
       id: id ?? this.id,
@@ -567,6 +596,15 @@ class DoctorProfile {
       email: email ?? this.email,
       departmentName: departmentName ?? this.departmentName,
       degree: degree ?? this.degree,
+      country: country ?? this.country,
+      medicalCouncil: medicalCouncil ?? this.medicalCouncil,
+      registrationNumber: registrationNumber ?? this.registrationNumber,
+      subSpecialty: subSpecialty ?? this.subSpecialty,
+      practiceType: practiceType ?? this.practiceType,
+      yearsOfExperience: yearsOfExperience ?? this.yearsOfExperience,
+      languages: languages ?? this.languages,
+      emrSystem: emrSystem ?? this.emrSystem,
+      avgPatientsPerDay: avgPatientsPerDay ?? this.avgPatientsPerDay,
     );
   }
 
@@ -582,6 +620,15 @@ class DoctorProfile {
       'email': email,
       'departmentName': departmentName,
       'degree': degree,
+      'country': country,
+      'medicalCouncil': medicalCouncil,
+      'registrationNumber': registrationNumber,
+      'subSpecialty': subSpecialty,
+      'practiceType': practiceType,
+      'yearsOfExperience': yearsOfExperience,
+      'languages': languages,
+      'emrSystem': emrSystem,
+      'avgPatientsPerDay': avgPatientsPerDay,
     };
   }
 
@@ -597,6 +644,19 @@ class DoctorProfile {
       email: (map['email'] ?? '').toString(),
       departmentName: map['departmentName']?.toString(),
       degree: map['degree']?.toString(),
+      country: map['country']?.toString(),
+      medicalCouncil: map['medicalCouncil']?.toString(),
+      registrationNumber: map['registrationNumber']?.toString(),
+      subSpecialty: map['subSpecialty']?.toString(),
+      practiceType: map['practiceType']?.toString(),
+      yearsOfExperience: map['yearsOfExperience'] is int
+          ? map['yearsOfExperience'] as int
+          : int.tryParse(map['yearsOfExperience']?.toString() ?? ''),
+      languages: _toStringList(map['languages']),
+      emrSystem: map['emrSystem']?.toString(),
+      avgPatientsPerDay: map['avgPatientsPerDay'] is int
+          ? map['avgPatientsPerDay'] as int
+          : int.tryParse(map['avgPatientsPerDay']?.toString() ?? ''),
     );
   }
 }

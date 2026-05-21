@@ -13,6 +13,8 @@ import 'ward_rounds_screen.dart';
 import '../features/transcription/presentation/transcription_controller.dart';
 import '../features/transcription/presentation/transcription_screen.dart';
 import 'doctor_profile_screen.dart';
+import 'lab_values_screen.dart';
+import 'document_scanner_screen.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   const HomeDashboardScreen({super.key});
@@ -23,17 +25,15 @@ class HomeDashboardScreen extends StatefulWidget {
 
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   static const Color _pageBg = Color(0xFFF6F7FB);
-  static const Color _card = Colors.white;
-  static const Color _ink = Color(0xFF1F2937);
   static const Color _muted = Color(0xFF6B7280);
   static const Color _brandBlue = Color(0xFF2563EB);
-  static const Color _brandTeal = Color(0xFF14B8A6);
-  static const Color _heroStart = Color(0xFF1F2937);
-  static const Color _heroEnd = Color(0xFF1D4ED8);
-  static const Color _heroGlow = Color(0xFF60A5FA);
 
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
+
+  int _patientCount = 0;
+  int _sessionsThisWeek = 0;
+  String _lastSessionText = '--';
 
   @override
   void initState() {
@@ -43,12 +43,32 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
   Future<void> _loadDashboardData() async {
     final doctorId = _authService.currentUser?.uid;
-    if (doctorId == null || doctorId.isEmpty) {
-      return;
-    }
+    if (doctorId == null || doctorId.isEmpty) return;
 
     try {
-      await _firestoreService.getDoctorPatients(doctorId);
+      final patients = await _firestoreService.getDoctorPatients(doctorId);
+      final sessions = await _firestoreService.getConsultationHistory(doctorId: doctorId);
+
+      final weekStart = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
+      final weekStartDay = DateTime(weekStart.year, weekStart.month, weekStart.day);
+      final thisWeek = sessions.where((s) => s.createdAt.isAfter(weekStartDay)).toList();
+
+      String lastText = '--';
+      if (sessions.isNotEmpty) {
+        final last = sessions.first.createdAt;
+        final diff = DateTime.now().difference(last);
+        if (diff.inMinutes < 60) lastText = '${diff.inMinutes}m ago';
+        else if (diff.inHours < 24) lastText = '${diff.inHours}h ago';
+        else lastText = '${diff.inDays}d ago';
+      }
+
+      if (mounted) {
+        setState(() {
+          _patientCount = patients.length;
+          _sessionsThisWeek = thisWeek.length;
+          _lastSessionText = lastText;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading dashboard data: $e');
     }
@@ -92,7 +112,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
-                  color: _ink,
+                  color: Color(0xFF1F2937),
+                  letterSpacing: -0.4,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -133,156 +154,55 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   Widget _buildHeroSpotlight() {
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [_heroStart, _heroEnd],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: _heroGlow.withValues(alpha: 0.35),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
-          ),
-        ],
+        color: _brandBlue,
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: Stack(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            top: -40,
-            right: -30,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
+          const Text(
+            'Start consultation',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.4,
             ),
           ),
-          Positioned(
-            bottom: -45,
-            left: -35,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.06),
-              ),
+          const SizedBox(height: 6),
+          const Text(
+            'Record once. Get summary + prescription.',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              height: 1.35,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.mic, color: Colors.white, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'Consultation AI',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    _HeroChip(
-                      icon: Icons.check_circle,
-                      label: 'Ready',
-                    ),
-                  ],
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _HeroPrimaryButton(
+                  label: 'Record',
+                  icon: Icons.mic_rounded,
+                  onTap: _openTranscription,
                 ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Start a new consult',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _HeroGhostButton(
+                  label: 'Notes',
+                  icon: Icons.note_alt_outlined,
+                  onTap: () => _navigateTo(
+                    ClinicalNotesScreen(patientId: 'new'),
                   ),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Record once and generate summary + prescription instantly.',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: const [
-                    _HeroChip(icon: Icons.history, label: 'Last session: --'),
-                    _HeroChip(icon: Icons.auto_awesome, label: 'Auto summary on'),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  children: [
-                    _HeroPrimaryButton(
-                      label: 'Start Consultation',
-                      icon: Icons.play_arrow_rounded,
-                      onTap: _openTranscription,
-                    ),
-                    _HeroGhostButton(
-                      label: 'Open Notes',
-                      icon: Icons.note_alt,
-                      onTap: () => _navigateTo(
-                        ClinicalNotesScreen(patientId: 'new'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPrimaryShortcuts() {
-    return Row(
-      children: [
-        Expanded(
-          child: _PrimaryShortcutCard(
-            title: 'Consultation AI',
-            subtitle: 'Voice consult + auto summary',
-            icon: Icons.mic_none,
-            color: _brandBlue,
-            onTap: _openTranscription,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _PrimaryShortcutCard(
-            title: 'Clinical Notes',
-            subtitle: 'Document and organize notes',
-            icon: Icons.note_alt,
-            color: _brandTeal,
-            onTap: () => _navigateTo(
-              ClinicalNotesScreen(patientId: 'new'),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -290,158 +210,146 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: const [
-          _InsightCard(title: 'Sessions this week', value: '0', caption: 'Target 3'),
-          SizedBox(width: 12),
-          _InsightCard(title: 'Avg time saved', value: '--', caption: 'Per consult'),
-          SizedBox(width: 12),
-          _InsightCard(title: 'Notes pending', value: '0', caption: 'Ready to review'),
+        children: [
+          _InsightCard(
+            title: 'Sessions this week',
+            value: '$_sessionsThisWeek',
+            caption: _sessionsThisWeek >= 3 ? 'Target met ✓' : 'Target 3',
+          ),
+          const SizedBox(width: 12),
+          _InsightCard(
+            title: 'Total patients',
+            value: '$_patientCount',
+            caption: 'In your care',
+          ),
+          const SizedBox(width: 12),
+          _InsightCard(
+            title: 'Last session',
+            value: _lastSessionText,
+            caption: 'Most recent',
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSectionHeader({required String title, required String subtitle}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: _ink,
-          ),
+  Widget _buildSectionHeader({required String title}) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: _muted,
+          letterSpacing: 0.8,
         ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: const TextStyle(fontSize: 12, color: _muted),
-        ),
-      ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final userName = _authService.currentUser?.displayName ?? 'Doctor';
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final workflowCardAspectRatio = screenWidth <= 390 ? 1.05 : 1.12;
 
     return Scaffold(
       backgroundColor: _pageBg,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [_pageBg, Color(0xFFEFF3F8)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: RefreshIndicator(
-          onRefresh: _loadDashboardData,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverAppBar(
-                pinned: true,
-                backgroundColor: _pageBg,
-                elevation: 0,
-                toolbarHeight: 86,
-                titleSpacing: 16,
-                title: _buildAppBarContent(userName),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: RefreshIndicator(
+        onRefresh: _loadDashboardData,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              backgroundColor: _pageBg,
+              elevation: 0,
+              toolbarHeight: 80,
+              titleSpacing: 16,
+              title: _buildAppBarContent(userName),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  _buildHeroSpotlight(),
+                  const SizedBox(height: 28),
+
+                  _buildSectionHeader(title: 'Workflows'),
+                  GridView.count(
+                    padding: EdgeInsets.zero,
+                    crossAxisCount: 3,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 0.95,
                     children: [
-                      _buildHeroSpotlight(),
-                      const SizedBox(height: 16),
-                      _buildPrimaryShortcuts(),
-                      const SizedBox(height: 22),
-                      _buildSectionHeader(
-                        title: 'Workflows',
-                        subtitle: 'Specialized tools for fast, structured notes.',
+                      _WorkflowCard(
+                        icon: Icons.local_pharmacy_outlined,
+                        color: const Color(0xFFEA580C),
+                        title: 'Meds',
+                        onTap: () => _navigateTo(MedicationSafetyScreen()),
                       ),
-                      const SizedBox(height: 12),
-                      GridView.count(
-                        padding: EdgeInsets.zero,
-                        crossAxisCount: 2,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: workflowCardAspectRatio,
-                        children: [
-                          _WorkflowCard(
-                            icon: Icons.local_pharmacy,
-                            color: Colors.orange,
-                            title: 'Medication Safety',
-                            description: 'Check interactions and contraindications',
-                            onTap: () => _navigateTo(MedicationSafetyScreen()),
-                          ),
-                          _WorkflowCard(
-                            icon: Icons.assignment,
-                            color: Colors.teal,
-                            title: 'Shift Handoff',
-                            description: 'Generate concise handoff summaries',
-                            onTap: () => _navigateTo(ShiftHandoffScreen()),
-                          ),
-                          _WorkflowCard(
-                            icon: Icons.emergency_share,
-                            color: Colors.red,
-                            title: 'Emergency Triage',
-                            description: 'Prioritize urgent cases quickly',
-                            onTap: () => _navigateTo(EmergencyTriageScreen()),
-                          ),
-                          _WorkflowCard(
-                            icon: Icons.local_hospital,
-                            color: Colors.indigo,
-                            title: 'Ward Rounds',
-                            description: 'Generate rounds summaries and plans',
-                            onTap: () => _navigateTo(WardRoundsScreen()),
-                          ),
-                        ],
+                      _WorkflowCard(
+                        icon: Icons.assignment_outlined,
+                        color: const Color(0xFF14B8A6),
+                        title: 'Handoff',
+                        onTap: () => _navigateTo(ShiftHandoffScreen()),
                       ),
-                      const SizedBox(height: 22),
-                      _buildSectionHeader(
-                        title: 'Quick Actions',
-                        subtitle: 'Jump into your most used destinations.',
+                      _WorkflowCard(
+                        icon: Icons.emergency_share_outlined,
+                        color: const Color(0xFFDC2626),
+                        title: 'Triage',
+                        onTap: () => _navigateTo(EmergencyTriageScreen()),
                       ),
-                      const SizedBox(height: 12),
-                      _ActionButton(
-                        icon: Icons.group,
-                        color: Colors.cyan,
-                        title: 'My Patients',
-                        description: 'View patient records and history',
-                        onTap: () => _navigateTo(DoctorPatientsScreen()),
+                      _WorkflowCard(
+                        icon: Icons.local_hospital_outlined,
+                        color: const Color(0xFF4F46E5),
+                        title: 'Rounds',
+                        onTap: () => _navigateTo(WardRoundsScreen()),
                       ),
-                      const SizedBox(height: 10),
-                      _ActionButton(
-                        icon: Icons.note_alt,
-                        color: Colors.deepPurple,
-                        title: 'Recent Notes',
-                        description: 'Continue editing recent documentation',
+                      _WorkflowCard(
+                        icon: Icons.biotech_outlined,
+                        color: const Color(0xFF0891B2),
+                        title: 'Labs',
+                        onTap: () => _navigateTo(const LabValuesScreen()),
+                      ),
+                      _WorkflowCard(
+                        icon: Icons.document_scanner_outlined,
+                        color: const Color(0xFF9333EA),
+                        title: 'Scan',
                         onTap: () => _navigateTo(
-                          ClinicalNotesScreen(patientId: 'new'),
-                        ),
+                            const DocumentScannerScreen(patientId: 'new')),
                       ),
-                      const SizedBox(height: 22),
-                      _buildSectionHeader(
-                        title: 'Insights',
-                        subtitle: 'Track your momentum through the week.',
-                      ),
-                      const SizedBox(height: 12),
-                      _buildInsightsStrip(),
-                      SizedBox(height: MediaQuery.paddingOf(context).bottom + 24),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 28),
+
+                  _buildSectionHeader(title: 'Quick Access'),
+                  _ActionButton(
+                    icon: Icons.group_outlined,
+                    color: const Color(0xFF06B6D4),
+                    title: 'My Patients',
+                    trailing: _patientCount > 0 ? '$_patientCount' : null,
+                    onTap: () => _navigateTo(DoctorPatientsScreen()),
+                  ),
+                  const SizedBox(height: 8),
+                  _ActionButton(
+                    icon: Icons.note_alt_outlined,
+                    color: const Color(0xFF7C3AED),
+                    title: 'Recent Notes',
+                    onTap: () => _navigateTo(
+                      ClinicalNotesScreen(patientId: 'new'),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  _buildSectionHeader(title: 'This week'),
+                  _buildInsightsStrip(),
+                ]),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -474,42 +382,6 @@ class _PillIconButton extends StatelessWidget {
   }
 }
 
-class _HeroChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _HeroChip({
-    required this.icon,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _HeroPrimaryButton extends StatelessWidget {
   final String label;
@@ -595,82 +467,6 @@ class _HeroGhostButton extends StatelessWidget {
   }
 }
 
-class _PrimaryShortcutCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _PrimaryShortcutCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withValues(alpha: 0.18)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1F2937),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  height: 1.25,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _InsightCard extends StatelessWidget {
   final String title;
@@ -731,18 +527,17 @@ class _InsightCard extends StatelessWidget {
   }
 }
 
+/// Tiny iOS-style grid tile: tinted icon over title. Hairline border, no shadow.
 class _WorkflowCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String title;
-  final String description;
   final VoidCallback onTap;
 
   const _WorkflowCard({
     required this.icon,
     required this.color,
     required this.title,
-    required this.description,
     required this.onTap,
   });
 
@@ -750,63 +545,39 @@ class _WorkflowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.14)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            borderRadius: BorderRadius.circular(14),
           ),
+          padding: const EdgeInsets.all(10),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(icon, color: color, size: 22),
-                  ),
-                  const Spacer(),
-                  Icon(Icons.arrow_forward_rounded, color: Colors.grey[400], size: 16),
-                ],
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 24),
               ),
               const SizedBox(height: 10),
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                   color: Color(0xFF1F2937),
+                  letterSpacing: -0.2,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Expanded(
-                child: Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    height: 1.25,
-                  ),
-                ),
               ),
             ],
           ),
@@ -816,18 +587,19 @@ class _WorkflowCard extends StatelessWidget {
   }
 }
 
+/// iOS-style list row: tinted icon + title + optional trailing label + chevron.
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String title;
-  final String description;
+  final String? trailing;
   final VoidCallback onTap;
 
   const _ActionButton({
     required this.icon,
     required this.color,
     required this.title,
-    required this.description,
+    this.trailing,
     required this.onTap,
   });
 
@@ -835,62 +607,52 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            borderRadius: BorderRadius.circular(12),
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 24),
+                child: Icon(icon, color: color, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1F2937),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1F2937),
+                    letterSpacing: -0.2,
+                  ),
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.grey[400], size: 22),
+              if (trailing != null) ...[
+                Text(
+                  trailing!,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Color(0xFF9CA3AF),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              const Icon(Icons.chevron_right,
+                  color: Color(0xFFC7CACE), size: 22),
             ],
           ),
         ),

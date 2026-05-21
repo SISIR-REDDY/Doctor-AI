@@ -7,7 +7,9 @@ import '../../core/config/firebase_config.dart';
 import '../../services/firebase/auth_service.dart';
 import '../../services/firebase/api_credentials_service.dart';
 import '../../services/firebase/firebase_bootstrap_service.dart';
+import '../../services/firebase/firestore_service.dart';
 import '../home_dashboard_screen.dart';
+import '../onboarding/onboarding_screen.dart';
 import 'sign_in_screen.dart';
 
 class AuthGateScreen extends StatefulWidget {
@@ -19,11 +21,13 @@ class AuthGateScreen extends StatefulWidget {
 
 class _AuthGateScreenState extends State<AuthGateScreen> {
   final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
   String? _preloadedKeysForUid;
 
   // Track auth state to avoid unnecessary rebuilds
   bool _isLoading = true;
   bool _isSignedIn = false;
+  bool _needsOnboarding = false;
   StreamSubscription<User?>? _authSubscription;
 
   @override
@@ -80,7 +84,6 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
       debugPrint('[AuthGate] User signed in (${user.email}), preloading API keys...');
     }
 
-    // Preload API keys immediately without delay
     ApiCredentialsService.instance.preload().then((_) {
       if (kDebugMode) {
         debugPrint('[AuthGate] ✅ API keys preloaded successfully');
@@ -90,10 +93,21 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
         debugPrint('[AuthGate] Note: API keys not ready yet. Will retry on first use.');
       }
     });
+
+    // Check whether this user has completed onboarding
+    _firestoreService.loadDoctorProfile(user.uid).then((profile) {
+      if (mounted) {
+        setState(() => _needsOnboarding = profile == null);
+      }
+    }).catchError((_) {
+      // On error assume profile exists to avoid blocking the user
+      if (mounted) setState(() => _needsOnboarding = false);
+    });
   }
 
   void _handleSignedOutUser() {
     _preloadedKeysForUid = null;
+    _needsOnboarding = false;
     ApiCredentialsService.instance.clearCache();
   }
 
@@ -110,6 +124,7 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     }
 
     if (_isSignedIn) {
+      if (_needsOnboarding) return const OnboardingScreen();
       return const HomeDashboardScreen();
     }
 

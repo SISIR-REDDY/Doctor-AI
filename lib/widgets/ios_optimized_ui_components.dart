@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 
 import '../../core/providers/base_provider.dart';
+import '../../core/providers/enhanced_connection_provider.dart';
 import '../theme/ios_app_theme.dart';
 
 /// Ios-style loading state indicator widget with perfect responsive design
@@ -650,10 +651,10 @@ class IosConnectionStatusIndicator extends StatelessWidget {
         icon = CupertinoIcons.wifi_slash;
         text = 'Offline';
         break;
-      case ConnectionStatus.unknown:
+      case ConnectionStatus.syncing:
         color = IosAppTheme.systemOrange;
-        icon = CupertinoIcons.question_circle;
-        text = 'Unknown';
+        icon = CupertinoIcons.arrow_2_circlepath;
+        text = 'Syncing';
         break;
     }
 
@@ -721,8 +722,8 @@ class IosConnectionStatusIndicator extends StatelessWidget {
         return 'Connected to the internet';
       case ConnectionStatus.offline:
         return 'No internet connection';
-      case ConnectionStatus.unknown:
-        return 'Connection status unknown';
+      case ConnectionStatus.syncing:
+        return 'Syncing data…';
     }
   }
 }

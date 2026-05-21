@@ -1,13 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import '../core/ai_prompt_builder.dart';
 import '../core/base_patient_screen.dart';
 import '../core/errors/app_error_handler.dart';
 import '../models/health_models.dart';
 import '../services/chatbot_service.dart';
+import '../services/deepgram_service.dart';
 import '../services/firebase/auth_service.dart';
 import '../services/firebase/firestore_service.dart';
 import '../theme/app_theme.dart';
@@ -30,6 +35,10 @@ class _ShiftHandoffScreenState extends State<ShiftHandoffScreen>
   final ChatbotService _chatbotService = ChatbotService();
   final FirestoreService _firestoreService = FirestoreService();
   final AuthService _authService = AuthService();
+  final DeepgramService _deepgramService = DeepgramService();
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  String? _currentRecordingPath;
+  String? _currentRecordingField;
 
   final TextEditingController _patientSummaryController = TextEditingController();
   final TextEditingController _overnightEventsController = TextEditingController();
@@ -76,6 +85,7 @@ class _ShiftHandoffScreenState extends State<ShiftHandoffScreen>
 
   @override
   void dispose() {
+    _audioRecorder.dispose();
     _patientSummaryController.dispose();
     _overnightEventsController.dispose();
     _pendingTasksController.dispose();
@@ -186,33 +196,73 @@ $_handoffReport''',
     }
   }
 
-  void _simulateVoiceInput(String fieldKey, TextEditingController controller) {
-    setState(() => _isRecording[fieldKey] = true);
+  Future<void> _toggleVoiceInput(String fieldKey, TextEditingController controller) async {
+    if (_isRecording[fieldKey] == true) {
+      await _stopAndTranscribe(fieldKey, controller);
+    } else {
+      await _startVoiceRecording(fieldKey);
+    }
+  }
 
-    // Simulate voice recording with sample text after a short delay
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-
-      String sampleText = '';
-      switch (fieldKey) {
-        case 'patientSummary':
-          sampleText = 'Patient is a 65-year-old male admitted with chest pain, currently stable on telemetry monitoring. Primary diagnosis is NSTEMI.';
-          break;
-        case 'overnightEvents':
-          sampleText = 'Patient remained hemodynamically stable overnight. Received morning medications as scheduled. No acute events or concerns.';
-          break;
-        case 'pendingTasks':
-          sampleText = 'Cardiology consult pending for this afternoon. Repeat troponins due at 0800. Discharge planning to be initiated.';
-          break;
-        case 'keyIssues':
-          sampleText = 'Patient is anxious about cardiac catheterization. Family meeting requested with cardiologist. Monitor for chest pain recurrence.';
-          break;
+  Future<void> _startVoiceRecording(String fieldKey) async {
+    try {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Microphone permission required')),
+          );
+        }
+        return;
       }
 
-      controller.text = sampleText;
-      setState(() => _isRecording[fieldKey] = false);
-      HapticFeedback.lightImpact();
-    });
+      // Stop any other field that may be recording
+      if (_currentRecordingField != null && _currentRecordingField != fieldKey) {
+        await _audioRecorder.stop();
+        setState(() => _isRecording[_currentRecordingField!] = false);
+      }
+
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/handoff_${fieldKey}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000, numChannels: 1),
+        path: path,
+      );
+
+      _currentRecordingPath = path;
+      _currentRecordingField = fieldKey;
+      setState(() => _isRecording[fieldKey] = true);
+      HapticFeedback.mediumImpact();
+    } catch (e) {
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
+    }
+  }
+
+  Future<void> _stopAndTranscribe(String fieldKey, TextEditingController controller) async {
+    try {
+      final path = _currentRecordingPath;
+      await _audioRecorder.stop();
+      _currentRecordingField = null;
+      setState(() => _isRecording[fieldKey] = true); // keep spinner while transcribing
+
+      if (path == null || !await File(path).exists()) {
+        setState(() => _isRecording[fieldKey] = false);
+        return;
+      }
+
+      final transcript = await _deepgramService.transcribeAudioFile(path);
+      if (mounted) {
+        final existing = controller.text.trim();
+        controller.text = existing.isEmpty ? transcript : '$existing\n$transcript';
+        setState(() => _isRecording[fieldKey] = false);
+        HapticFeedback.lightImpact();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isRecording[fieldKey] = false);
+        AppErrorHandler.showSnackBar(context, e);
+      }
+    }
   }
 
   Future<void> _shareReport() async {
@@ -741,9 +791,7 @@ Generated with DocPilot AI Assistant
               child: CupertinoButton(
                 padding: const EdgeInsets.all(8),
                 minSize: 0,
-                onPressed: _isRecording[fieldKey] == true
-                  ? null
-                  : () => _simulateVoiceInput(fieldKey, controller),
+                onPressed: () => _toggleVoiceInput(fieldKey, controller),
                 child: Icon(
                   _isRecording[fieldKey] == true
                     ? CupertinoIcons.stop_circle_fill

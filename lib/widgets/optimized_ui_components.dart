@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/providers/base_provider.dart';
+import '../../core/providers/enhanced_connection_provider.dart';
 
 /// Loading state indicator widget
 class LoadingStateWidget extends StatelessWidget {
@@ -496,10 +497,10 @@ class ConnectionStatusIndicator extends StatelessWidget {
         icon = Icons.wifi_off;
         text = 'Offline';
         break;
-      case ConnectionStatus.unknown:
+      case ConnectionStatus.syncing:
         color = Colors.orange;
-        icon = Icons.help_outline;
-        text = 'Unknown';
+        icon = Icons.sync;
+        text = 'Syncing';
         break;
     }
 
@@ -545,8 +546,8 @@ class ConnectionStatusIndicator extends StatelessWidget {
         return 'Connected to the internet';
       case ConnectionStatus.offline:
         return 'No internet connection';
-      case ConnectionStatus.unknown:
-        return 'Connection status unknown';
+      case ConnectionStatus.syncing:
+        return 'Syncing data…';
     }
   }
 }

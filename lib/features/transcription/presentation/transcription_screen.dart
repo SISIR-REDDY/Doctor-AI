@@ -1,24 +1,29 @@
 import 'dart:async';
-import 'dart:math';
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:docpilot/core/healthcare/healthcare_services_manager.dart';
+import 'package:docpilot/models/health_models.dart';
 import 'package:docpilot/screens/prescription_screen.dart';
 import 'package:docpilot/screens/summary_screen.dart';
 import 'package:docpilot/screens/transcription_detail_screen.dart';
+import 'package:docpilot/services/firebase/auth_service.dart';
+import 'package:docpilot/services/firebase/firestore_service.dart';
 import 'package:docpilot/widgets/audio_visualizer.dart';
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'transcription_controller.dart';
 
-const Color _bg = Color(0xFFF2F4F7);
-const Color _card = Colors.white;
-const Color _ink = Color(0xFF1E2733);
-const Color _muted = Color(0xFF8B95A5);
-const Color _sky = Color(0xFF6EA8FF);
-const Color _mint = Color(0xFF58D6C7);
-const Color _sun = Color(0xFFFFC857);
-const Color _rose = Color(0xFFFF6B6B);
-const Color _violet = Color(0xFF7B7BFF);
+// ─── iOS-native palette ─────────────────────────────────────────────────────
+const Color _bg = Color(0xFFF6F7FB);
+const Color _surface = Colors.white;
+const Color _border = Color(0xFFE5E7EB);
+const Color _ink = Color(0xFF111827);
+const Color _muted = Color(0xFF6B7280);
+const Color _faint = Color(0xFF9CA3AF);
+const Color _brand = Color(0xFF2563EB);
+const Color _danger = Color(0xFFDC2626);
+const Color _success = Color(0xFF10B981);
 
 class TranscriptionScreen extends StatefulWidget {
   const TranscriptionScreen({super.key});
@@ -29,39 +34,179 @@ class TranscriptionScreen extends StatefulWidget {
 
 class _TranscriptionScreenState extends State<TranscriptionScreen> {
   final HealthcareServicesManager _services = HealthcareServicesManager();
+  final FirestoreService _firestore = FirestoreService();
+  final AuthService _auth = AuthService();
+
   bool _promptedForSave = false;
   String? _lastSavedSignature;
+  String? _lastErrorShown;
+
+  // Live elapsed-time tracking. We compute on every tick so the timer in the
+  // hero card updates without changing the controller.
+  Timer? _ticker;
+  DateTime? _recordingStartedAt;
+  Duration _elapsed = Duration.zero;
+  TranscriptionState? _lastState;
+
+  // Recent sessions (loaded once, refreshed after save).
+  List<ConsultationSession> _recentSessions = const [];
+  bool _isLoadingSessions = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentSessions();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadRecentSessions() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      if (mounted) setState(() => _isLoadingSessions = false);
+      return;
+    }
+    try {
+      final sessions =
+          await _firestore.getConsultationHistory(doctorId: uid, limit: 3);
+      if (!mounted) return;
+      setState(() {
+        _recentSessions = sessions;
+        _isLoadingSessions = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingSessions = false);
+    }
+  }
+
+  void _syncElapsedTracker(TranscriptionController c) {
+    // Start/stop the elapsed timer in lockstep with recording state.
+    if (c.isRecording && _lastState != TranscriptionState.recording) {
+      _recordingStartedAt = DateTime.now();
+      _elapsed = Duration.zero;
+      _ticker?.cancel();
+      _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (!mounted || _recordingStartedAt == null) return;
+        setState(() {
+          _elapsed = DateTime.now().difference(_recordingStartedAt!);
+        });
+      });
+    } else if (!c.isRecording && _lastState == TranscriptionState.recording) {
+      _ticker?.cancel();
+      _ticker = null;
+      _recordingStartedAt = null;
+    }
+    _lastState = c.state;
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<TranscriptionController>();
+    _syncElapsedTracker(controller);
     _maybePromptForSave(controller);
+    _maybeShowError(controller);
 
     return Scaffold(
       backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _bg,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: const Text(
+          'Consultation',
+          style: TextStyle(
+            color: _ink,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+          ),
+        ),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: _ink, size: 20),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        actions: [
+          if (controller.state == TranscriptionState.done &&
+              controller.transcription.isNotEmpty)
+            TextButton(
+              onPressed: () => _confirmReset(controller),
+              child: const Text('New',
+                  style: TextStyle(
+                      color: _brand,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600)),
+            ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: SafeArea(
+        top: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            _buildTopBar(controller),
-            const SizedBox(height: 16),
-            _buildHeroCard(controller),
-            const SizedBox(height: 16),
-            _buildWaveformCard(controller),
-            const SizedBox(height: 16),
-            _buildInsightRow(controller),
-            const SizedBox(height: 20),
-            _buildSectionTitle('Quick Actions'),
-            const SizedBox(height: 12),
-            _buildActionRow(context, controller),
-            const SizedBox(height: 20),
-            _buildSectionTitle('Recent Snapshot'),
-            const SizedBox(height: 12),
-            _buildRecentCard(context, controller),
+            _RecorderHero(
+              controller: controller,
+              elapsed: _elapsed,
+            ),
+            const SizedBox(height: 24),
+            const _SectionHeader('Results'),
+            _ResultsList(controller: controller),
+            const SizedBox(height: 24),
+            const _SectionHeader('Recent sessions'),
+            _RecentSessionsList(
+              sessions: _recentSessions,
+              isLoading: _isLoadingSessions,
+              onTapSession: (s) => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => TranscriptionDetailScreen(
+                    transcription: s.transcript,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  // ─── Side-effect helpers ─────────────────────────────────────────────────
+
+  void _maybeShowError(TranscriptionController controller) {
+    if (controller.state != TranscriptionState.error) {
+      _lastErrorShown = null;
+      return;
+    }
+    final msg = controller.errorMessage ?? 'Something went wrong';
+    if (_lastErrorShown == msg) return;
+    _lastErrorShown = msg;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: const Text('Recording failed'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(msg),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   void _maybePromptForSave(TranscriptionController controller) {
@@ -71,7 +216,6 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       _promptedForSave = false;
       return;
     }
-
     if (controller.state != TranscriptionState.done) return;
     if (controller.transcription.trim().isEmpty) return;
 
@@ -81,8 +225,9 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
     _promptedForSave = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      final suggestedName =
-          _services.suggestPatientNameFromTranscript(controller.transcription);
+      final suggestedName = _services
+              .suggestPatientNameFromTranscript(controller.transcription) ??
+          '';
       final enteredName =
           await _promptForPatientName(suggestedName: suggestedName);
       final resolvedName = _resolvePatientName(enteredName, suggestedName);
@@ -101,47 +246,63 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Sign in to save this session.'),
-            backgroundColor: _sun,
+            backgroundColor: _danger,
+            behavior: SnackBarBehavior.floating,
           ),
         );
         return;
       }
-
       _lastSavedSignature = signature;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Saved to patient records.'),
-          backgroundColor: _mint,
+        SnackBar(
+          content: Text(
+              'Saved to ${savedPatient.firstName} ${savedPatient.lastName}'
+                  .trim()),
+          backgroundColor: _success,
+          behavior: SnackBarBehavior.floating,
         ),
       );
+      // Refresh the recent sessions list so the just-saved one appears.
+      _loadRecentSessions();
     });
   }
 
-  String _buildSignature(TranscriptionController controller) {
-    return '${controller.transcription.hashCode}-${controller.summary.hashCode}-${controller.prescription.hashCode}';
+  String _buildSignature(TranscriptionController c) =>
+      '${c.transcription.length}|${c.summary.length}|${c.prescription.length}';
+
+  String _resolvePatientName(String? direct, String suggestion) {
+    if (direct != null && direct.trim().isNotEmpty) return direct.trim();
+    if (suggestion.isNotEmpty) return suggestion;
+    return 'Patient ${DateTime.now().millisecondsSinceEpoch}';
   }
 
-  Future<String?> _promptForPatientName({String? suggestedName}) {
-    final controller = TextEditingController(text: suggestedName ?? '');
-    return showDialog<String>(
+  Future<String?> _promptForPatientName({required String suggestedName}) async {
+    final ctrl = TextEditingController(text: suggestedName);
+    return showCupertinoDialog<String>(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Patient name'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Enter patient name',
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Save to patient'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: CupertinoTextField(
+            controller: ctrl,
+            autofocus: true,
+            placeholder: 'Patient name',
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemGrey6,
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
-          textInputAction: TextInputAction.done,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Use default'),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Use suggested'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
             child: const Text('Save'),
           ),
         ],
@@ -149,768 +310,656 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
     );
   }
 
-  String _resolvePatientName(String? enteredName, String? suggestedName) {
-    final direct = enteredName?.trim() ?? '';
-    if (direct.isNotEmpty) return direct;
-    final suggestion = suggestedName?.trim() ?? '';
-    if (suggestion.isNotEmpty) return suggestion;
-    return 'Unknown Patient';
-  }
-
-  String _statusText(TranscriptionState state) {
-    switch (state) {
-      case TranscriptionState.recording:    return 'Recording your voice...';
-      case TranscriptionState.transcribing: return 'Transcribing your voice...';
-      case TranscriptionState.processing:   return 'Processing with Gemini...';
-      case TranscriptionState.error:        return 'Something went wrong';
-      default:                              return 'Tap the mic to begin';
-    }
-  }
-
-  String _statusDetailText(TranscriptionController controller) {
-    switch (controller.state) {
-      case TranscriptionState.recording:    return 'Recording in progress';
-      case TranscriptionState.transcribing: return 'Processing audio...';
-      case TranscriptionState.processing:   return 'Generating content with Gemini...';
-      case TranscriptionState.done:         return 'Ready to view results';
-      case TranscriptionState.error:        return controller.errorMessage ?? 'Error occurred';
-      default:                              return 'Press the microphone button to start';
-    }
-  }
-
-  String _statusLabel(TranscriptionController controller) {
-    if (controller.state == TranscriptionState.error) {
-      return 'Needs attention';
-    }
-    if (controller.isRecording) {
-      return 'Recording';
-    }
-    if (controller.isProcessing) {
-      return 'Processing';
-    }
-    return 'Ready';
-  }
-
-  Color _statusColor(TranscriptionController controller) {
-    if (controller.state == TranscriptionState.error) {
-      return _rose;
-    }
-    if (controller.isRecording) {
-      return _rose;
-    }
-    if (controller.isProcessing) {
-      return _sun;
-    }
-    return _mint;
-  }
-
-  Widget _buildTopBar(TranscriptionController controller) {
-    final statusLabel = _statusLabel(controller);
-    final statusColor = _statusColor(controller);
-
-    return Row(
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text(
-              'Welcome back',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _muted, letterSpacing: 0.2),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'DocPilot Studio',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: _ink, letterSpacing: 0.3),
-            ),
-          ],
+  Future<void> _confirmReset(TranscriptionController c) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Start a new session?'),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text('The current transcript and AI outputs will be cleared.'),
         ),
-        const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: statusColor.withAlpha(28),
-            borderRadius: BorderRadius.circular(999),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
           ),
-          child: Text(
-            statusLabel,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: statusColor),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHeroCard(TranscriptionController controller) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1B2431), Color(0xFF364962)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 18, offset: const Offset(0, 10)),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: -20,
-            right: -20,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withAlpha(20),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -30,
-            left: -10,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _violet.withAlpha(30),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Voice clinic companion',
-                            style: TextStyle(fontSize: 12, color: Colors.white70, letterSpacing: 0.6),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _statusText(controller.state),
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _statusDetailText(controller),
-                            style: const TextStyle(fontSize: 12, color: Colors.white70),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    _buildRecordOrb(controller),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (controller.isProcessing)
-                  LinearProgressIndicator(
-                    minHeight: 6,
-                    backgroundColor: Colors.white.withAlpha(26),
-                    valueColor: const AlwaysStoppedAnimation<Color>(_sun),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(18),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'Tap the mic to capture a session',
-                      style: TextStyle(fontSize: 12, color: Colors.white),
-                    ),
-                  ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildMiniChip('Transcript', controller.transcription.isNotEmpty, _mint),
-                    _buildMiniChip('Summary', controller.summary.isNotEmpty, _sky),
-                    _buildMiniChip('Prescription', controller.prescription.isNotEmpty, _sun),
-                  ],
-                ),
-              ],
-            ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Start new'),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildMiniChip(String label, bool isReady, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: isReady ? color.withAlpha(38) : Colors.white.withAlpha(18),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: isReady ? color : Colors.white.withAlpha(40)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: isReady ? color : Colors.white70,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecordOrb(TranscriptionController controller) {
-    final isRecording = controller.isRecording;
-    final baseColor = isRecording ? _rose : _sky;
-
-    return GestureDetector(
-      onTap: controller.isProcessing ? null : controller.toggleRecording,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        width: 78,
-        height: 78,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: baseColor,
-          boxShadow: [
-            BoxShadow(
-              color: baseColor.withAlpha(isRecording ? 120 : 80),
-              blurRadius: isRecording ? 24 : 18,
-              spreadRadius: isRecording ? 6 : 2,
-            ),
-          ],
-        ),
-        child: Icon(isRecording ? Icons.stop : Icons.mic, color: Colors.white, size: 32),
-      ),
-    );
-  }
-
-  Widget _buildWaveformCard(TranscriptionController controller) {
-    final isLive = controller.isRecording;
-    final isProcessing = controller.isProcessing;
-    final isActive = isLive || isProcessing;
-    final dockStateText = isLive ? 'Live' : (isProcessing ? 'Processing' : 'Idle');
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withAlpha(12), blurRadius: 16, offset: const Offset(0, 8)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'Signal Dock',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _ink),
-              ),
-              const Spacer(),
-              Text(
-                dockStateText,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? _mint : _muted,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 90,
-            width: double.infinity,
-            child: AudioSignalBox(
-              isActive: isActive,
-              color: _mint,
-              audioLevel: controller.audioLevel,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInsightRow(TranscriptionController controller) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildInsightCard(
-            'Transcripts',
-            controller.transcription.isNotEmpty ? '1' : '0',
-            Icons.record_voice_over,
-            _mint,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildInsightCard(
-            'Summaries',
-            controller.summary.isNotEmpty ? '1' : '0',
-            Icons.summarize,
-            _sky,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildInsightCard(
-            'Scripts',
-            controller.prescription.isNotEmpty ? '1' : '0',
-            Icons.medication,
-            _sun,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInsightCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 12, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(color: color.withAlpha(38), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(height: 10),
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _ink)),
-          const SizedBox(height: 4),
-          Text(title, style: const TextStyle(fontSize: 11, color: _muted)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _ink),
-    );
-  }
-
-  Widget _buildActionRow(BuildContext context, TranscriptionController controller) {
-    return Column(
-      children: [
-        _buildActionTile(
-          title: 'Transcription',
-          subtitle: _previewLine(
-            controller.transcription,
-            fallback: 'Record a session first',
-          ),
-          icon: Icons.record_voice_over,
-          color: _mint,
-          isEnabled: controller.transcription.isNotEmpty,
-          onPressed: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => TranscriptionDetailScreen(transcription: controller.transcription),
-          )),
-        ),
-        const SizedBox(height: 12),
-        _buildActionTile(
-          title: 'Summary',
-          subtitle: _previewLine(
-            controller.summary,
-            fallback: 'Record a session first',
-          ),
-          icon: Icons.summarize,
-          color: _sky,
-          isEnabled: controller.summary.isNotEmpty,
-          onPressed: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => SummaryScreen(summary: controller.summary),
-          )),
-        ),
-        const SizedBox(height: 12),
-        _buildActionTile(
-          title: 'Prescription',
-          subtitle: _previewLine(
-            controller.prescription,
-            fallback: 'Record a session first',
-          ),
-          icon: Icons.medication,
-          color: _sun,
-          isEnabled: controller.prescription.isNotEmpty,
-          onPressed: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => PrescriptionScreen(prescription: controller.prescription),
-          )),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionTile({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required bool isEnabled,
-    required VoidCallback onPressed,
-  }) {
-    final borderColor = isEnabled ? color : _muted.withAlpha(90);
-    final fillColor = isEnabled ? Colors.white : const Color(0xFFF2F3F5);
-    final iconColor = isEnabled ? color : _muted;
-    final titleColor = isEnabled ? _ink : _muted;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: isEnabled ? onPressed : null,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          height: 84,
-          decoration: BoxDecoration(
-            color: fillColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor, width: 1),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: iconColor.withAlpha(18),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: titleColor),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: _muted),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  isEnabled ? Icons.chevron_right : Icons.lock_outline,
-                  color: isEnabled ? _ink : _muted,
-                  size: 18,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _previewLine(String text, {required String fallback}) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return fallback;
-    final singleLine = trimmed.replaceAll(RegExp(r'\s+'), ' ');
-    return singleLine.length > 90 ? '${singleLine.substring(0, 90)}...' : singleLine;
-  }
-
-  Widget _buildRecentCard(BuildContext context, TranscriptionController controller) {
-    final hasTranscript = controller.transcription.isNotEmpty;
-    final preview = hasTranscript
-        ? controller.transcription.trim()
-        : 'No session recorded yet. Use the mic above to start.';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withAlpha(12), blurRadius: 12, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'Latest transcript',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _ink),
-              ),
-              const Spacer(),
-              if (hasTranscript)
-                TextButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => TranscriptionDetailScreen(transcription: controller.transcription),
-                  )),
-                  child: const Text('Open'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            preview,
-            style: const TextStyle(fontSize: 12, color: _muted, height: 1.4),
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(Icons.auto_awesome, size: 16, color: _violet.withAlpha(200)),
-              const SizedBox(width: 6),
-              Text(
-                hasTranscript ? 'Ready for review' : 'Awaiting first session',
-                style: const TextStyle(fontSize: 12, color: _muted),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+    if (confirmed == true) {
+      _promptedForSave = false;
+      _lastSavedSignature = null;
+      // Trigger a fresh record cycle. The controller resets data on start.
+      await c.toggleRecording();
+      if (c.isRecording) await c.toggleRecording();
+    }
   }
 }
 
-class _SignalDockWave extends StatefulWidget {
-  final double amplitude;
-  final double voiceLevel;
-  final bool isLive;
-  final Color waveColor;
-  final Color guideColor;
+// ────────────────────────────────────────────────────────────────────────────
+//   PREMIUM HERO RECORDER
+// ────────────────────────────────────────────────────────────────────────────
 
-  const _SignalDockWave({
-    required this.amplitude,
-    required this.voiceLevel,
-    required this.isLive,
-    required this.waveColor,
-    required this.guideColor,
-  });
-
-  @override
-  State<_SignalDockWave> createState() => _SignalDockWaveState();
-}
-
-class _SignalDockWaveState extends State<_SignalDockWave> {
-  static const int _sampleCount = 120;
-  static const Duration _frameStep = Duration(milliseconds: 24);
-
-  late final List<double> _samples;
-  Timer? _timer;
-  double _smoothedAmplitude = 0.0;
-  double _smoothedVoice = 0.0;
-  double _beatPhase = 0.0;
-  double _t = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _samples = List<double>.filled(_sampleCount, 0.0, growable: true);
-    _startTicker();
-  }
-
-  @override
-  void didUpdateWidget(covariant _SignalDockWave oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.isLive && !widget.isLive) {
-      _smoothedAmplitude *= 0.6;
-      _smoothedVoice *= 0.4;
-    }
-  }
-
-  void _startTicker() {
-    _timer?.cancel();
-    _timer = Timer.periodic(_frameStep, (_) {
-      if (!mounted) {
-        return;
-      }
-
-      _t += _frameStep.inMilliseconds / 1000.0;
-      final inputAmp = widget.amplitude.clamp(0.0, 1.0);
-      _smoothedAmplitude = _smoothedAmplitude * 0.82 + inputAmp * 0.18;
-      final inputVoice = widget.voiceLevel.clamp(0.0, 1.0);
-      _smoothedVoice = _smoothedVoice * 0.7 + inputVoice * 0.3;
-      final voiceGate = ((_smoothedVoice - 0.06) / 0.94).clamp(0.0, 1.0);
-
-      final bpm = widget.isLive
-          ? (60.0 + voiceGate * 130.0)
-          : 44.0;
-      _beatPhase = (_beatPhase + (bpm / 60.0) * (_frameStep.inMilliseconds / 1000.0)) % 1.0;
-
-      final beat = _ecgShape(_beatPhase);
-      final beatStrength = (0.18 + _smoothedAmplitude * 0.95) * (0.15 + voiceGate * 0.85);
-      final voicePulse = sin(_t * (4.0 + voiceGate * 10.0)) * (0.02 + voiceGate * 0.22);
-      final drift = sin(_t * 2.4) * (0.018 * voiceGate);
-      final micro = sin(_t * 17.0) * (0.008 * voiceGate);
-      final rawValue = (beat * beatStrength + voicePulse + drift + micro).clamp(-1.0, 1.0);
-      final value = voiceGate <= 0.02 ? 0.0 : rawValue;
-
-      _samples.removeAt(0);
-      _samples.add(value);
-
-      setState(() {});
-    });
-  }
-
-  double _ecgShape(double phase) {
-    if (phase < 0.08) {
-      final p = phase / 0.08;
-      return 0.14 * sin(pi * p);
-    }
-    if (phase < 0.12) {
-      return -0.16 * ((phase - 0.08) / 0.04);
-    }
-    if (phase < 0.15) {
-      return -0.16 + 1.28 * ((phase - 0.12) / 0.03);
-    }
-    if (phase < 0.18) {
-      return 1.12 - 1.44 * ((phase - 0.15) / 0.03);
-    }
-    if (phase < 0.26) {
-      return -0.32 * (1 - ((phase - 0.18) / 0.08));
-    }
-    if (phase < 0.46) {
-      final t = (phase - 0.26) / 0.20;
-      return 0.26 * sin(pi * t);
-    }
-    return 0.0;
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
+class _RecorderHero extends StatelessWidget {
+  final TranscriptionController controller;
+  final Duration elapsed;
+  const _RecorderHero({required this.controller, required this.elapsed});
 
   @override
   Widget build(BuildContext context) {
-    final renderedSamples = List<double>.unmodifiable(_samples);
-    return RepaintBoundary(
-      child: CustomPaint(
-        painter: _SignalWavePainter(
-          samples: renderedSamples,
-          amplitude: _smoothedAmplitude,
-          isLive: widget.isLive,
-          waveColor: widget.waveColor,
-          guideColor: widget.guideColor,
+    final isRecording = controller.isRecording;
+    final isProcessing = controller.isProcessing;
+    final isDone = controller.state == TranscriptionState.done &&
+        controller.transcription.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _border),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+      child: Column(
+        children: [
+          // Status pill + live timer
+          Row(
+            children: [
+              _StatusPill(controller: controller),
+              const Spacer(),
+              _Timer(
+                elapsed: elapsed,
+                isActive: isRecording,
+                isDone: isDone,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+
+          // Always-visible waveform — pulses when idle, alive when recording
+          SizedBox(
+            height: 80,
+            child: AudioSignalBox(
+              isActive: isRecording || isProcessing,
+              color: isRecording
+                  ? _danger
+                  : (isProcessing ? _brand : _faint.withValues(alpha: 0.6)),
+              audioLevel: controller.audioLevel,
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // Big mic button
+          _MicButton(
+            isRecording: isRecording,
+            isDisabled: isProcessing,
+            onTap: controller.toggleRecording,
+          ),
+          const SizedBox(height: 14),
+
+          // Helper text
+          Text(
+            _helperText(controller, isDone),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: _muted,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // AI feature pills (always visible — informs the doctor)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: const [
+              _FeaturePill(icon: Icons.auto_awesome, label: 'Auto-summary'),
+              _FeaturePill(icon: Icons.medication_outlined, label: 'Auto-Rx'),
+              _FeaturePill(icon: Icons.bolt_rounded, label: 'AI insights'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _helperText(TranscriptionController c, bool isDone) {
+    switch (c.state) {
+      case TranscriptionState.idle:
+        return 'Tap to start recording the consultation';
+      case TranscriptionState.recording:
+        return 'Tap again to stop and generate AI outputs';
+      case TranscriptionState.transcribing:
+        return 'Converting audio to text…';
+      case TranscriptionState.processing:
+        return 'Generating summary and prescription…';
+      case TranscriptionState.done:
+        return isDone
+            ? 'Review results below or tap mic to record again'
+            : 'Tap mic to start a new recording';
+      case TranscriptionState.error:
+        return 'Tap mic to try again';
+    }
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final TranscriptionController controller;
+  const _StatusPill({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color, bg) = _styleFor(controller.state);
+    final isProcessing = controller.isProcessing;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isProcessing) ...[
+            const CupertinoActivityIndicator(radius: 6),
+            const SizedBox(width: 6),
+          ] else
+            Container(
+              width: 7,
+              height: 7,
+              margin: const EdgeInsets.only(right: 7),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+              letterSpacing: -0.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  (String, Color, Color) _styleFor(TranscriptionState s) {
+    switch (s) {
+      case TranscriptionState.idle:
+        return ('Ready', _muted, const Color(0xFFF3F4F6));
+      case TranscriptionState.recording:
+        return ('Recording', _danger, _danger.withValues(alpha: 0.10));
+      case TranscriptionState.transcribing:
+        return ('Transcribing', _brand, _brand.withValues(alpha: 0.10));
+      case TranscriptionState.processing:
+        return ('Generating', _brand, _brand.withValues(alpha: 0.10));
+      case TranscriptionState.done:
+        return ('Complete', _success, _success.withValues(alpha: 0.10));
+      case TranscriptionState.error:
+        return ('Error', _danger, _danger.withValues(alpha: 0.10));
+    }
+  }
+}
+
+class _Timer extends StatelessWidget {
+  final Duration elapsed;
+  final bool isActive;
+  final bool isDone;
+  const _Timer(
+      {required this.elapsed, required this.isActive, required this.isDone});
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = elapsed.inMinutes.toString().padLeft(2, '0');
+    final ss = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+    final color = isActive ? _danger : (isDone ? _ink : _faint);
+    return Text(
+      '$mm:$ss',
+      style: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: color,
+        fontFeatures: const [FontFeature.tabularFigures()],
+        letterSpacing: -0.5,
+      ),
+    );
+  }
+}
+
+class _MicButton extends StatelessWidget {
+  final bool isRecording;
+  final bool isDisabled;
+  final VoidCallback onTap;
+
+  const _MicButton({
+    required this.isRecording,
+    required this.isDisabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isRecording ? _danger : _brand;
+    return GestureDetector(
+      onTap: isDisabled ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 88,
+        height: 88,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDisabled ? _faint.withValues(alpha: 0.25) : color,
+          boxShadow: isDisabled
+              ? null
+              : [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.30),
+                    blurRadius: 20,
+                    spreadRadius: isRecording ? 6 : 0,
+                  ),
+                ],
+        ),
+        child: Icon(
+          isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+          color: Colors.white,
+          size: 36,
         ),
       ),
     );
   }
 }
 
-class _SignalWavePainter extends CustomPainter {
-  final List<double> samples;
-  final double amplitude;
-  final bool isLive;
-  final Color waveColor;
-  final Color guideColor;
+class _FeaturePill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _FeaturePill({required this.icon, required this.label});
 
-  _SignalWavePainter({
-    required this.samples,
-    required this.amplitude,
-    required this.isLive,
-    required this.waveColor,
-    required this.guideColor,
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: _brand.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: _brand),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: _brand,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//   RESULTS LIST
+// ────────────────────────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: _muted,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultsList extends StatelessWidget {
+  final TranscriptionController controller;
+  const _ResultsList({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          _ResultRow(
+            icon: Icons.record_voice_over_rounded,
+            iconColor: const Color(0xFF14B8A6),
+            title: 'Transcript',
+            preview: _preview(controller.transcription),
+            isReady: controller.transcription.isNotEmpty,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TranscriptionDetailScreen(
+                  transcription: controller.transcription,
+                ),
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: _border),
+          _ResultRow(
+            icon: Icons.auto_awesome_rounded,
+            iconColor: const Color(0xFF2563EB),
+            title: 'Summary',
+            preview: _preview(controller.summary),
+            isReady: controller.summary.isNotEmpty,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SummaryScreen(summary: controller.summary),
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: _border),
+          _ResultRow(
+            icon: Icons.medication_outlined,
+            iconColor: const Color(0xFFEA580C),
+            title: 'Prescription',
+            preview: _preview(controller.prescription),
+            isReady: controller.prescription.isNotEmpty,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PrescriptionScreen(
+                  prescription: controller.prescription,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _preview(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return '';
+    final single = t.replaceAll(RegExp(r'\s+'), ' ');
+    return single.length > 80 ? '${single.substring(0, 80)}…' : single;
+  }
+}
+
+class _ResultRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String preview;
+  final bool isReady;
+  final VoidCallback onTap;
+
+  const _ResultRow({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.preview,
+    required this.isReady,
+    required this.onTap,
   });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final waveRect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final waveGradient = LinearGradient(
-      colors: [waveColor.withAlpha(120), waveColor.withAlpha(230)],
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isReady ? onTap : null,
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: isReady
+                      ? iconColor.withValues(alpha: 0.12)
+                      : _faint.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(
+                  icon,
+                  color: isReady ? iconColor : _faint,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: isReady ? _ink : _faint,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      preview.isEmpty
+                          ? 'Record a session to generate'
+                          : preview,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: preview.isEmpty ? _faint : _muted,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: isReady ? _faint : _border,
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
-    final paint = Paint()
-      ..shader = waveGradient.createShader(waveRect)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = isLive ? 2.5 : 2.1
-      ..strokeCap = StrokeCap.round;
-
-    final guidePaint = Paint()
-      ..color = guideColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    final centerY = size.height / 2;
-    final liveScale = isLive ? (0.30 + amplitude * 0.50) : (0.16 + amplitude * 0.12);
-    final maxAmplitude = size.height * liveScale;
-
-    for (double x = 0; x < size.width; x += 10) {
-      canvas.drawLine(Offset(x, centerY), Offset((x + 5).clamp(0.0, size.width), centerY), guidePaint);
-    }
-
-    if (samples.length < 2) {
-      return;
-    }
-
-    final points = <Offset>[];
-    for (int i = 0; i < samples.length; i++) {
-      final x = (i / (samples.length - 1)) * size.width;
-      final y = centerY - samples[i] * maxAmplitude;
-      points.add(Offset(x, y));
-    }
-
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (int i = 1; i < points.length; i++) {
-      final prev = points[i - 1];
-      final curr = points[i];
-      final xc = (prev.dx + curr.dx) / 2;
-      final yc = (prev.dy + curr.dy) / 2;
-      path.quadraticBezierTo(prev.dx, prev.dy, xc, yc);
-    }
-    path.lineTo(points.last.dx, points.last.dy);
-
-    if (isLive) {
-      final glowPaint = Paint()
-        ..color = waveColor.withAlpha((110 + amplitude * 90).clamp(110, 200).toInt())
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5.0
-        ..strokeCap = StrokeCap.round
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
-      canvas.drawPath(path, glowPaint);
-    }
-
-    canvas.drawPath(path, paint);
-
-    final pulsePaint = Paint()
-      ..color = waveColor.withAlpha((120 + amplitude * 90).clamp(120, 210).toInt())
-      ..style = PaintingStyle.fill;
-    final pulseRadius = isLive ? 2.2 + amplitude * 2.8 : 1.6 + amplitude * 1.2;
-    canvas.drawCircle(points.last, pulseRadius, pulsePaint);
   }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//   RECENT SESSIONS LIST (fills bottom space with real, useful data)
+// ────────────────────────────────────────────────────────────────────────────
+
+class _RecentSessionsList extends StatelessWidget {
+  final List<ConsultationSession> sessions;
+  final bool isLoading;
+  final ValueChanged<ConsultationSession> onTapSession;
+
+  const _RecentSessionsList({
+    required this.sessions,
+    required this.isLoading,
+    required this.onTapSession,
+  });
 
   @override
-  bool shouldRepaint(covariant _SignalWavePainter oldDelegate) {
-    return oldDelegate.amplitude != amplitude ||
-        oldDelegate.isLive != isLive ||
-        oldDelegate.samples != samples ||
-        oldDelegate.waveColor != waveColor ||
-        oldDelegate.guideColor != guideColor;
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return Container(
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _border),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: const Center(child: CupertinoActivityIndicator()),
+      );
+    }
+    if (sessions.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: _surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _border),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _faint.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: const Icon(Icons.history_rounded,
+                  size: 18, color: _faint),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'No past consultations yet. Recorded sessions will appear here.',
+                style: TextStyle(fontSize: 13, color: _muted, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (int i = 0; i < sessions.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: _border),
+            _SessionRow(
+              session: sessions[i],
+              onTap: () => onTapSession(sessions[i]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionRow extends StatelessWidget {
+  final ConsultationSession session;
+  final VoidCallback onTap;
+  const _SessionRow({required this.session, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final patient = session.patientName.trim().isEmpty
+        ? 'Untitled patient'
+        : session.patientName;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _brand.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Center(
+                  child: Text(
+                    _initialsOf(patient),
+                    style: const TextStyle(
+                        color: _brand,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      patient,
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _ink,
+                          letterSpacing: -0.2),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _relativeTime(session.createdAt),
+                      style: const TextStyle(fontSize: 12, color: _muted),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  color: _faint, size: 22),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _initialsOf(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
+
+  String _relativeTime(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${(diff.inDays / 7).floor()}w ago';
   }
 }

@@ -517,10 +517,12 @@ Suggested next steps (admit, observe, discharge with follow-up)
   void _determinePriorityFromResponse(String response) {
     final lowercaseResponse = response.toLowerCase();
 
-    // Extract ESI Level
-    final esiMatch = RegExp(r'esi[- ]?(\d)').firstMatch(lowercaseResponse);
+    // Extract ESI Level — handles: "ESI-2", "ESI 2", "ESI Level 2", "ESI-Level-2", "level 2"
+    final esiMatch = RegExp(r'esi[\s\-]?(?:level[\s\-]?)?(\d)|esi[\s\-](\d)').firstMatch(lowercaseResponse);
     if (esiMatch != null) {
-      _esiLevel = int.tryParse(esiMatch.group(1) ?? '') ?? 0;
+      final raw = esiMatch.group(1) ?? esiMatch.group(2) ?? '';
+      final parsed = int.tryParse(raw) ?? 0;
+      if (parsed >= 1 && parsed <= 5) _esiLevel = parsed;
     }
 
     if (lowercaseResponse.contains('critical') || lowercaseResponse.contains('emergent') || _esiLevel == 1) {

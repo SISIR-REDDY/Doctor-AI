@@ -16,7 +16,7 @@ class ChatbotService {
   /// Get API key from Firebase only (no local fallback)
   Future<String> _getGeminiApiKey() async {
     try {
-      final firebaseKey = await _credentialsService.getGeminiApiKey(forceRefresh: true);
+      final firebaseKey = await _credentialsService.getGeminiApiKey(forceRefresh: false);
       if (firebaseKey.isNotEmpty) {
         debugPrint('[ChatbotService] ✅ Using Gemini API key from Firebase');
         return firebaseKey;

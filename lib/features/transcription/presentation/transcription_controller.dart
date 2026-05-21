@@ -176,11 +176,17 @@ class TranscriptionController extends ChangeNotifier {
       state = TranscriptionState.processing;
       notifyListeners();
 
-      if (transcript.isNotEmpty && transcript != 'No speech detected') {
+      final isUsable = transcript.isNotEmpty &&
+          transcript != 'No speech detected' &&
+          transcript.split(' ').length >= 3; // at least 3 words
+      if (isUsable) {
         await _processWithGemini(transcript);
       } else {
         state = TranscriptionState.done;
         notifyListeners();
+        if (transcript == 'No speech detected' || transcript.isEmpty) {
+          _setError('No speech detected. Please speak clearly and try again.');
+        }
       }
     } catch (e) {
       _setError('Transcription error: $e');

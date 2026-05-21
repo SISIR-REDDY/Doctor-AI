@@ -18,7 +18,7 @@ class AppRouter {
     switch (settings.name) {
       case voiceAssistant:
         final args = settings.arguments;
-        String patientId = 'demo-patient';
+        String patientId = 'new';
         String? initialPrompt;
 
         if (args is Map) {
@@ -44,7 +44,7 @@ class AppRouter {
         final args = settings.arguments;
         final patientId = args is String && args.trim().isNotEmpty
             ? args
-            : 'demo-patient';
+            : 'new';
         return MaterialPageRoute<void>(
           builder: (_) => ClinicalNotesScreen(patientId: patientId),
           settings: settings,
@@ -54,7 +54,7 @@ class AppRouter {
         final args = settings.arguments;
         final patientId = args is String && args.trim().isNotEmpty
             ? args
-            : 'demo-patient';
+            : 'new';
         return MaterialPageRoute<void>(
           builder: (_) => DocumentScannerScreen(patientId: patientId),
           settings: settings,

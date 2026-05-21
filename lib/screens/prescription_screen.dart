@@ -54,7 +54,7 @@ class _PrescriptionScreenState extends State<PrescriptionScreen> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: message.toLowerCase().contains('fail') ? AppTheme.dangerColor : AppTheme.successColor,
+        backgroundColor: (message.toLowerCase().contains('fail') || message.toLowerCase().contains('error')) ? AppTheme.dangerColor : AppTheme.successColor,
       ),
     );
   }
