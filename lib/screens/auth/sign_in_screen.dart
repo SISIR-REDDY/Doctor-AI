@@ -24,90 +24,80 @@ class _SignInScreenState extends State<SignInScreen> {
   Future<void> _signInWithGoogle() async {
     if (_isLoadingGoogle) return;
     setState(() => _isLoadingGoogle = true);
-
     try {
       final credential = await _authService.signInWithGoogle();
       await credential.user?.getIdToken(true);
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       await ApiCredentialsService.instance.preload();
     } catch (error) {
       if (!mounted) return;
       AppErrorHandler.showSnackBar(context, error);
     } finally {
-      _isLoadingGoogle = false;
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() => _isLoadingGoogle = false);
     }
   }
 
   Future<void> _signInWithApple() async {
     if (_isLoadingApple) return;
     setState(() => _isLoadingApple = true);
-
     try {
       await _authService.signInWithApple();
     } catch (error) {
       if (!mounted) return;
       AppErrorHandler.showSnackBar(context, error);
     } finally {
-      _isLoadingApple = false;
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() => _isLoadingApple = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isFirebaseConfigured =
+    final configured =
         FirebaseConfig.isEnabled && FirebaseBootstrapService.isInitialized;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       body: SafeArea(
         child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: AppTheme.xl,
-                vertical: AppTheme.lg,
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 460),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: AppTheme.md),
-                        _BrandHeader(),
-                        const SizedBox(height: AppTheme.xl),
-                        const _CapabilityGrid(),
-                        const SizedBox(height: AppTheme.lg),
-                        const _TrustStrip(),
-                        const SizedBox(height: AppTheme.lg),
-                        _SignInBlock(
-                          isFirebaseConfigured: isFirebaseConfigured,
-                          isLoadingGoogle: _isLoadingGoogle,
-                          isLoadingApple: _isLoadingApple,
-                          onGoogle: _signInWithGoogle,
-                          onApple: _signInWithApple,
-                        ),
-                        const SizedBox(height: AppTheme.md),
-                      ],
-                    ),
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.xl, vertical: AppTheme.lg),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: AppTheme.lg),
+                      _BrandHeader(),
+                      const SizedBox(height: AppTheme.xl),
+                      const _FeatureGrid(),
+                      const SizedBox(height: AppTheme.lg),
+                      const _TrustStrip(),
+                      const SizedBox(height: AppTheme.lg),
+                      _SignInBlock(
+                        configured: configured,
+                        loadingGoogle: _isLoadingGoogle,
+                        loadingApple: _isLoadingApple,
+                        onGoogle: _signInWithGoogle,
+                        onApple: _signInWithApple,
+                      ),
+                      const SizedBox(height: AppTheme.md),
+                    ],
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
   }
 }
+
+// ── Brand Header ──────────────────────────────────────────────────────────────
 
 class _BrandHeader extends StatelessWidget {
   @override
@@ -133,24 +123,18 @@ class _BrandHeader extends StatelessWidget {
             child: Image.asset(
               'assets/images/docpilot_logo.png',
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return const Center(
-                  child: Icon(
-                    Icons.medical_services_rounded,
-                    color: Colors.white,
-                    size: 34,
-                  ),
-                );
-              },
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.health_and_safety_rounded,
+                    color: Colors.white, size: 34),
+              ),
             ),
           ),
         ),
         const SizedBox(height: AppTheme.lg),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
+            const Text(
               'Clinix',
               style: TextStyle(
                 fontSize: 32,
@@ -162,10 +146,8 @@ class _BrandHeader extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 9,
-                vertical: 3,
-              ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
               decoration: BoxDecoration(
                 gradient: AppTheme.primaryGradient,
                 borderRadius: BorderRadius.circular(7),
@@ -185,13 +167,12 @@ class _BrandHeader extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          'Clinical command center for modern physicians',
+          'Your personal health companion, powered by AI',
           textAlign: TextAlign.center,
           style: AppTheme.bodyMedium.copyWith(
             color: AppTheme.textSecondary,
             fontSize: 13.5,
             height: 1.4,
-            letterSpacing: -0.1,
           ),
         ),
       ],
@@ -199,33 +180,35 @@ class _BrandHeader extends StatelessWidget {
   }
 }
 
-class _CapabilityGrid extends StatelessWidget {
-  const _CapabilityGrid();
+// ── Feature Grid ──────────────────────────────────────────────────────────────
 
-  static const _items = <_Capability>[
-    _Capability(
-      icon: Icons.mic_none_rounded,
-      title: 'Voice Notes',
-      subtitle: 'Dictate SOAP & Rx',
+class _FeatureGrid extends StatelessWidget {
+  const _FeatureGrid();
+
+  static const _items = <_Feature>[
+    _Feature(
+      icon: Icons.smart_toy_rounded,
+      title: 'AI Symptom Check',
+      subtitle: 'Describe & get guidance',
       accent: AppTheme.primaryColor,
     ),
-    _Capability(
-      icon: Icons.local_hospital_rounded,
-      title: 'Triage',
-      subtitle: 'ESI-aligned AI',
-      accent: AppTheme.emergencyColor,
-    ),
-    _Capability(
-      icon: Icons.assignment_turned_in_rounded,
-      title: 'Ward Rounds',
-      subtitle: 'Live patient lists',
+    _Feature(
+      icon: Icons.folder_copy_rounded,
+      title: 'Health Records',
+      subtitle: 'Store & scan reports',
       accent: AppTheme.secondaryColor,
     ),
-    _Capability(
-      icon: Icons.medication_liquid_rounded,
-      title: 'Med Safety',
-      subtitle: 'Interactions & dosing',
+    _Feature(
+      icon: Icons.medication_rounded,
+      title: 'Med Tracker',
+      subtitle: 'Manage medications',
       accent: AppTheme.surgeryColor,
+    ),
+    _Feature(
+      icon: Icons.verified_user_rounded,
+      title: 'Insurance Hub',
+      subtitle: 'Claims & fight support',
+      accent: AppTheme.warningColor,
     ),
   ];
 
@@ -233,11 +216,7 @@ class _CapabilityGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(
-        AppTheme.lg,
-        AppTheme.lg,
-        AppTheme.lg,
-        AppTheme.md,
-      ),
+          AppTheme.lg, AppTheme.lg, AppTheme.lg, AppTheme.md),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: AppTheme.largeRadius,
@@ -265,7 +244,7 @@ class _CapabilityGrid extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                'BUILT FOR CLINICIANS',
+                'EVERYTHING YOU NEED',
                 style: AppTheme.labelSmall.copyWith(
                   color: AppTheme.textSecondary,
                   letterSpacing: 1.6,
@@ -279,9 +258,9 @@ class _CapabilityGrid extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _CapabilityTile(item: _items[0])),
+                Expanded(child: _FeatureTile(item: _items[0])),
                 const SizedBox(width: AppTheme.sm),
-                Expanded(child: _CapabilityTile(item: _items[1])),
+                Expanded(child: _FeatureTile(item: _items[1])),
               ],
             ),
           ),
@@ -290,9 +269,9 @@ class _CapabilityGrid extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _CapabilityTile(item: _items[2])),
+                Expanded(child: _FeatureTile(item: _items[2])),
                 const SizedBox(width: AppTheme.sm),
-                Expanded(child: _CapabilityTile(item: _items[3])),
+                Expanded(child: _FeatureTile(item: _items[3])),
               ],
             ),
           ),
@@ -302,12 +281,12 @@ class _CapabilityGrid extends StatelessWidget {
   }
 }
 
-class _Capability {
+class _Feature {
   final IconData icon;
   final String title;
   final String subtitle;
   final Color accent;
-  const _Capability({
+  const _Feature({
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -315,21 +294,20 @@ class _Capability {
   });
 }
 
-class _CapabilityTile extends StatelessWidget {
-  final _Capability item;
-  const _CapabilityTile({required this.item});
+class _FeatureTile extends StatelessWidget {
+  final _Feature item;
+  const _FeatureTile({required this.item});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.md,
-        vertical: AppTheme.md,
-      ),
+          horizontal: AppTheme.md, vertical: AppTheme.md),
       decoration: BoxDecoration(
         color: AppTheme.surfaceVariant,
         borderRadius: AppTheme.mediumRadius,
-        border: Border.all(color: AppTheme.dividerColor.withValues(alpha: 0.6)),
+        border:
+            Border.all(color: AppTheme.dividerColor.withValues(alpha: 0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,21 +326,17 @@ class _CapabilityTile extends StatelessWidget {
           Text(
             item.title,
             style: AppTheme.labelLarge.copyWith(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.1,
-            ),
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.1),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 3),
           Text(
             item.subtitle,
-            style: AppTheme.bodySmall.copyWith(
-              color: AppTheme.textSecondary,
-              height: 1.25,
-              fontSize: 11.5,
-            ),
+            style: AppTheme.bodySmall
+                .copyWith(color: AppTheme.textSecondary, fontSize: 11.5),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -372,30 +346,39 @@ class _CapabilityTile extends StatelessWidget {
   }
 }
 
+// ── Trust Strip ───────────────────────────────────────────────────────────────
+
 class _TrustStrip extends StatelessWidget {
   const _TrustStrip();
 
   @override
   Widget build(BuildContext context) {
-    Widget chip(IconData icon, String label) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: AppTheme.textTertiary),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: AppTheme.textSecondary,
-              letterSpacing: 0.2,
-              fontWeight: FontWeight.w600,
-              height: 1.0,
+    Widget chip(IconData icon, String label) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: AppTheme.textTertiary),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w600,
+                height: 1.0,
+              ),
             ),
+          ],
+        );
+
+    const dot = SizedBox(
+        width: 3,
+        height: 3,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppTheme.textTertiary,
+            shape: BoxShape.circle,
           ),
-        ],
-      );
-    }
+        ));
 
     return Wrap(
       spacing: 14,
@@ -403,41 +386,29 @@ class _TrustStrip extends StatelessWidget {
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        chip(Icons.shield_outlined, 'Encrypted'),
-        Container(
-          width: 3,
-          height: 3,
-          decoration: const BoxDecoration(
-            color: AppTheme.textTertiary,
-            shape: BoxShape.circle,
-          ),
-        ),
-        chip(Icons.cloud_done_outlined, 'Secure cloud sync'),
-        Container(
-          width: 3,
-          height: 3,
-          decoration: const BoxDecoration(
-            color: AppTheme.textTertiary,
-            shape: BoxShape.circle,
-          ),
-        ),
-        chip(Icons.verified_user_outlined, 'Clinician-only'),
+        chip(Icons.lock_outline_rounded, 'Encrypted'),
+        dot,
+        chip(Icons.cloud_done_outlined, 'Secure sync'),
+        dot,
+        chip(Icons.private_connectivity_rounded, 'Private'),
       ],
     );
   }
 }
 
+// ── Sign-In Block ─────────────────────────────────────────────────────────────
+
 class _SignInBlock extends StatelessWidget {
-  final bool isFirebaseConfigured;
-  final bool isLoadingGoogle;
-  final bool isLoadingApple;
+  final bool configured;
+  final bool loadingGoogle;
+  final bool loadingApple;
   final VoidCallback onGoogle;
   final VoidCallback onApple;
 
   const _SignInBlock({
-    required this.isFirebaseConfigured,
-    required this.isLoadingGoogle,
-    required this.isLoadingApple,
+    required this.configured,
+    required this.loadingGoogle,
+    required this.loadingApple,
     required this.onGoogle,
     required this.onApple,
   });
@@ -453,17 +424,14 @@ class _SignInBlock extends StatelessWidget {
             'assets/images/google_logo.png',
             height: 20,
             width: 20,
-            errorBuilder: (context, error, stackTrace) {
-              return const Icon(
+            errorBuilder: (_, __, ___) => const Icon(
                 Icons.g_mobiledata,
                 size: 22,
-                color: Colors.black54,
-              );
-            },
+                color: Colors.black54),
           ),
           backgroundColor: Colors.white,
           foregroundColor: AppTheme.textPrimary,
-          isLoading: isLoadingGoogle,
+          isLoading: loadingGoogle,
           onPressed: onGoogle,
         ),
         if (Platform.isIOS) ...[
@@ -473,7 +441,7 @@ class _SignInBlock extends StatelessWidget {
             icon: Icons.apple,
             backgroundColor: Colors.black,
             foregroundColor: Colors.white,
-            isLoading: isLoadingApple,
+            isLoading: loadingApple,
             onPressed: onApple,
           ),
         ],
@@ -482,25 +450,25 @@ class _SignInBlock extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              isFirebaseConfigured
-                  ? Icons.lock_outline
+              configured
+                  ? Icons.lock_outline_rounded
                   : Icons.warning_amber_rounded,
               size: 13,
-              color: isFirebaseConfigured
+              color: configured
                   ? AppTheme.successColor
                   : AppTheme.warningColor,
             ),
             const SizedBox(width: 5),
             Flexible(
               child: Text(
-                isFirebaseConfigured
-                    ? 'HIPAA-aware handling · Secure sync active'
-                    : 'Firebase setup required before sign-in is available',
+                configured
+                    ? 'Your data is encrypted and private'
+                    : 'Firebase setup required before sign-in',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: isFirebaseConfigured
+                  color: configured
                       ? AppTheme.textSecondary
                       : AppTheme.warningColor,
                   height: 1.2,
@@ -510,14 +478,13 @@ class _SignInBlock extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        Text(
-          'By continuing you agree to secure handling of clinical content.',
+        const Text(
+          'By continuing you agree to secure handling of your health data.',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 10.5,
             color: AppTheme.textTertiary,
             fontWeight: FontWeight.w500,
-            letterSpacing: 0.1,
             height: 1.35,
           ),
         ),

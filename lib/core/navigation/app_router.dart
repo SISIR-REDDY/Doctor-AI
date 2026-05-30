@@ -1,125 +1,91 @@
 import 'package:flutter/material.dart';
 
-import '../../models/health_models.dart';
-import '../../screens/clinical_notes_screen.dart';
-import '../../screens/document_scanner_screen.dart';
-import '../../screens/doctor_patient_detail_screen.dart';
-import '../../screens/emergency_triage_screen.dart';
-import '../../screens/voice_assistant_screen.dart';
+import '../../features/ai_chat/ai_health_assistant_screen.dart';
+import '../../features/claims/claim_detail_screen.dart';
+import '../../features/claims/claims_screen.dart';
+import '../../features/claims/new_claim_screen.dart';
+import '../../features/insurance/add_policy_screen.dart';
+import '../../features/insurance/insurance_screen.dart';
+import '../../features/medications/medications_screen.dart';
+import '../../features/profile/health_profile_screen.dart';
+import '../../features/records/record_detail_screen.dart';
+import '../../features/records/records_vault_screen.dart';
+import '../../features/symptom_journal/symptom_journal_screen.dart';
+import '../../models/patient_models.dart';
 
 class AppRouter {
-  static const String voiceAssistant = '/voiceAssistant';
-  static const String clinicalNotes = '/clinicalNotes';
-  static const String documentScanner = '/documentScanner';
-  static const String emergencyTriage = '/emergencyTriage';
-  static const String patientDetail = '/patient';
+  static const String healthProfile = '/healthProfile';
+  static const String aiChat = '/aiChat';
+  static const String symptomJournal = '/symptomJournal';
+  static const String medications = '/medications';
+  static const String recordsVault = '/recordsVault';
+  static const String recordDetail = '/recordDetail';
+  static const String insurance = '/insurance';
+  static const String addPolicy = '/addPolicy';
+  static const String claims = '/claims';
+  static const String newClaim = '/newClaim';
+  static const String claimDetail = '/claimDetail';
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
-      case voiceAssistant:
-        final args = settings.arguments;
-        String patientId = 'new';
-        String? initialPrompt;
+      case healthProfile:
+        return _slide(const HealthProfileScreen(), settings);
 
-        if (args is Map) {
-          final dynamic id = args['patientId'];
-          final dynamic prompt = args['initialPrompt'];
-          if (id is String && id.trim().isNotEmpty) {
-            patientId = id;
-          }
-          if (prompt is String && prompt.trim().isNotEmpty) {
-            initialPrompt = prompt;
-          }
+      case aiChat:
+        return _slide(const AiHealthAssistantScreen(), settings);
+
+      case symptomJournal:
+        return _slide(const SymptomJournalScreen(), settings);
+
+      case medications:
+        return _slide(const MedicationsScreen(), settings);
+
+      case recordsVault:
+        return _slide(const RecordsVaultScreen(), settings);
+
+      case recordDetail:
+        final record = settings.arguments as MedicalRecord?;
+        if (record != null) {
+          return _slide(RecordDetailScreen(record: record), settings);
         }
+        return null;
 
-        return MaterialPageRoute<void>(
-          builder: (_) => InteractiveVoiceAssistantScreen(
-            patientId: patientId,
-            initialPrompt: initialPrompt,
-          ),
-          settings: settings,
-        );
+      case insurance:
+        return _slide(const InsuranceScreen(), settings);
 
-      case clinicalNotes:
-        final args = settings.arguments;
-        final patientId = args is String && args.trim().isNotEmpty
-            ? args
-            : 'new';
-        return MaterialPageRoute<void>(
-          builder: (_) => ClinicalNotesScreen(patientId: patientId),
-          settings: settings,
-        );
+      case addPolicy:
+        final policy = settings.arguments as InsurancePolicy?;
+        return _slide(AddPolicyScreen(existingPolicy: policy), settings);
 
-      case documentScanner:
-        final args = settings.arguments;
-        final patientId = args is String && args.trim().isNotEmpty
-            ? args
-            : 'new';
-        return MaterialPageRoute<void>(
-          builder: (_) => DocumentScannerScreen(patientId: patientId),
-          settings: settings,
-        );
+      case claims:
+        return _slide(const ClaimsScreen(), settings);
 
-      case emergencyTriage:
-        final args = settings.arguments;
-        String? patientId;
-        String? triageId;
-        if (args is Map) {
-          patientId = args['patientId']?.toString();
-          triageId = args['triageId']?.toString();
-        } else if (args is String) {
-          patientId = args;
-        }
-        return MaterialPageRoute<void>(
-          builder: (_) => EmergencyTriageScreen(
-            patientId: patientId,
-            initialTriageId: triageId,
-          ),
-          settings: settings,
-        );
+      case newClaim:
+        return _slide(const NewClaimScreen(), settings);
 
-      case patientDetail:
-        final args = settings.arguments;
-        if (args is ProviderPatientRecord) {
-          return MaterialPageRoute<void>(
-            builder: (_) => DoctorPatientDetailScreen(patient: args),
-            settings: settings,
-          );
-        }
-        if (args is Map && args['patient'] is ProviderPatientRecord) {
-          return MaterialPageRoute<void>(
-            builder: (_) => DoctorPatientDetailScreen(
-              patient: args['patient'] as ProviderPatientRecord,
-            ),
-            settings: settings,
-          );
+      case claimDetail:
+        final claim = settings.arguments as InsuranceClaim?;
+        if (claim != null) {
+          return _slide(ClaimDetailScreen(claim: claim), settings);
         }
         return null;
     }
     return null;
   }
 
-  /// Parses docpilot:// deep links from share handoffs.
-  static Route<dynamic>? routeFromDeepLink(Uri uri) {
-    if (uri.scheme != 'docpilot') return null;
-    final host = uri.host;
-    final segments = uri.pathSegments;
-
-    if (host == 'triage' && segments.isNotEmpty) {
-      return onGenerateRoute(RouteSettings(
-        name: emergencyTriage,
-        arguments: {'triageId': segments.first},
-      ));
-    }
-    if (host == 'patient' && segments.isNotEmpty) {
-      return onGenerateRoute(RouteSettings(
-        name: emergencyTriage,
-        arguments: {
-          'patientId': segments.first,
-          'triageId': uri.queryParameters['triage'],
-        },
-      ));
-    }
-    return null;
+  static PageRouteBuilder<void> _slide(Widget page, RouteSettings settings) {
+    return PageRouteBuilder<void>(
+      settings: settings,
+      pageBuilder: (_, __, ___) => page,
+      transitionsBuilder: (_, animation, __, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: child,
+        );
+      },
+    );
   }
 }

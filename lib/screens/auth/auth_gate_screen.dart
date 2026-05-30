@@ -1,15 +1,16 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
 import '../../core/config/firebase_config.dart';
-import '../../services/firebase/auth_service.dart';
+import '../../features/auth/patient_onboarding_screen.dart';
+import '../../features/home/home_dashboard_screen.dart';
 import '../../services/firebase/api_credentials_service.dart';
+import '../../services/firebase/auth_service.dart';
 import '../../services/firebase/firebase_bootstrap_service.dart';
 import '../../services/firebase/firestore_service.dart';
-import '../home_dashboard_screen.dart';
-import '../onboarding/onboarding_screen.dart';
 import 'sign_in_screen.dart';
 
 class AuthGateScreen extends StatefulWidget {
@@ -22,90 +23,66 @@ class AuthGateScreen extends StatefulWidget {
 class _AuthGateScreenState extends State<AuthGateScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
-  String? _preloadedKeysForUid;
 
-  // Track auth state to avoid unnecessary rebuilds
   bool _isLoading = true;
   bool _isSignedIn = false;
   bool _needsOnboarding = false;
-  StreamSubscription<User?>? _authSubscription;
+  String? _preloadedKeysForUid;
+
+  StreamSubscription<User?>? _authSub;
 
   @override
   void initState() {
     super.initState();
     if (FirebaseConfig.isEnabled && FirebaseBootstrapService.isInitialized) {
-      _authSubscription = _authService.authStateChanges().listen(_onAuthChanged);
-      // Add timeout to prevent infinite loading
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && _isLoading) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+      _authSub = _authService.authStateChanges().listen(_onAuthChanged);
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted && _isLoading) setState(() => _isLoading = false);
       });
     } else {
-      // Firebase not available, skip loading state
       _isLoading = false;
     }
   }
 
   @override
   void dispose() {
-    _authSubscription?.cancel();
+    _authSub?.cancel();
     super.dispose();
   }
 
   void _onAuthChanged(User? user) {
-    final nowSignedIn = user != null;
-
+    final signedIn = user != null;
     if (user != null) {
-      _handleSignedInUser(user);
+      _handleSignedIn(user);
     } else {
-      _handleSignedOutUser();
+      _handleSignedOut();
     }
-
-    // Only rebuild if the signed-in status actually changed
-    if (_isLoading || _isSignedIn != nowSignedIn) {
+    if (_isLoading || _isSignedIn != signedIn) {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _isSignedIn = nowSignedIn;
+          _isSignedIn = signedIn;
         });
       }
     }
   }
 
-  void _handleSignedInUser(User user) {
+  void _handleSignedIn(User user) {
     if (_preloadedKeysForUid == user.uid) return;
-
     _preloadedKeysForUid = user.uid;
 
-    if (kDebugMode) {
-      debugPrint('[AuthGate] User signed in (${user.email}), preloading API keys...');
-    }
-
-    ApiCredentialsService.instance.preload().then((_) {
-      if (kDebugMode) {
-        debugPrint('[AuthGate] ✅ API keys preloaded successfully');
-      }
-    }).catchError((error) {
-      if (kDebugMode) {
-        debugPrint('[AuthGate] Note: API keys not ready yet. Will retry on first use.');
-      }
+    ApiCredentialsService.instance.preload().catchError((e) {
+      if (kDebugMode) debugPrint('[AuthGate] API keys not ready: $e');
     });
 
-    // Check whether this user has completed onboarding
-    _firestoreService.loadDoctorProfile(user.uid).then((profile) {
-      if (mounted) {
-        setState(() => _needsOnboarding = profile == null);
-      }
+    _firestoreService.loadPatientProfile(user.uid).then((profile) {
+      if (mounted) setState(() => _needsOnboarding = profile == null);
     }).catchError((_) {
-      // On error assume profile exists to avoid blocking the user
       if (mounted) setState(() => _needsOnboarding = false);
     });
   }
 
-  void _handleSignedOutUser() {
+  void _handleSignedOut() {
     _preloadedKeysForUid = null;
     _needsOnboarding = false;
     ApiCredentialsService.instance.clearCache();
@@ -113,18 +90,49 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!FirebaseConfig.isEnabled) {
-      return const SignInScreen();
-    }
+    if (!FirebaseConfig.isEnabled) return const SignInScreen();
 
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0078D4), Color(0xFF00BCB4)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.health_and_safety_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
     if (_isSignedIn) {
-      if (_needsOnboarding) return const OnboardingScreen();
+      if (_needsOnboarding) {
+        return PatientOnboardingScreen(
+          onComplete: () {
+            if (mounted) setState(() => _needsOnboarding = false);
+          },
+        );
+      }
       return const HomeDashboardScreen();
     }
 

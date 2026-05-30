@@ -84,7 +84,7 @@ class ApiCredentialsService {
   Future<bool> hasKeys({bool forceRefresh = false}) async {
     try {
       final creds = await _load(forceRefresh: forceRefresh);
-      return creds.geminiApiKey.isNotEmpty && creds.deepgramApiKey.isNotEmpty;
+      return creds.geminiApiKey.isNotEmpty;
     } catch (_) {
       return false;
     }
@@ -172,11 +172,12 @@ class ApiCredentialsService {
         if (v.isNotEmpty) { deepgram = v; break; }
       }
 
-      if (gemini == null || deepgram == null) return null;
+      // Deepgram is no longer used by the patient app — only Gemini is required.
+      if (gemini == null) return null;
 
       return ApiCredentials(
         geminiApiKey: gemini,
-        deepgramApiKey: deepgram,
+        deepgramApiKey: deepgram ?? '',
         source: 'firestore:${FirebaseConfig.apiKeysCollection}/${FirebaseConfig.apiKeysDocument}',
       );
     } catch (e) {
@@ -200,11 +201,12 @@ class ApiCredentialsService {
       if (v.isNotEmpty) { deepgram = v; break; }
     }
 
-    if (gemini == null || deepgram == null) return null;
+    // Deepgram is no longer used by the patient app — only Gemini is required.
+    if (gemini == null) return null;
 
     return ApiCredentials(
       geminiApiKey: gemini,
-      deepgramApiKey: deepgram,
+      deepgramApiKey: deepgram ?? '',
       source: 'dotenv',
     );
   }

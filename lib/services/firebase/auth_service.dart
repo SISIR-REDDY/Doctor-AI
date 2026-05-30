@@ -15,13 +15,21 @@ import 'firestore_service.dart';
 class AuthService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   static Future<void>? _googleSignInInitialization;
-    static const String _androidServerClientId =
+
+  // Server (web) client ID used by Android for server-side auth flows.
+  static const String _androidServerClientId =
       '873559957687-41ubt16p8uggr8qoqal06umdfnhnpbt4.apps.googleusercontent.com';
+
+  // iOS native client ID — read from firebase_options to avoid needing
+  // GoogleService-Info.plist in the Xcode project bundle.
+  static const String _iosClientId =
+      '873559957687-emljucvb770bsvosgcbq81bajcbmfn7l.apps.googleusercontent.com';
 
   Future<void> _ensureGoogleSignInInitialized() {
     return _googleSignInInitialization ??= () async {
       await _googleSignIn.initialize(
         serverClientId: Platform.isAndroid ? _androidServerClientId : null,
+        clientId: Platform.isIOS || Platform.isMacOS ? _iosClientId : null,
       );
     }();
   }

@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import 'core/config/app_branding.dart';
 import 'core/navigation/app_router.dart';
 import 'core/providers/enhanced_connection_provider.dart';
-import 'core/providers/patient_provider.dart';
+import 'core/providers/health_data_provider.dart';
 import 'screens/auth/auth_gate_screen.dart';
 import 'services/firebase/firebase_bootstrap_service.dart';
 import 'theme/app_theme.dart';
@@ -20,7 +20,7 @@ Future<void> main() async {
       try {
         await dotenv.load(fileName: '.env');
       } catch (e) {
-        debugPrint('Warning: .env file not found or failed to load: $e');
+        debugPrint('Warning: .env not found: $e');
       }
 
       await FirebaseBootstrapService.initialize();
@@ -28,7 +28,7 @@ Future<void> main() async {
       runApp(const ClinixAIApp());
     },
     (error, stackTrace) {
-      debugPrint('Unhandled app error: $error');
+      debugPrint('Unhandled error: $error');
       debugPrintStack(stackTrace: stackTrace);
     },
   );
@@ -44,8 +44,8 @@ class ClinixAIApp extends StatelessWidget {
         ChangeNotifierProvider<EnhancedConnectionProvider>(
           create: (_) => EnhancedConnectionProvider()..initialize(),
         ),
-        ChangeNotifierProvider<PatientProvider>(
-          create: (_) => PatientProvider(),
+        ChangeNotifierProvider<HealthDataProvider>(
+          create: (_) => HealthDataProvider(),
         ),
       ],
       child: MaterialApp(
