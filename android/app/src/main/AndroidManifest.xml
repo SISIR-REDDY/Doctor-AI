@@ -1,25 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Network permissions -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- Audio recording for voice transcription -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
-    <!-- Camera and storage for image picker -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-
-    <!-- Notifications for Firebase Cloud Messaging (Android 13+) -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Foreground service for audio recording -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-
     <application
-        android:label="Clinix AI"
+        android:label="docpilot"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -58,7 +39,7 @@
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
-            android:icon="@mipmap/ic_launcher">
+            <data android:mimeType="text/plain"/>
         </intent>
     </queries>
 </manifest>
