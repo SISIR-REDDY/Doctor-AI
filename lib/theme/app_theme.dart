@@ -22,12 +22,12 @@ class AppTheme {
   static const Color oncologyColor = Color(0xFFAF52DE);
   static const Color surgeryColor = Color(0xFF34C759);
 
-  static const Color backgroundColor = Color(0xFFF2F2F7);
+  static const Color backgroundColor = Color(0xFFF0F4FB);
   static const Color surfaceColor = Color(0xFFFFFFFF);
-  static const Color surfaceMuted = Color(0xFFE8F0FE);
-  static const Color surfaceVariant = Color(0xFFE5EAF4);
-  static const Color dividerColor = Color(0xFFDDE4F0);
-  static const Color borderColor = Color(0xFFE8EEF8);
+  static const Color surfaceMuted = Color(0xFFE3EEFF);
+  static const Color surfaceVariant = Color(0xFFE2E9F6);
+  static const Color dividerColor = Color(0xFFE8EDF8);
+  static const Color borderColor = Color(0xFFEBEFF8);
 
   static const Color textPrimary = Color(0xFF1C1C1E);
   static const Color textSecondary = Color(0xFF636366);
@@ -35,19 +35,19 @@ class AppTheme {
   static const Color textOnPrimary = Color(0xFFFFFFFF);
 
   static const LinearGradient screenGradient = LinearGradient(
-    colors: [Color(0xFFE8F2FF), Color(0xFFF5F8FF), Color(0xFFFAFCFF)],
+    colors: [Color(0xFFDCEBFF), Color(0xFFEBF2FF), Color(0xFFF0F4FB)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
 
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF007AFF), Color(0xFF5AC8FA)],
+    colors: [Color(0xFF0055E5), Color(0xFF00B0F0)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient heroGradient = LinearGradient(
-    colors: [Color(0xFF007AFF), Color(0xFF5856D6), Color(0xFF5AC8FA)],
+    colors: [Color(0xFF0055E5), Color(0xFF5048D4), Color(0xFF00B0F0)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -59,7 +59,7 @@ class AppTheme {
   );
 
   static const LinearGradient fabGradient = LinearGradient(
-    colors: [Color(0xFF007AFF), Color(0xFF00C7BE)],
+    colors: [Color(0xFF0055E5), Color(0xFF00C8C2)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -171,12 +171,18 @@ class AppTheme {
     letterSpacing: 1.1,
   );
 
-  /// Soft card shadow — no colored glow.
+  /// Two-layer card shadow for visible depth.
   static const List<BoxShadow> cardShadow = [
     BoxShadow(
-      color: Color(0x0F000000),
-      blurRadius: 12,
-      offset: Offset(0, 4),
+      color: Color(0x08000000),
+      blurRadius: 1,
+      offset: Offset(0, 1),
+      spreadRadius: 1,
+    ),
+    BoxShadow(
+      color: Color(0x1A000000),
+      blurRadius: 24,
+      offset: Offset(0, 8),
     ),
   ];
 
@@ -293,12 +299,10 @@ class GlossyPanel extends StatelessWidget {
     final content = Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: (tint ?? AppTheme.surfaceColor).withValues(
-          alpha: enableBlur ? 0.72 : 0.98,
-        ),
+        color: tint ?? AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.65),
+          color: const Color(0xFFE8EDF8),
           width: 0.8,
         ),
         boxShadow: AppTheme.cardShadow,
@@ -311,7 +315,7 @@ class GlossyPanel extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: content,
       ),
     );
@@ -384,20 +388,26 @@ class GlossyBottomNav extends StatelessWidget {
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(
-          top: BorderSide(color: Color(0xFFE5E5EA), width: 0.5),
+          top: BorderSide(color: Color(0xFFE8EDF8), width: 0.8),
         ),
         boxShadow: [
           BoxShadow(
-            color: Color(0x0C000000),
-            blurRadius: 8,
-            offset: Offset(0, -2),
+            color: Color(0x0A000000),
+            blurRadius: 2,
+            offset: Offset(0, -1),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 20,
+            offset: Offset(0, -4),
           ),
         ],
       ),
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 52,
+          height: 60,
           child: Row(
             children: List.generate(destinations.length, (i) {
               final d = destinations[i];
@@ -436,22 +446,32 @@ class _SimpleNavSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        selected ? AppTheme.primaryColor : const Color(0xFF8E8E93);
+    final color = selected ? AppTheme.primaryColor : const Color(0xFF9EA3B0);
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          if (selected)
+            Container(
+              width: 32,
+              height: 3,
+              margin: const EdgeInsets.only(bottom: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            )
+          else
+            const SizedBox(height: 9),
           Icon(selected ? activeIcon : icon, size: 22, color: color),
           const SizedBox(height: 3),
           Text(
             label,
             style: TextStyle(
               fontSize: 10,
-              fontWeight:
-                  selected ? FontWeight.w600 : FontWeight.w400,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
               color: color,
             ),
           ),
@@ -525,12 +545,11 @@ class GlossyCard extends StatelessWidget {
               borderRadius: borderRadius,
               border: Border.all(
                 color: gradient != null
-                    ? Colors.white.withValues(alpha: 0.4)
-                    : AppTheme.borderColor,
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : const Color(0xFFE8EDF8),
+                width: 0.8,
               ),
-              boxShadow: AppTheme.glossyShadow(
-                tint: gradient?.colors.first ?? AppTheme.primaryColor,
-              ),
+              boxShadow: AppTheme.cardShadow,
             ),
             child: ClipRRect(
               borderRadius: borderRadius,
