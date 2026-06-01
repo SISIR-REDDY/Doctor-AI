@@ -15,6 +15,7 @@ import '../../services/voice_recorder_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/audio_visualizer.dart';
 import '../../widgets/clinical_md.dart';
+import 'chat_history_sheet.dart';
 
 class AiHealthAssistantScreen extends StatefulWidget {
   const AiHealthAssistantScreen({super.key});
@@ -33,7 +34,8 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
   final _voice = VoiceRecorderService();
   final _uuid = const Uuid();
 
-  static const String _mainThreadId = 'health_main';
+  ChatSession? _currentSession;
+  bool _initializingSession = true;
 
   final List<AiChatMessage> _messages = [];
   StreamSubscription<List<AiChatMessage>>? _chatSub;
@@ -59,17 +61,47 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
     _levelSub = _voice.levelStream.listen((l) {
       if (mounted) setState(() => _voiceLevel = l);
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startChat());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
   }
 
-  Future<void> _startChat() async {
+  // ── Session lifecycle ────────────────────────────────────────────────────
+
+  Future<void> _initSession() async {
     final provider = context.read<HealthDataProvider>();
     await provider.loadProfile();
     if (!mounted) return;
     final uid = provider.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      if (mounted) setState(() => _initializingSession = false);
+      return;
+    }
+
+    final latest = await _db.loadLatestChatSession(uid);
+    if (!mounted) return;
+
+    if (latest != null) {
+      _currentSession = latest;
+    } else {
+      final session = ChatSession(id: _uuid.v4(), userId: uid);
+      try {
+        await _db.saveChatSession(uid, session);
+      } catch (e) {
+        debugPrint('[Chat] initial saveChatSession failed: $e');
+      }
+      if (!mounted) return;
+      _currentSession = session;
+    }
+
+    setState(() => _initializingSession = false);
+    _subscribeToSession();
+  }
+
+  void _subscribeToSession() {
+    final uid = context.read<HealthDataProvider>().uid;
+    if (uid == null || _currentSession == null) return;
     _chatSub?.cancel();
-    _chatSub = _db.watchChatMessages(uid, _mainThreadId).listen(
+    _chatSub =
+        _db.watchChatMessages(uid, _currentSession!.id).listen(
       (msgs) async {
         if (!mounted) return;
         if (msgs.isEmpty && !_welcomeSeeded) {
@@ -82,12 +114,92 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
           ..addAll(msgs));
         _scrollToBottom();
       },
-      onError: (_) {},
+      onError: (e) => debugPrint('[Chat] watchChatMessages error: $e'),
     );
   }
 
-  Future<void> _seedWelcome(String uid) async {
+  Future<void> _newChat() async {
+    final uid = context.read<HealthDataProvider>().uid;
+    if (uid == null) return;
+    final session = ChatSession(id: _uuid.v4(), userId: uid);
+    try {
+      await _db.saveChatSession(uid, session);
+    } catch (e) {
+      debugPrint('[Chat] newChat saveChatSession failed: $e');
+    }
     if (!mounted) return;
+    _chatSub?.cancel();
+    setState(() {
+      _currentSession = session;
+      _messages.clear();
+      _welcomeSeeded = false;
+    });
+    _subscribeToSession();
+  }
+
+  void _switchSession(ChatSession session) {
+    if (_currentSession?.id == session.id) return;
+    _chatSub?.cancel();
+    setState(() {
+      _currentSession = session;
+      _messages.clear();
+      _welcomeSeeded = false;
+    });
+    _subscribeToSession();
+  }
+
+  void _openHistory() {
+    final uid = context.read<HealthDataProvider>().uid;
+    if (uid == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChatHistorySheet(
+        uid: uid,
+        db: _db,
+        currentSession: _currentSession,
+        onNewChat: () {
+          Navigator.pop(context);
+          _newChat();
+        },
+        onSelect: (session) {
+          Navigator.pop(context);
+          _switchSession(session);
+        },
+      ),
+    );
+  }
+
+  // ── Session metadata updates ─────────────────────────────────────────────
+
+  Future<void> _updateSessionAfterUserMessage(
+      String uid, String text) async {
+    if (_currentSession == null) return;
+    final isFirstMsg = _currentSession!.title == 'New Chat';
+    final preview =
+        text.length > 80 ? '${text.substring(0, 77)}…' : text;
+    final newTitle = isFirstMsg
+        ? (text.length > 45 ? '${text.substring(0, 42)}…' : text)
+        : null;
+    final updated = _currentSession!.copyWith(
+      title: newTitle,
+      lastMessage: preview,
+      updatedAt: DateTime.now(),
+      messageCount: _currentSession!.messageCount + 1,
+    );
+    setState(() => _currentSession = updated);
+    try {
+      await _db.saveChatSession(uid, updated);
+    } catch (e) {
+      debugPrint('[Chat] saveChatSession failed: $e');
+    }
+  }
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+
+  Future<void> _seedWelcome(String uid) async {
+    if (!mounted || _currentSession == null) return;
     final profile = context.read<HealthDataProvider>().profile;
     final name = profile?.firstName.isNotEmpty == true
         ? ', ${profile!.firstName}'
@@ -95,7 +207,7 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
     final welcome = AiChatMessage(
       id: _uuid.v4(),
       userId: uid,
-      threadId: _mainThreadId,
+      threadId: _currentSession!.id,
       role: 'assistant',
       content:
           'Hello$name! I\'m your Clinix AI health assistant.\n\nType your question or tap the microphone to speak — your voice is transcribed with Deepgram, then Gemini provides health guidance.\n\n_Remember: I\'m an AI assistant, not a doctor. Always consult a healthcare professional for medical advice._',
@@ -131,12 +243,10 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
 
   Future<void> _toggleVoice() async {
     if (_isTranscribingVoice || _typing) return;
-
     if (_isRecordingVoice) {
       await _finishVoiceAndSend();
       return;
     }
-
     try {
       await _voice.start();
       if (mounted) setState(() => _isRecordingVoice = true);
@@ -155,12 +265,9 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
       _isRecordingVoice = false;
       _isTranscribingVoice = true;
     });
-
     try {
       final path = await _voice.stop();
-      if (path == null) {
-        throw Exception('Recording failed. Try again.');
-      }
+      if (path == null) throw Exception('Recording failed. Try again.');
       final transcript = await _deepgram.transcribeFile(path);
       if (!mounted) return;
       setState(() => _isTranscribingVoice = false);
@@ -175,23 +282,25 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
 
   Future<void> _send([String? quick]) async {
     final text = (quick ?? _msgCtrl.text).trim();
-    if (text.isEmpty || _typing || _isTranscribingVoice) return;
+    if (text.isEmpty ||
+        _typing ||
+        _isTranscribingVoice ||
+        _currentSession == null) {
+      return;
+    }
 
-    final profile = context.read<HealthDataProvider>().profile;
-    final uid = context.read<HealthDataProvider>().uid;
-
+    final provider = context.read<HealthDataProvider>();
+    final uid = provider.uid;
     if (uid == null) {
       AppErrorHandler.showSnackBar(
-        context,
-        Exception('Sign in required to use the health assistant.'),
-      );
+          context, Exception('Sign in required.'));
       return;
     }
 
     final userMsg = AiChatMessage(
       id: _uuid.v4(),
       userId: uid,
-      threadId: _mainThreadId,
+      threadId: _currentSession!.id,
       role: 'user',
       content: text,
     );
@@ -205,6 +314,8 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
     });
     _scrollToBottom();
 
+    await _updateSessionAfterUserMessage(uid, text);
+
     try {
       await _db.saveChatMessage(uid, userMsg);
     } catch (e) {
@@ -212,13 +323,13 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
     }
 
     try {
-      final prompt = _buildPrompt(profile, text);
+      final prompt = _buildPrompt(provider.profile, text);
       final response = await _chatbot.getGeminiResponse(prompt);
 
       final botMsg = AiChatMessage(
         id: _uuid.v4(),
         userId: uid,
-        threadId: _mainThreadId,
+        threadId: _currentSession!.id,
         role: 'assistant',
         content: ClinicalMd.normalize(response),
       );
@@ -232,12 +343,7 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
         try {
           await _db.saveChatMessage(uid, botMsg);
         } catch (e) {
-          if (mounted) {
-            AppErrorHandler.showSnackBar(
-              context,
-              e,
-            );
-          }
+          if (mounted) AppErrorHandler.showSnackBar(context, e);
         }
       }
     } catch (e) {
@@ -300,9 +406,15 @@ Formatting rules (required):
 - Always mention seeing a doctor for serious, persistent, or worsening symptoms''';
   }
 
+  // ── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final busy = _typing || _isTranscribingVoice;
+    final sessionTitle = _currentSession?.title == 'New Chat' ||
+            _currentSession == null
+        ? null
+        : _currentSession!.title;
 
     return Scaffold(
       backgroundColor: const Color(0xFFECEFF4),
@@ -321,7 +433,8 @@ Formatting rules (required):
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                icon:
+                    const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                 onPressed: () => Navigator.maybePop(context),
               ),
               Container(
@@ -342,52 +455,104 @@ Formatting rules (required):
                     color: Colors.white, size: 22),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('AI Health Assistant',
+                    const Text('AI Health Assistant',
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w700)),
-                    Text('Voice · Deepgram  ·  Gemini',
-                        style: TextStyle(
-                            fontSize: 11, color: AppTheme.textSecondary)),
+                    Text(
+                      sessionTitle ?? 'Voice · Deepgram  ·  Gemini',
+                      style: const TextStyle(
+                          fontSize: 11, color: AppTheme.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
+              ),
+              // New chat button
+              IconButton(
+                icon: const Icon(Icons.add_comment_outlined, size: 22),
+                onPressed:
+                    _initializingSession ? null : _newChat,
+                tooltip: 'New chat',
+                color: AppTheme.primaryColor,
+              ),
+              // History button
+              IconButton(
+                icon: const Icon(Icons.history_rounded, size: 22),
+                onPressed:
+                    _initializingSession ? null : _openHistory,
+                tooltip: 'Chat history',
+                color: AppTheme.textSecondary,
               ),
             ],
           ),
         ),
       ),
-      body: Column(
-        children: [
-          SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight),
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollCtrl,
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              itemCount: _messages.length + (busy ? 1 : 0),
-              itemBuilder: (ctx, i) {
-                if (busy && i == _messages.length) {
-                  return _isTranscribingVoice
-                      ? const _TranscribingVoiceBanner()
-                      : const _TypingIndicator();
-                }
-                return _MessageBubble(msg: _messages[i]);
-              },
+      body: _initializingSession
+          ? _buildLoading()
+          : Column(
+              children: [
+                SizedBox(
+                    height:
+                        MediaQuery.paddingOf(context).top + kToolbarHeight),
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollCtrl,
+                    padding:
+                        const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                    itemCount: _messages.length + (busy ? 1 : 0),
+                    itemBuilder: (ctx, i) {
+                      if (busy && i == _messages.length) {
+                        return _isTranscribingVoice
+                            ? const _TranscribingVoiceBanner()
+                            : const _TypingIndicator();
+                      }
+                      return _MessageBubble(msg: _messages[i]);
+                    },
+                  ),
+                ),
+                if (_messages.length <= 2 && !_isRecordingVoice)
+                  _QuickPrompts(
+                      prompts: _quickPrompts, onTap: _send),
+                _ChatInputBar(
+                  ctrl: _msgCtrl,
+                  busy: busy,
+                  isRecording: _isRecordingVoice,
+                  voiceLevel: _voiceLevel,
+                  onSend: () => _send(),
+                  onVoiceToggle: _toggleVoice,
+                  onVoiceCancel: _cancelVoice,
+                ),
+              ],
             ),
+    );
+  }
+
+  Widget _buildLoading() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.smart_toy_rounded,
+                color: Colors.white, size: 26),
           ),
-          if (_messages.length <= 2 && !_isRecordingVoice)
-            _QuickPrompts(prompts: _quickPrompts, onTap: _send),
-          _ChatInputBar(
-            ctrl: _msgCtrl,
-            busy: busy,
-            isRecording: _isRecordingVoice,
-            voiceLevel: _voiceLevel,
-            onSend: () => _send(),
-            onVoiceToggle: _toggleVoice,
-            onVoiceCancel: _cancelVoice,
+          const SizedBox(height: 20),
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
           ),
         ],
       ),
@@ -406,7 +571,8 @@ class _TranscribingVoiceBanner extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: GlossyPanel(
         enableBlur: true,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         radius: 16,
         child: Row(
           children: [
@@ -417,8 +583,8 @@ class _TranscribingVoiceBanner extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Text('Transcribing your voice…',
-                style: AppTheme.bodyMedium.copyWith(
-                    color: AppTheme.textSecondary)),
+                style: AppTheme.bodyMedium
+                    .copyWith(color: AppTheme.textSecondary)),
           ],
         ),
       ),
@@ -448,7 +614,7 @@ class _MessageBubble extends StatelessWidget {
               width: 28,
               height: 28,
               margin: const EdgeInsets.only(right: 6),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: AppTheme.primaryGradient,
                 shape: BoxShape.circle,
               ),
@@ -460,14 +626,14 @@ class _MessageBubble extends StatelessWidget {
             child: GestureDetector(
               onLongPress: () {
                 Clipboard.setData(ClipboardData(text: msg.content));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Copied'),
-                  duration: Duration(seconds: 1),
-                ));
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Copied'),
+                        duration: Duration(seconds: 1)));
               },
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: isUser
                       ? AppTheme.primaryColor
@@ -475,12 +641,15 @@ class _MessageBubble extends StatelessWidget {
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(18),
                     topRight: const Radius.circular(18),
-                    bottomLeft: Radius.circular(isUser ? 18 : 4),
-                    bottomRight: Radius.circular(isUser ? 4 : 18),
+                    bottomLeft:
+                        Radius.circular(isUser ? 18 : 4),
+                    bottomRight:
+                        Radius.circular(isUser ? 4 : 18),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
+                      color:
+                          Colors.black.withValues(alpha: 0.06),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -558,7 +727,8 @@ class _TypingIndicatorState extends State<_TypingIndicator>
           ),
           GlossyPanel(
             enableBlur: true,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 12),
             radius: 18,
             child: AnimatedBuilder(
               animation: _ctrl,
@@ -626,13 +796,16 @@ class _QuickPrompts extends StatelessWidget {
               (p) => Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ActionChip(
-                  label: Text(p, style: const TextStyle(fontSize: 12)),
+                  label:
+                      Text(p, style: const TextStyle(fontSize: 12)),
                   onPressed: () => onTap(p),
-                  backgroundColor: Colors.white.withValues(alpha: 0.9),
+                  backgroundColor:
+                      Colors.white.withValues(alpha: 0.9),
                   side: BorderSide(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.35),
-                  ),
-                  labelStyle: const TextStyle(color: AppTheme.primaryColor),
+                      color: AppTheme.primaryColor
+                          .withValues(alpha: 0.35)),
+                  labelStyle: const TextStyle(
+                      color: AppTheme.primaryColor),
                 ),
               ),
             )
@@ -642,7 +815,7 @@ class _QuickPrompts extends StatelessWidget {
   }
 }
 
-// ── Chat input (text + Deepgram voice) ──────────────────────────────────────────
+// ── Chat input ──────────────────────────────────────────────────────────────────
 
 class _ChatInputBar extends StatelessWidget {
   final TextEditingController ctrl;
@@ -666,7 +839,6 @@ class _ChatInputBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasText = ctrl.text.trim().isNotEmpty;
-
     return GlassBar(
       padding: EdgeInsets.fromLTRB(
         12,
@@ -708,9 +880,7 @@ class _ChatInputBar extends StatelessWidget {
                     .copyWith(color: AppTheme.textTertiary),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
+                    horizontal: 16, vertical: 10),
               ),
               onSubmitted: (_) {
                 if (hasText && !busy) onSend();
@@ -721,7 +891,9 @@ class _ChatInputBar extends StatelessWidget {
         const SizedBox(width: 8),
         _roundButton(
           onPressed: busy || !hasText ? null : onSend,
-          color: hasText ? AppTheme.primaryColor : AppTheme.surfaceVariant,
+          color: hasText
+              ? AppTheme.primaryColor
+              : AppTheme.surfaceVariant,
           icon: Icons.send_rounded,
           iconColor: hasText ? Colors.white : AppTheme.textTertiary,
           tooltip: 'Send',
@@ -738,7 +910,8 @@ class _ChatInputBar extends StatelessWidget {
           children: [
             IconButton(
               onPressed: onVoiceCancel,
-              icon: const Icon(Icons.close_rounded, color: AppTheme.dangerColor),
+              icon: const Icon(Icons.close_rounded,
+                  color: AppTheme.dangerColor),
             ),
             Expanded(
               child: AudioSignalBox(
@@ -761,7 +934,8 @@ class _ChatInputBar extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           'Listening… tap stop to send',
-          style: AppTheme.labelSmall.copyWith(color: AppTheme.primaryColor),
+          style:
+              AppTheme.labelSmall.copyWith(color: AppTheme.primaryColor),
         ),
       ],
     );
