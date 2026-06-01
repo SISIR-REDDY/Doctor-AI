@@ -57,6 +57,16 @@ class FirestoreService {
     return db;
   }
 
+  void _ensureFirebaseForWrite() {
+    if (!_isFirebaseAvailable) {
+      throw AppException(
+        code: 'firebase-not-configured',
+        message:
+            'Cloud sync is unavailable. Check your internet connection and try again.',
+      );
+    }
+  }
+
   // ── Collection helpers ────────────────────────────────────────────────────
 
   DocumentReference<Map<String, dynamic>> _userDoc(String uid) =>
@@ -189,7 +199,7 @@ class FirestoreService {
   }
 
   Future<void> saveSymptom(String uid, SymptomEntry entry) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'symptoms').doc(entry.id).set(entry.toMap());
     } catch (e) {
@@ -198,7 +208,7 @@ class FirestoreService {
   }
 
   Future<void> deleteSymptom(String uid, String symptomId) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'symptoms').doc(symptomId).delete();
     } catch (e) {
@@ -225,7 +235,7 @@ class FirestoreService {
   }
 
   Future<void> saveMedication(String uid, Medication med) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'medications').doc(med.id).set(med.toMap());
     } catch (e) {
@@ -234,7 +244,7 @@ class FirestoreService {
   }
 
   Future<void> deleteMedication(String uid, String medId) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'medications').doc(medId).delete();
     } catch (e) {
@@ -261,7 +271,7 @@ class FirestoreService {
   }
 
   Future<void> saveMedicalRecord(String uid, MedicalRecord record) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'records').doc(record.id).set(record.toMap());
     } catch (e) {
@@ -270,7 +280,7 @@ class FirestoreService {
   }
 
   Future<void> deleteMedicalRecord(String uid, String recordId) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'records').doc(recordId).delete();
     } catch (e) {
@@ -285,15 +295,32 @@ class FirestoreService {
   Stream<List<AiChatMessage>> watchChatMessages(String uid, String threadId) {
     if (!_isFirebaseAvailable) return Stream.value([]);
     return _sub(uid, 'ai_chats')
-        .where('threadId', isEqualTo: threadId)
         .orderBy('timestamp')
         .snapshots()
-        .map((s) => s.docs.map((d) => AiChatMessage.fromMap(d.data())).toList());
+        .map((s) {
+      final list = s.docs
+          .map((d) => AiChatMessage.fromMap(d.data()))
+          .where((m) => m.threadId == threadId)
+          .toList();
+      list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      return list;
+    });
   }
 
   Future<void> saveChatMessage(String uid, AiChatMessage msg) async {
-    if (!_isFirebaseAvailable) return;
-    await _sub(uid, 'ai_chats').doc(msg.id).set(msg.toMap());
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'ai_chats').doc(msg.id).set(msg.toMap());
+    } catch (e) {
+      final denied = e.toString().contains('PERMISSION_DENIED');
+      throw AppException(
+        code: denied ? 'firestore-permission-denied' : 'save-chat-failed',
+        message: denied
+            ? 'Chat could not be saved. In Firebase Console → Firestore → Rules, publish the rules from firestore.rules in this project (allows users/{uid}/ai_chats).'
+            : 'Unable to save message.',
+        cause: e,
+      );
+    }
   }
 
   Future<void> deleteChatThread(String uid, String threadId) async {
@@ -327,7 +354,7 @@ class FirestoreService {
   }
 
   Future<void> savePolicy(String uid, InsurancePolicy policy) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'insurance').doc(policy.id).set(policy.toMap());
     } catch (e) {
@@ -336,7 +363,7 @@ class FirestoreService {
   }
 
   Future<void> deletePolicy(String uid, String policyId) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'insurance').doc(policyId).delete();
     } catch (e) {
@@ -363,7 +390,7 @@ class FirestoreService {
   }
 
   Future<void> saveClaim(String uid, InsuranceClaim claim) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'claims').doc(claim.id).set(claim.toMap());
     } catch (e) {
@@ -372,7 +399,7 @@ class FirestoreService {
   }
 
   Future<void> deleteClaim(String uid, String claimId) async {
-    if (!_isFirebaseAvailable) return;
+    _ensureFirebaseForWrite();
     try {
       await _sub(uid, 'claims').doc(claimId).delete();
     } catch (e) {

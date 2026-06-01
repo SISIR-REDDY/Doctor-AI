@@ -22,33 +22,8 @@ class RecordDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Image preview
-            if (record.imagePath.isNotEmpty &&
-                File(record.imagePath).existsSync())
-              ClipRRect(
-                borderRadius: AppTheme.largeRadius,
-                child: Image.file(
-                  File(record.imagePath),
-                  fit: BoxFit.cover,
-                  height: 200,
-                ),
-              )
-            else
-              Container(
-                height: 160,
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceVariant,
-                  borderRadius: AppTheme.largeRadius,
-                  border: Border.all(color: AppTheme.dividerColor),
-                ),
-                child: const Center(
-                  child: Icon(Icons.description_outlined,
-                      size: 56, color: AppTheme.textTertiary),
-                ),
-              ),
+            _RecordImage(record: record),
             const SizedBox(height: AppTheme.lg),
-
-            // Meta info
             _InfoCard(children: [
               _Row(Icons.category_outlined, 'Type',
                   record.recordType[0].toUpperCase() +
@@ -63,13 +38,11 @@ class RecordDetailScreen extends StatelessWidget {
                     record.hospitalName),
             ]),
             const SizedBox(height: AppTheme.lg),
-
-            // AI Summary
             if (record.aiSummary.isNotEmpty)
               Container(
                 padding: const EdgeInsets.all(AppTheme.lg),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.06),
                   borderRadius: AppTheme.mediumRadius,
                   border: Border.all(
                     color: AppTheme.primaryColor.withValues(alpha: 0.2),
@@ -80,49 +53,88 @@ class RecordDetailScreen extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.auto_awesome_rounded,
-                            color: AppTheme.primaryColor, size: 18),
+                        Icon(Icons.auto_awesome_rounded,
+                            color: AppTheme.primaryColor, size: 20),
                         const SizedBox(width: 8),
-                        const Text('AI Analysis',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.primaryColor,
-                                fontSize: 14)),
+                        Text('AI Summary',
+                            style: AppTheme.labelLarge.copyWith(
+                                color: AppTheme.primaryColor)),
                       ],
                     ),
-                    const SizedBox(height: AppTheme.sm),
-                    Text(record.aiSummary,
-                        style: AppTheme.bodySmall.copyWith(height: 1.6)),
-                  ],
-                ),
-              ),
-
-            if (record.extractedText.isNotEmpty) ...[
-              const SizedBox(height: AppTheme.lg),
-              Container(
-                padding: const EdgeInsets.all(AppTheme.lg),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  borderRadius: AppTheme.mediumRadius,
-                  border: Border.all(color: AppTheme.dividerColor),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Extracted Text',
-                        style:
-                            AppTheme.headingSmall.copyWith(fontSize: 15)),
                     const SizedBox(height: AppTheme.md),
-                    Text(record.extractedText,
-                        style: AppTheme.bodySmall
-                            .copyWith(fontFamily: 'monospace', height: 1.5)),
+                    Text(record.aiSummary, style: AppTheme.bodyMedium),
                   ],
                 ),
               ),
+            if (record.extractedText.isNotEmpty &&
+                record.extractedText != record.aiSummary) ...[
+              const SizedBox(height: AppTheme.lg),
+              _InfoCard(children: [
+                Text('Full analysis', style: AppTheme.labelLarge),
+                const SizedBox(height: AppTheme.sm),
+                Text(record.extractedText, style: AppTheme.bodyMedium),
+              ]),
             ],
-            const SizedBox(height: AppTheme.xxl),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RecordImage extends StatelessWidget {
+  final MedicalRecord record;
+  const _RecordImage({required this.record});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = record.imageUrl.trim();
+    if (url.startsWith('http')) {
+      return ClipRRect(
+        borderRadius: AppTheme.largeRadius,
+        child: Image.network(
+          url,
+          fit: BoxFit.cover,
+          height: 220,
+          loadingBuilder: (_, child, progress) {
+            if (progress == null) return child;
+            return Container(
+              height: 220,
+              alignment: Alignment.center,
+              color: AppTheme.surfaceVariant,
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            );
+          },
+          errorBuilder: (_, __, ___) => _placeholder(),
+        ),
+      );
+    }
+
+    if (record.imagePath.isNotEmpty && File(record.imagePath).existsSync()) {
+      return ClipRRect(
+        borderRadius: AppTheme.largeRadius,
+        child: Image.file(
+          File(record.imagePath),
+          fit: BoxFit.cover,
+          height: 220,
+        ),
+      );
+    }
+
+    return _placeholder();
+  }
+
+  Widget _placeholder() {
+    return Container(
+      height: 160,
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceVariant,
+        borderRadius: AppTheme.largeRadius,
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: const Center(
+        child: Icon(Icons.description_outlined,
+            size: 56, color: AppTheme.textTertiary),
       ),
     );
   }
@@ -138,10 +150,13 @@ class _InfoCard extends StatelessWidget {
       padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.mediumRadius,
-        border: Border.all(color: AppTheme.dividerColor),
+        borderRadius: AppTheme.largeRadius,
+        boxShadow: AppTheme.cardShadow,
       ),
-      child: Column(children: children),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
     );
   }
 }
@@ -155,20 +170,13 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(bottom: AppTheme.sm),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppTheme.textSecondary),
-          const SizedBox(width: AppTheme.md),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: AppTheme.bodySmall),
-              Text(value,
-                  style: AppTheme.bodyMedium
-                      .copyWith(fontWeight: FontWeight.w500)),
-            ],
-          ),
+          Icon(icon, size: 18, color: AppTheme.textTertiary),
+          const SizedBox(width: 10),
+          Text('$label: ', style: AppTheme.bodySmall),
+          Expanded(child: Text(value, style: AppTheme.labelLarge)),
         ],
       ),
     );

@@ -1,98 +1,99 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+/// iOS-inspired glossy palette — system blue, soft surfaces, vibrant accents.
 class AppTheme {
-  // Professional Healthcare Color Palette
-  static const Color primaryColor = Color(0xFF0078D4); // Microsoft Healthcare Blue
-  static const Color secondaryColor = Color(0xFF00BCB4); // Healthcare Teal
-  static const Color accentColor = Color(0xFF6CB4EE); // Soft Medical Blue
+  static const Color primaryColor = Color(0xFF007AFF);
+  static const Color primaryLight = Color(0xFF5AC8FA);
+  static const Color secondaryColor = Color(0xFF5856D6);
+  static const Color accentColor = Color(0xFFFF9500);
 
-  // Functional Colors - Healthcare Context
-  static const Color successColor = Color(0xFF22C55E); // Medical Success Green
-  static const Color warningColor = Color(0xFFF59E0B); // Medical Warning Amber
-  static const Color dangerColor = Color(0xFFEF4444); // Medical Alert Red
-  static const Color infoColor = Color(0xFF3B82F6); // Medical Info Blue
+  static const Color successColor = Color(0xFF34C759);
+  static const Color warningColor = Color(0xFFFF9500);
+  static const Color dangerColor = Color(0xFFFF3B30);
+  static const Color infoColor = Color(0xFF32ADE6);
 
-  // Healthcare Specialty Colors
-  static const Color cardiologyColor = Color(0xFFDC2626); // Heart Health Red
-  static const Color neurologyColor = Color(0xFF7C3AED); // Neurology Purple
-  static const Color emergencyColor = Color(0xFFEA580C); // Emergency Orange
-  static const Color pediatricsColor = Color(0xFF06B6D4); // Pediatric Cyan
-  static const Color oncologyColor = Color(0xFF9333EA); // Oncology Purple
-  static const Color surgeryColor = Color(0xFF059669); // Surgery Green
+  static const Color cardiologyColor = Color(0xFFFF3B30);
+  static const Color neurologyColor = Color(0xFF5856D6);
+  static const Color emergencyColor = Color(0xFFFF9500);
+  static const Color pediatricsColor = Color(0xFF5AC8FA);
+  static const Color oncologyColor = Color(0xFFAF52DE);
+  static const Color surgeryColor = Color(0xFF34C759);
 
-  // Background & Surface Colors
-  static const Color backgroundColor = Color(0xFFF8FAFC); // Clinical White
-  static const Color surfaceColor = Color(0xFFFFFFFF); // Pure White
-  static const Color surfaceVariant = Color(0xFFF1F5F9); // Soft Gray
-  static const Color dividerColor = Color(0xFFE2E8F0); // Light Gray Divider
+  static const Color backgroundColor = Color(0xFFF2F2F7);
+  static const Color surfaceColor = Color(0xFFFFFFFF);
+  static const Color surfaceMuted = Color(0xFFE8F0FE);
+  static const Color surfaceVariant = Color(0xFFE5EAF4);
+  static const Color dividerColor = Color(0xFFDDE4F0);
+  static const Color borderColor = Color(0xFFE8EEF8);
 
-  // Text Colors
-  static const Color textPrimary = Color(0xFF1E293B); // Dark Slate
-  static const Color textSecondary = Color(0xFF64748B); // Slate Gray
-  static const Color textTertiary = Color(0xFF94A3B8); // Light Slate
-  static const Color textOnPrimary = Color(0xFFFFFFFF); // White on Primary
+  static const Color textPrimary = Color(0xFF1C1C1E);
+  static const Color textSecondary = Color(0xFF636366);
+  static const Color textTertiary = Color(0xFF8E8E93);
+  static const Color textOnPrimary = Color(0xFFFFFFFF);
 
-  // Professional Healthcare Gradients
+  static const LinearGradient screenGradient = LinearGradient(
+    colors: [Color(0xFFE8F2FF), Color(0xFFF5F8FF), Color(0xFFFAFCFF)],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF0078D4), Color(0xFF00BCB4)],
+    colors: [Color(0xFF007AFF), Color(0xFF5AC8FA)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient heroGradient = LinearGradient(
+    colors: [Color(0xFF007AFF), Color(0xFF5856D6), Color(0xFF5AC8FA)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient glassShine = LinearGradient(
+    colors: [Color(0x66FFFFFF), Color(0x00FFFFFF)],
+    begin: Alignment.topCenter,
+    end: Alignment.center,
+  );
+
+  static const LinearGradient fabGradient = LinearGradient(
+    colors: [Color(0xFF007AFF), Color(0xFF00C7BE)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient successGradient = LinearGradient(
-    colors: [Color(0xFF22C55E), Color(0xFF059669)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
+    colors: [Color(0xFF34C759), Color(0xFF30D158)],
   );
-
   static const LinearGradient warningGradient = LinearGradient(
-    colors: [Color(0xFFF59E0B), Color(0xFFEA580C)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
+    colors: [Color(0xFFFF9500), Color(0xFFFFCC00)],
   );
-
   static const LinearGradient emergencyGradient = LinearGradient(
-    colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
+    colors: [Color(0xFFFF3B30), Color(0xFFFF6482)],
   );
-
-  static const LinearGradient cardiologyGradient = LinearGradient(
-    colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
+  static const LinearGradient cardiologyGradient = emergencyGradient;
   static const LinearGradient neurologyGradient = LinearGradient(
-    colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
+    colors: [Color(0xFF5856D6), Color(0xFFAF52DE)],
   );
-
-  static const LinearGradient surgeryGradient = LinearGradient(
-    colors: [Color(0xFF059669), Color(0xFF047857)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
+  static const LinearGradient surgeryGradient = successGradient;
   static const LinearGradient pediatricsGradient = LinearGradient(
-    colors: [Color(0xFF06B6D4), Color(0xFF0891B2)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
+    colors: [Color(0xFF5AC8FA), Color(0xFF32ADE6)],
   );
 
-  // Legacy gradients (to be deprecated)
   static const LinearGradient blueGradient = primaryGradient;
   static const LinearGradient greenGradient = successGradient;
-  static const LinearGradient healthGradient = primaryGradient;
+  static const LinearGradient healthGradient = heroGradient;
 
-  // Border Radius
+  static List<BoxShadow> glossyShadow({Color? tint}) => cardShadow;
+
   static const BorderRadius smallRadius = BorderRadius.all(Radius.circular(8));
   static const BorderRadius mediumRadius = BorderRadius.all(Radius.circular(12));
-  static const BorderRadius largeRadius = BorderRadius.all(Radius.circular(20));
-  static const BorderRadius extraLargeRadius = BorderRadius.all(Radius.circular(28));
+  static const BorderRadius largeRadius = BorderRadius.all(Radius.circular(16));
+  static const BorderRadius extraLargeRadius =
+      BorderRadius.all(Radius.circular(20));
 
-  // Spacing
   static const double xs = 4.0;
   static const double sm = 8.0;
   static const double md = 12.0;
@@ -101,23 +102,23 @@ class AppTheme {
   static const double xxl = 32.0;
   static const double xxxl = 48.0;
 
-  // Text Styles
   static const TextStyle headingLarge = TextStyle(
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: FontWeight.w700,
     color: textPrimary,
-    letterSpacing: -1.5,
+    letterSpacing: -0.8,
+    height: 1.15,
   );
 
   static const TextStyle headingMedium = TextStyle(
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: FontWeight.w600,
     color: textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   );
 
   static const TextStyle headingSmall = TextStyle(
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: FontWeight.w600,
     color: textPrimary,
   );
@@ -133,14 +134,14 @@ class AppTheme {
     fontSize: 14,
     fontWeight: FontWeight.w400,
     color: textPrimary,
-    height: 1.4,
+    height: 1.45,
   );
 
   static const TextStyle bodySmall = TextStyle(
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: FontWeight.w400,
     color: textSecondary,
-    height: 1.3,
+    height: 1.35,
   );
 
   static const TextStyle labelLarge = TextStyle(
@@ -153,63 +154,106 @@ class AppTheme {
     fontSize: 12,
     fontWeight: FontWeight.w600,
     color: textSecondary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   );
 
   static const TextStyle labelSmall = TextStyle(
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: FontWeight.w600,
     color: textTertiary,
-    letterSpacing: 1.0,
+    letterSpacing: 0.5,
   );
 
-  // Theme Data
+  static const TextStyle sectionLabel = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w600,
+    color: textTertiary,
+    letterSpacing: 1.1,
+  );
+
+  /// Soft card shadow — no colored glow.
+  static const List<BoxShadow> cardShadow = [
+    BoxShadow(
+      color: Color(0x0F000000),
+      blurRadius: 12,
+      offset: Offset(0, 4),
+    ),
+  ];
+
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      colorScheme: const ColorScheme(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryColor,
         brightness: Brightness.light,
         primary: primaryColor,
         onPrimary: Colors.white,
         secondary: secondaryColor,
-        onSecondary: Colors.white,
-        tertiary: successColor,
-        onTertiary: Colors.white,
-        error: dangerColor,
-        onError: Colors.white,
         surface: surfaceColor,
         onSurface: textPrimary,
+        error: dangerColor,
       ),
       scaffoldBackgroundColor: backgroundColor,
       appBarTheme: const AppBarTheme(
-        backgroundColor: surfaceColor,
+        backgroundColor: backgroundColor,
         foregroundColor: textPrimary,
         elevation: 0,
-        centerTitle: true,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
         titleTextStyle: headingSmall,
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
       cardTheme: CardThemeData(
         color: surfaceColor,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: mediumRadius),
+        shape: RoundedRectangleBorder(
+          borderRadius: largeRadius,
+          side: const BorderSide(color: borderColor),
+        ),
         margin: EdgeInsets.zero,
+      ),
+      dividerTheme: const DividerThemeData(color: dividerColor, thickness: 1),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surfaceColor,
+        indicatorColor: primaryColor.withValues(alpha: 0.12),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            color: selected ? primaryColor : textTertiary,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: selected ? primaryColor : textTertiary,
+            size: 24,
+          );
+        }),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 2,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFFF5F5F5),
+        fillColor: surfaceMuted,
         border: OutlineInputBorder(
           borderRadius: mediumRadius,
-          borderSide: const BorderSide(color: dividerColor),
+          borderSide: const BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: mediumRadius,
-          borderSide: const BorderSide(color: dividerColor),
+          borderSide: const BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: mediumRadius,
-          borderSide: const BorderSide(color: primaryColor, width: 2),
+          borderSide: const BorderSide(color: primaryColor, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: lg, vertical: md),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: lg, vertical: md),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -220,25 +264,236 @@ class AppTheme {
           elevation: 0,
         ),
       ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: primaryColor,
-          padding: const EdgeInsets.symmetric(horizontal: lg, vertical: md),
-        ),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: lg, vertical: 2),
       ),
-      fontFamily: 'SF Pro Display',
     );
   }
 }
 
-// Glossy Card Widget - iOS Style
+/// Frosted glass surface — WhatsApp / iOS style.
+class GlossyPanel extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  final bool enableBlur;
+  final Color? tint;
+
+  const GlossyPanel({
+    super.key,
+    required this.child,
+    this.padding = EdgeInsets.zero,
+    this.radius = 16,
+    this.enableBlur = false,
+    this.tint,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: (tint ?? AppTheme.surfaceColor).withValues(
+          alpha: enableBlur ? 0.72 : 0.98,
+        ),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.65),
+          width: 0.8,
+        ),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: child,
+    );
+
+    if (!enableBlur) return content;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        child: content,
+      ),
+    );
+  }
+}
+
+/// Full-width frosted bar (chat input, nav).
+class GlassBar extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  const GlassBar({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(
+      horizontal: AppTheme.lg,
+      vertical: AppTheme.md,
+    ),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor.withValues(alpha: 0.78),
+            border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// One tab in [GlossyBottomNav].
+class GlossyNavDestination {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+
+  const GlossyNavDestination({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+  });
+}
+
+/// Simple compact bottom nav — clean white surface, icon + label, blue active.
+class GlossyBottomNav extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+  final List<GlossyNavDestination> destinations;
+
+  const GlossyBottomNav({
+    super.key,
+    required this.selectedIndex,
+    required this.onSelect,
+    required this.destinations,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Color(0xFFE5E5EA), width: 0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0C000000),
+            blurRadius: 8,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 52,
+          child: Row(
+            children: List.generate(destinations.length, (i) {
+              final d = destinations[i];
+              final sel = i == selectedIndex;
+              return Expanded(
+                child: _SimpleNavSlot(
+                  selected: sel,
+                  icon: d.icon,
+                  activeIcon: d.activeIcon,
+                  label: d.label,
+                  onTap: () => onSelect(i),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SimpleNavSlot extends StatelessWidget {
+  final bool selected;
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SimpleNavSlot({
+    required this.selected,
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        selected ? AppTheme.primaryColor : const Color(0xFF8E8E93);
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(selected ? activeIcon : icon, size: 22, color: color),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight:
+                  selected ? FontWeight.w600 : FontWeight.w400,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AppCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsets padding;
+  final VoidCallback? onTap;
+
+  const AppCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(AppTheme.lg),
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlossyPanel(
+      padding: padding,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppTheme.largeRadius,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 class GlossyCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
   final BorderRadius borderRadius;
   final Color backgroundColor;
-  final Border? border;
-  final double elevation;
   final VoidCallback? onTap;
   final LinearGradient? gradient;
   final EdgeInsets margin;
@@ -247,10 +502,8 @@ class GlossyCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(AppTheme.lg),
-    this.borderRadius = AppTheme.mediumRadius,
+    this.borderRadius = AppTheme.largeRadius,
     this.backgroundColor = AppTheme.surfaceColor,
-    this.border,
-    this.elevation = 0.5,
     this.onTap,
     this.gradient,
     this.margin = EdgeInsets.zero,
@@ -270,22 +523,32 @@ class GlossyCard extends StatelessWidget {
               gradient: gradient,
               color: gradient == null ? backgroundColor : null,
               borderRadius: borderRadius,
-              border: border ??
-                  Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    width: 1.5,
-                  ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+              border: Border.all(
+                color: gradient != null
+                    ? Colors.white.withValues(alpha: 0.4)
+                    : AppTheme.borderColor,
+              ),
+              boxShadow: AppTheme.glossyShadow(
+                tint: gradient?.colors.first ?? AppTheme.primaryColor,
+              ),
             ),
-            child: Padding(
-              padding: padding,
-              child: child,
+            child: ClipRRect(
+              borderRadius: borderRadius,
+              child: Stack(
+                children: [
+                  if (gradient != null)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 72,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(gradient: AppTheme.glassShine),
+                      ),
+                    ),
+                  Padding(padding: padding, child: child),
+                ],
+              ),
             ),
           ),
         ),
@@ -294,7 +557,6 @@ class GlossyCard extends StatelessWidget {
   }
 }
 
-// iOS Style Button
 class IosButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
@@ -323,40 +585,16 @@ class IosButton extends StatelessWidget {
       return OutlinedButton(
         onPressed: isLoading ? null : onPressed,
         style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: AppTheme.primaryColor, width: 2),
+          side: const BorderSide(color: AppTheme.primaryColor),
           padding: const EdgeInsets.symmetric(
             horizontal: AppTheme.xl,
             vertical: AppTheme.lg,
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: AppTheme.mediumRadius,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: AppTheme.mediumRadius),
         ),
-        child: isLoading
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(AppTheme.primaryColor),
-                ),
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (iconWidget != null) ...[
-                    iconWidget!,
-                    const SizedBox(width: AppTheme.sm),
-                  ] else if (icon != null) ...[
-                    Icon(icon, color: AppTheme.primaryColor),
-                    const SizedBox(width: AppTheme.sm),
-                  ],
-                  Text(label),
-                ],
-              ),
+        child: _buildChild(context, outlined: true),
       );
     }
-
     return ElevatedButton(
       onPressed: isLoading ? null : onPressed,
       style: ElevatedButton.styleFrom(
@@ -366,38 +604,42 @@ class IosButton extends StatelessWidget {
           horizontal: AppTheme.xl,
           vertical: AppTheme.lg,
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius: AppTheme.mediumRadius,
-        ),
-        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: AppTheme.mediumRadius),
       ),
-      child: isLoading
-          ? SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation(foregroundColor),
-              ),
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (iconWidget != null) ...[
-                  iconWidget!,
-                  const SizedBox(width: AppTheme.sm),
-                ] else if (icon != null) ...[
-                  Icon(icon),
-                  const SizedBox(width: AppTheme.sm),
-                ],
-                Text(label),
-              ],
-            ),
+      child: _buildChild(context),
+    );
+  }
+
+  Widget _buildChild(BuildContext context, {bool outlined = false}) {
+    if (isLoading) {
+      return SizedBox(
+        height: 20,
+        width: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation(
+            outlined ? AppTheme.primaryColor : foregroundColor,
+          ),
+        ),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (iconWidget != null) ...[
+          iconWidget!,
+          const SizedBox(width: AppTheme.sm),
+        ],
+        if (icon != null) ...[
+          Icon(icon, size: 20),
+          const SizedBox(width: AppTheme.sm),
+        ],
+        Text(label),
+      ],
     );
   }
 }
 
-// iOS Section Header
 class SectionHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -415,48 +657,39 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: AppTheme.lg,
-        right: AppTheme.lg,
-        top: AppTheme.xl,
-        bottom: AppTheme.md,
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.lg,
+        AppTheme.xl,
+        AppTheme.lg,
+        AppTheme.sm,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: AppTheme.headingSmall),
-              if (subtitle != null) ...[
-                const SizedBox(height: AppTheme.xs),
-                Text(subtitle!, style: AppTheme.bodySmall),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTheme.headingSmall),
+                if (subtitle != null) ...[
+                  const SizedBox(height: AppTheme.xs),
+                  Text(subtitle!, style: AppTheme.bodySmall),
+                ],
               ],
-            ],
-          ),
-          if (actionLabel != null)
-            GestureDetector(
-              onTap: onTap,
-              child: Text(
-                actionLabel!,
-                style: AppTheme.labelLarge.copyWith(
-                  color: AppTheme.primaryColor,
-                ),
-              ),
             ),
+          ),
+          if (actionLabel != null && onTap != null)
+            TextButton(onPressed: onTap, child: Text(actionLabel!)),
         ],
       ),
     );
   }
 }
 
-// Stat Card Widget
 class StatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
   final Color iconColor;
-  final LinearGradient? gradient;
 
   const StatCard({
     super.key,
@@ -464,25 +697,15 @@ class StatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     this.iconColor = AppTheme.primaryColor,
-    this.gradient,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GlossyCard(
-      gradient: gradient,
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(AppTheme.md),
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              borderRadius: AppTheme.mediumRadius,
-              shape: BoxShape.rectangle,
-            ),
-            child: Icon(icon, color: iconColor, size: 24),
-          ),
+          Icon(icon, color: iconColor, size: 22),
           const SizedBox(height: AppTheme.md),
           Text(label, style: AppTheme.bodySmall),
           const SizedBox(height: AppTheme.xs),

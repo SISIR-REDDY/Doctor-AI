@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/config/firebase_config.dart';
 import '../../core/errors/app_error_handler.dart';
+import '../../core/errors/app_exception.dart';
 import '../../services/firebase/api_credentials_service.dart';
 import '../../services/firebase/auth_service.dart';
 import '../../services/firebase/firebase_bootstrap_service.dart';
@@ -21,19 +22,26 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _isLoadingGoogle = false;
   bool _isLoadingApple = false;
 
+  void _stopLoading() {
+    if (mounted) setState(() { _isLoadingGoogle = false; _isLoadingApple = false; });
+  }
+
   Future<void> _signInWithGoogle() async {
     if (_isLoadingGoogle) return;
     setState(() => _isLoadingGoogle = true);
     try {
-      final credential = await _authService.signInWithGoogle();
-      await credential.user?.getIdToken(true);
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      await ApiCredentialsService.instance.preload();
+      await _authService.signInWithGoogle();
+      // Preload API keys in background — never blocks the UI.
+      ApiCredentialsService.instance.preload().catchError((_) {});
     } catch (error) {
       if (!mounted) return;
-      AppErrorHandler.showSnackBar(context, error);
+      final code = error is AppException ? error.code : '';
+      // Swallow cancel — user intentionally closed the picker.
+      if (code != 'google-sign-in-canceled') {
+        AppErrorHandler.showSnackBar(context, error);
+      }
     } finally {
-      if (mounted) setState(() => _isLoadingGoogle = false);
+      _stopLoading();
     }
   }
 
@@ -42,11 +50,12 @@ class _SignInScreenState extends State<SignInScreen> {
     setState(() => _isLoadingApple = true);
     try {
       await _authService.signInWithApple();
+      ApiCredentialsService.instance.preload().catchError((_) {});
     } catch (error) {
       if (!mounted) return;
       AppErrorHandler.showSnackBar(context, error);
     } finally {
-      if (mounted) setState(() => _isLoadingApple = false);
+      _stopLoading();
     }
   }
 

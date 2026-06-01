@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 
 import 'core/config/app_branding.dart';
@@ -16,13 +15,6 @@ Future<void> main() async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-
-      try {
-        await dotenv.load(fileName: '.env');
-      } catch (e) {
-        debugPrint('Warning: .env not found: $e');
-      }
-
       await FirebaseBootstrapService.initialize();
 
       runApp(const ClinixAIApp());

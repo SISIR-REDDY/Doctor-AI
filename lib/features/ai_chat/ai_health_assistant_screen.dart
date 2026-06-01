@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/errors/app_error_handler.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/chatbot_service.dart';
+import '../../services/deepgram_service.dart';
 import '../../services/firebase/firestore_service.dart';
+import '../../services/voice_recorder_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/audio_visualizer.dart';
+import '../../widgets/clinical_md.dart';
 
 class AiHealthAssistantScreen extends StatefulWidget {
   const AiHealthAssistantScreen({super.key});
@@ -22,11 +29,20 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
   final _scrollCtrl = ScrollController();
   final _chatbot = ChatbotService();
   final _db = FirestoreService();
+  final _deepgram = DeepgramService();
+  final _voice = VoiceRecorderService();
   final _uuid = const Uuid();
 
-  late final String _threadId;
+  static const String _mainThreadId = 'health_main';
+
   final List<AiChatMessage> _messages = [];
+  StreamSubscription<List<AiChatMessage>>? _chatSub;
+  StreamSubscription<double>? _levelSub;
   bool _typing = false;
+  bool _welcomeSeeded = false;
+  bool _isRecordingVoice = false;
+  bool _isTranscribingVoice = false;
+  double _voiceLevel = 0;
 
   static const _quickPrompts = [
     'I have a headache and fever',
@@ -39,25 +55,63 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
   @override
   void initState() {
     super.initState();
-    _threadId = _uuid.v4();
-    _addWelcome();
+    _msgCtrl.addListener(() => setState(() {}));
+    _levelSub = _voice.levelStream.listen((l) {
+      if (mounted) setState(() => _voiceLevel = l);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startChat());
   }
 
-  void _addWelcome() {
+  Future<void> _startChat() async {
+    final provider = context.read<HealthDataProvider>();
+    await provider.loadProfile();
+    if (!mounted) return;
+    final uid = provider.uid;
+    if (uid == null) return;
+    _chatSub?.cancel();
+    _chatSub = _db.watchChatMessages(uid, _mainThreadId).listen(
+      (msgs) async {
+        if (!mounted) return;
+        if (msgs.isEmpty && !_welcomeSeeded) {
+          _welcomeSeeded = true;
+          await _seedWelcome(uid);
+          return;
+        }
+        setState(() => _messages
+          ..clear()
+          ..addAll(msgs));
+        _scrollToBottom();
+      },
+      onError: (_) {},
+    );
+  }
+
+  Future<void> _seedWelcome(String uid) async {
+    if (!mounted) return;
     final profile = context.read<HealthDataProvider>().profile;
     final name = profile?.firstName.isNotEmpty == true
         ? ', ${profile!.firstName}'
         : '';
-    _messages.add(AiChatMessage(
+    final welcome = AiChatMessage(
       id: _uuid.v4(),
+      userId: uid,
+      threadId: _mainThreadId,
       role: 'assistant',
       content:
-          'Hello$name! I\'m your Clinix AI health assistant.\n\nDescribe your symptoms or ask a health question and I\'ll do my best to help. I can:\n• Explain possible causes of your symptoms\n• Tell you when to see a doctor\n• Give home remedy suggestions\n• Answer general health questions\n\n_Remember: I\'m an AI assistant, not a doctor. Always consult a healthcare professional for medical advice._',
-    ));
+          'Hello$name! I\'m your Clinix AI health assistant.\n\nType your question or tap the microphone to speak — your voice is transcribed with Deepgram, then Gemini provides health guidance.\n\n_Remember: I\'m an AI assistant, not a doctor. Always consult a healthcare professional for medical advice._',
+    );
+    try {
+      await _db.saveChatMessage(uid, welcome);
+    } catch (_) {
+      if (mounted) setState(() => _messages.add(welcome));
+    }
   }
 
   @override
   void dispose() {
+    _chatSub?.cancel();
+    _levelSub?.cancel();
+    _voice.dispose();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -75,30 +129,86 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
     });
   }
 
+  Future<void> _toggleVoice() async {
+    if (_isTranscribingVoice || _typing) return;
+
+    if (_isRecordingVoice) {
+      await _finishVoiceAndSend();
+      return;
+    }
+
+    try {
+      await _voice.start();
+      if (mounted) setState(() => _isRecordingVoice = true);
+    } catch (e) {
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
+    }
+  }
+
+  Future<void> _cancelVoice() async {
+    await _voice.cancel();
+    if (mounted) setState(() => _isRecordingVoice = false);
+  }
+
+  Future<void> _finishVoiceAndSend() async {
+    setState(() {
+      _isRecordingVoice = false;
+      _isTranscribingVoice = true;
+    });
+
+    try {
+      final path = await _voice.stop();
+      if (path == null) {
+        throw Exception('Recording failed. Try again.');
+      }
+      final transcript = await _deepgram.transcribeFile(path);
+      if (!mounted) return;
+      setState(() => _isTranscribingVoice = false);
+      await _send(transcript);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isTranscribingVoice = false);
+        AppErrorHandler.showSnackBar(context, e);
+      }
+    }
+  }
+
   Future<void> _send([String? quick]) async {
     final text = (quick ?? _msgCtrl.text).trim();
-    if (text.isEmpty || _typing) return;
+    if (text.isEmpty || _typing || _isTranscribingVoice) return;
 
     final profile = context.read<HealthDataProvider>().profile;
     final uid = context.read<HealthDataProvider>().uid;
 
+    if (uid == null) {
+      AppErrorHandler.showSnackBar(
+        context,
+        Exception('Sign in required to use the health assistant.'),
+      );
+      return;
+    }
+
     final userMsg = AiChatMessage(
       id: _uuid.v4(),
-      userId: uid ?? '',
-      threadId: _threadId,
+      userId: uid,
+      threadId: _mainThreadId,
       role: 'user',
       content: text,
     );
 
     setState(() {
-      _messages.add(userMsg);
+      if (!_messages.any((m) => m.id == userMsg.id)) {
+        _messages.add(userMsg);
+      }
       _typing = true;
       _msgCtrl.clear();
     });
     _scrollToBottom();
 
-    if (uid != null) {
-      _db.saveChatMessage(uid, userMsg);
+    try {
+      await _db.saveChatMessage(uid, userMsg);
+    } catch (e) {
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
     }
 
     try {
@@ -107,33 +217,33 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
 
       final botMsg = AiChatMessage(
         id: _uuid.v4(),
-        userId: uid ?? '',
-        threadId: _threadId,
+        userId: uid,
+        threadId: _mainThreadId,
         role: 'assistant',
-        content: response,
+        content: ClinicalMd.normalize(response),
       );
 
       if (mounted) {
         setState(() {
-          _messages.add(botMsg);
           _typing = false;
+          _messages.add(botMsg);
         });
         _scrollToBottom();
-        if (uid != null) _db.saveChatMessage(uid, botMsg);
+        try {
+          await _db.saveChatMessage(uid, botMsg);
+        } catch (e) {
+          if (mounted) {
+            AppErrorHandler.showSnackBar(
+              context,
+              e,
+            );
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
-        final errMsg = AiChatMessage(
-          id: _uuid.v4(),
-          role: 'assistant',
-          content:
-              'Sorry, I couldn\'t process your request. Please check your internet connection and try again.\n\nError: ${e.toString()}',
-        );
-        setState(() {
-          _messages.add(errMsg);
-          _typing = false;
-        });
-        _scrollToBottom();
+        setState(() => _typing = false);
+        AppErrorHandler.showSnackBar(context, e);
       }
     }
   }
@@ -152,84 +262,132 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
 '''
         : 'Patient profile not available.';
 
-    return '''You are a compassionate and knowledgeable AI health assistant for a patient health app called Clinix AI. You help patients understand their symptoms, provide general health guidance, and advise when to seek professional medical care.
+    return '''You are a compassionate AI health assistant for Clinix AI. Help the patient understand symptoms, suggest safe home care when appropriate, and say clearly when to see a doctor.
 
 $profileContext
 
 Patient's message: $userMessage
 
-Please respond in a clear, friendly, and empathetic way. Structure your response with:
-1. A brief acknowledgment of the symptoms
-2. Possible causes (mention 2-4 most likely ones)
-3. Home care suggestions if appropriate
-4. Clear guidance on when to see a doctor (especially any RED FLAG symptoms requiring immediate attention)
-5. Any relevant considerations given their medical history or allergies
+Respond in clean Markdown for a mobile chat app. Use this exact structure:
 
-Important:
-- Always recommend seeing a doctor for serious, persistent, or worsening symptoms
-- Never diagnose definitively — say "possible" or "this could indicate"
-- Highlight any allergy-related risks based on their profile
-- Keep response concise but complete (not more than 250 words)
-- Use plain language, avoid heavy medical jargon
-- End with a reassuring note''';
+**Understanding your symptoms**
+One short empathetic paragraph (2-3 sentences).
+
+**Possible causes**
+- Cause one (brief)
+- Cause two (brief)
+- Cause three if relevant
+
+**What you can do at home**
+- Practical tip one
+- Practical tip two
+
+**When to see a doctor**
+- Red-flag or urgent signs (if any)
+- When routine care is enough
+
+**For your profile**
+One sentence on allergies, conditions, or medications from their profile (or say none on file).
+
+End with one short reassuring sentence.
+
+Formatting rules (required):
+- Use "- " for every bullet (never "* " at line start)
+- Use **bold** only for the five section titles above
+- No # headings, tables, or code blocks
+- Plain language; max 220 words
+- Never diagnose definitively — use "possible" or "may indicate"
+- Always mention seeing a doctor for serious, persistent, or worsening symptoms''';
   }
 
   @override
   Widget build(BuildContext context) {
+    final busy = _typing || _isTranscribingVoice;
+
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: const Color(0xFFECEFF4),
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient,
-                borderRadius: BorderRadius.circular(8),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        flexibleSpace: GlassBar(
+          padding: EdgeInsets.only(
+            left: 8,
+            right: 8,
+            top: MediaQuery.paddingOf(context).top,
+            bottom: 8,
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                onPressed: () => Navigator.maybePop(context),
               ),
-              child: const Icon(Icons.smart_toy_rounded,
-                  color: Colors.white, size: 18),
-            ),
-            const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('AI Health Assistant',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                Text('Powered by Gemini',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w400)),
-              ],
-            ),
-          ],
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.smart_toy_rounded,
+                    color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('AI Health Assistant',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700)),
+                    Text('Voice · Deepgram  ·  Gemini',
+                        style: TextStyle(
+                            fontSize: 11, color: AppTheme.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        centerTitle: false,
       ),
       body: Column(
         children: [
+          SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight),
           Expanded(
             child: ListView.builder(
               controller: _scrollCtrl,
-              padding: const EdgeInsets.all(AppTheme.lg),
-              itemCount: _messages.length + (_typing ? 1 : 0),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              itemCount: _messages.length + (busy ? 1 : 0),
               itemBuilder: (ctx, i) {
-                if (_typing && i == _messages.length) {
-                  return const _TypingIndicator();
+                if (busy && i == _messages.length) {
+                  return _isTranscribingVoice
+                      ? const _TranscribingVoiceBanner()
+                      : const _TypingIndicator();
                 }
                 return _MessageBubble(msg: _messages[i]);
               },
             ),
           ),
-          if (_messages.length <= 1)
+          if (_messages.length <= 2 && !_isRecordingVoice)
             _QuickPrompts(prompts: _quickPrompts, onTap: _send),
-          _InputBar(
+          _ChatInputBar(
             ctrl: _msgCtrl,
-            typing: _typing,
-            onSend: _send,
+            busy: busy,
+            isRecording: _isRecordingVoice,
+            voiceLevel: _voiceLevel,
+            onSend: () => _send(),
+            onVoiceToggle: _toggleVoice,
+            onVoiceCancel: _cancelVoice,
           ),
         ],
       ),
@@ -237,7 +395,38 @@ Important:
   }
 }
 
-// ── Message Bubble ────────────────────────────────────────────────────────────
+// ── Voice transcribing banner ─────────────────────────────────────────────────
+
+class _TranscribingVoiceBanner extends StatelessWidget {
+  const _TranscribingVoiceBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GlossyPanel(
+        enableBlur: true,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        radius: 16,
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Text('Transcribing your voice…',
+                style: AppTheme.bodyMedium.copyWith(
+                    color: AppTheme.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Message bubble ──────────────────────────────────────────────────────────────
 
 class _MessageBubble extends StatelessWidget {
   final AiChatMessage msg;
@@ -248,23 +437,23 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         mainAxisAlignment:
             isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[
             Container(
-              width: 32,
-              height: 32,
-              margin: const EdgeInsets.only(right: 8, top: 2),
+              width: 28,
+              height: 28,
+              margin: const EdgeInsets.only(right: 6),
               decoration: BoxDecoration(
                 gradient: AppTheme.primaryGradient,
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.smart_toy_rounded,
-                  color: Colors.white, size: 16),
+                  color: Colors.white, size: 14),
             ),
           ],
           Flexible(
@@ -272,54 +461,57 @@ class _MessageBubble extends StatelessWidget {
               onLongPress: () {
                 Clipboard.setData(ClipboardData(text: msg.content));
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Copied to clipboard'),
-                    duration: Duration(seconds: 1)));
+                  content: Text('Copied'),
+                  duration: Duration(seconds: 1),
+                ));
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  gradient:
-                      isUser ? AppTheme.primaryGradient : null,
-                  color: isUser ? null : AppTheme.surfaceColor,
+                  color: isUser
+                      ? AppTheme.primaryColor
+                      : Colors.white.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(16),
-                    topRight: const Radius.circular(16),
-                    bottomLeft:
-                        Radius.circular(isUser ? 16 : 4),
-                    bottomRight:
-                        Radius.circular(isUser ? 4 : 16),
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: Radius.circular(isUser ? 18 : 4),
+                    bottomRight: Radius.circular(isUser ? 4 : 18),
                   ),
-                  border: isUser
-                      ? null
-                      : Border.all(color: AppTheme.dividerColor),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 6,
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: Text(
-                  msg.content,
-                  style: TextStyle(
-                    color: isUser ? Colors.white : AppTheme.textPrimary,
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                ),
+                child: isUser
+                    ? Text(
+                        msg.content,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          height: 1.45,
+                        ),
+                      )
+                    : ClinicalMd(
+                        msg.content,
+                        fontSize: 15,
+                        color: AppTheme.textPrimary,
+                        bulletColor: AppTheme.primaryColor,
+                        selectable: true,
+                      ),
               ),
             ),
           ),
-          if (isUser) const SizedBox(width: 8),
         ],
       ),
     );
   }
 }
 
-// ── Typing Indicator ──────────────────────────────────────────────────────────
+// ── Typing indicator ────────────────────────────────────────────────────────────
 
 class _TypingIndicator extends StatefulWidget {
   const _TypingIndicator();
@@ -335,9 +527,10 @@ class _TypingIndicatorState extends State<_TypingIndicator>
   @override
   void initState() {
     super.initState();
-    _ctrl =
-        AnimationController(vsync: this, duration: const Duration(seconds: 1))
-          ..repeat();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat();
   }
 
   @override
@@ -349,45 +542,33 @@ class _TypingIndicatorState extends State<_TypingIndicator>
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
           Container(
-            width: 32,
-            height: 32,
-            margin: const EdgeInsets.only(right: 8, top: 2),
-            decoration: BoxDecoration(
+            width: 28,
+            height: 28,
+            margin: const EdgeInsets.only(right: 6),
+            decoration: const BoxDecoration(
               gradient: AppTheme.primaryGradient,
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.smart_toy_rounded,
-                color: Colors.white, size: 16),
+                color: Colors.white, size: 14),
           ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceColor,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-                bottomLeft: Radius.circular(4),
-              ),
-              border: Border.all(color: AppTheme.dividerColor),
-            ),
+          GlossyPanel(
+            enableBlur: true,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            radius: 18,
             child: AnimatedBuilder(
               animation: _ctrl,
-              builder: (_, __) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(
-                      3,
-                      (i) => _Dot(
-                          delay: i * 0.2,
-                          animation: _ctrl)),
-                );
-              },
+              builder: (_, __) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(
+                  3,
+                  (i) => _Dot(delay: i * 0.2, animation: _ctrl),
+                ),
+              ),
             ),
           ),
         ],
@@ -427,7 +608,7 @@ class _Dot extends StatelessWidget {
   }
 }
 
-// ── Quick Prompts ─────────────────────────────────────────────────────────────
+// ── Quick prompts ───────────────────────────────────────────────────────────────
 
 class _QuickPrompts extends StatelessWidget {
   final List<String> prompts;
@@ -436,124 +617,180 @@ class _QuickPrompts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          vertical: AppTheme.md, horizontal: AppTheme.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding:
-                const EdgeInsets.only(left: 4, bottom: AppTheme.sm),
-            child: Text('Quick start:',
-                style:
-                    AppTheme.bodySmall.copyWith(fontWeight: FontWeight.w600)),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: prompts
-                  .map((p) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ActionChip(
-                          label: Text(p,
-                              style: const TextStyle(fontSize: 12)),
-                          onPressed: () => onTap(p),
-                          backgroundColor: AppTheme.surfaceColor,
-                          side: const BorderSide(
-                              color: AppTheme.primaryColor),
-                          labelStyle:
-                              const TextStyle(color: AppTheme.primaryColor),
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ),
-        ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: prompts
+            .map(
+              (p) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ActionChip(
+                  label: Text(p, style: const TextStyle(fontSize: 12)),
+                  onPressed: () => onTap(p),
+                  backgroundColor: Colors.white.withValues(alpha: 0.9),
+                  side: BorderSide(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                  ),
+                  labelStyle: const TextStyle(color: AppTheme.primaryColor),
+                ),
+              ),
+            )
+            .toList(),
       ),
     );
   }
 }
 
-// ── Input Bar ─────────────────────────────────────────────────────────────────
+// ── Chat input (text + Deepgram voice) ──────────────────────────────────────────
 
-class _InputBar extends StatelessWidget {
+class _ChatInputBar extends StatelessWidget {
   final TextEditingController ctrl;
-  final bool typing;
+  final bool busy;
+  final bool isRecording;
+  final double voiceLevel;
   final VoidCallback onSend;
+  final VoidCallback onVoiceToggle;
+  final VoidCallback onVoiceCancel;
 
-  const _InputBar({
+  const _ChatInputBar({
     required this.ctrl,
-    required this.typing,
+    required this.busy,
+    required this.isRecording,
+    required this.voiceLevel,
     required this.onSend,
+    required this.onVoiceToggle,
+    required this.onVoiceCancel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.lg, vertical: AppTheme.md),
-      decoration: const BoxDecoration(
-        color: AppTheme.surfaceColor,
-        border: Border(top: BorderSide(color: AppTheme.dividerColor)),
+    final hasText = ctrl.text.trim().isNotEmpty;
+
+    return GlassBar(
+      padding: EdgeInsets.fromLTRB(
+        12,
+        10,
+        12,
+        10 + MediaQuery.paddingOf(context).bottom,
       ),
-      child: Row(
-        children: [
-          Expanded(
+      child: isRecording ? _recordingUI() : _textUI(hasText),
+    );
+  }
+
+  Widget _textUI(bool hasText) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _roundButton(
+          onPressed: busy ? null : onVoiceToggle,
+          color: AppTheme.primaryColor,
+          icon: Icons.mic_rounded,
+          iconColor: Colors.white,
+          tooltip: 'Voice message',
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppTheme.borderColor),
+            ),
             child: TextField(
               controller: ctrl,
               maxLines: 4,
               minLines: 1,
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
-                hintText: 'Describe your symptoms...',
+                hintText: 'Type a message…',
                 hintStyle: AppTheme.bodyMedium
                     .copyWith(color: AppTheme.textTertiary),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide:
-                      const BorderSide(color: AppTheme.dividerColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide:
-                      const BorderSide(color: AppTheme.dividerColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: const BorderSide(
-                      color: AppTheme.primaryColor, width: 2),
-                ),
+                border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
+                  horizontal: 16,
+                  vertical: 10,
+                ),
               ),
-              onSubmitted: (_) => onSend(),
+              onSubmitted: (_) {
+                if (hasText && !busy) onSend();
+              },
             ),
           ),
-          const SizedBox(width: AppTheme.sm),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              gradient: typing ? null : AppTheme.primaryGradient,
-              color: typing ? AppTheme.dividerColor : null,
-              shape: BoxShape.circle,
+        ),
+        const SizedBox(width: 8),
+        _roundButton(
+          onPressed: busy || !hasText ? null : onSend,
+          color: hasText ? AppTheme.primaryColor : AppTheme.surfaceVariant,
+          icon: Icons.send_rounded,
+          iconColor: hasText ? Colors.white : AppTheme.textTertiary,
+          tooltip: 'Send',
+        ),
+      ],
+    );
+  }
+
+  Widget _recordingUI() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              onPressed: onVoiceCancel,
+              icon: const Icon(Icons.close_rounded, color: AppTheme.dangerColor),
             ),
-            child: IconButton(
-              onPressed: typing ? null : onSend,
-              icon: typing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppTheme.textSecondary))
-                  : const Icon(Icons.send_rounded,
-                      color: Colors.white, size: 20),
+            Expanded(
+              child: AudioSignalBox(
+                isActive: true,
+                audioLevel: voiceLevel,
+                height: 48,
+                color: AppTheme.primaryColor,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            _roundButton(
+              onPressed: onVoiceToggle,
+              color: AppTheme.primaryColor,
+              icon: Icons.stop_rounded,
+              iconColor: Colors.white,
+              size: 52,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Listening… tap stop to send',
+          style: AppTheme.labelSmall.copyWith(color: AppTheme.primaryColor),
+        ),
+      ],
+    );
+  }
+
+  Widget _roundButton({
+    required VoidCallback? onPressed,
+    required Color color,
+    required IconData icon,
+    required Color iconColor,
+    double size = 44,
+    String? tooltip,
+  }) {
+    final btn = Material(
+      color: color,
+      shape: const CircleBorder(),
+      elevation: onPressed != null ? 3 : 0,
+      shadowColor: AppTheme.primaryColor.withValues(alpha: 0.3),
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(icon, color: iconColor, size: 24),
+        ),
       ),
     );
+    if (tooltip == null) return btn;
+    return Tooltip(message: tooltip, child: btn);
   }
 }

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -13,31 +12,20 @@ import 'firebase_bootstrap_service.dart';
 import 'firestore_service.dart';
 
 class AuthService {
-  static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
-  static Future<void>? _googleSignInInitialization;
+  // google_sign_in v6 — create a single instance with both client IDs.
+  // clientId  → used on iOS/macOS (native OAuth client)
+  // serverClientId → used on Android (web/server client for ID token)
+  static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId:
+        '873559957687-emljucvb770bsvosgcbq81bajcbmfn7l.apps.googleusercontent.com',
+    serverClientId:
+        '873559957687-41ubt16p8uggr8qoqal06umdfnhnpbt4.apps.googleusercontent.com',
+  );
 
-  // Server (web) client ID used by Android for server-side auth flows.
-  static const String _androidServerClientId =
-      '873559957687-41ubt16p8uggr8qoqal06umdfnhnpbt4.apps.googleusercontent.com';
+  // ── Firebase helpers ──────────────────────────────────────────────────────
 
-  // iOS native client ID — read from firebase_options to avoid needing
-  // GoogleService-Info.plist in the Xcode project bundle.
-  static const String _iosClientId =
-      '873559957687-emljucvb770bsvosgcbq81bajcbmfn7l.apps.googleusercontent.com';
-
-  Future<void> _ensureGoogleSignInInitialized() {
-    return _googleSignInInitialization ??= () async {
-      await _googleSignIn.initialize(
-        serverClientId: Platform.isAndroid ? _androidServerClientId : null,
-        clientId: Platform.isIOS || Platform.isMacOS ? _iosClientId : null,
-      );
-    }();
-  }
-
-  Stream<User?> authStateChanges() {
-    final auth = _auth;
-    return auth?.authStateChanges() ?? const Stream<User?>.empty();
-  }
+  Stream<User?> authStateChanges() =>
+      _auth?.authStateChanges() ?? const Stream<User?>.empty();
 
   User? get currentUser => _auth?.currentUser;
 
@@ -58,81 +46,71 @@ class AuthService {
     if (auth == null) {
       throw AppException(
         code: 'firebase-not-configured',
-        message: 'Firebase is not configured yet. Set FIREBASE_ENABLED=true after setup.',
+        message: 'Firebase is not configured. Please check your setup.',
       );
     }
     return auth;
   }
 
+  // ── Google Sign-In ────────────────────────────────────────────────────────
+
   Future<UserCredential> signInWithGoogle() async {
-    try {
-      final auth = _requireAuth();
-      await _ensureGoogleSignInInitialized();
+    final auth = _requireAuth();
 
-      if (kDebugMode) {
-        debugPrint('Starting Google Sign-In...');
-      }
+    if (kDebugMode) debugPrint('[Auth] Starting Google Sign-In...');
 
-      final googleUser = await _googleSignIn.authenticate();
+    // signIn() shows the account picker on all platforms (iOS, Android, web).
+    // Returns null if the user cancels.
+    final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
-      if (kDebugMode) {
-        debugPrint('Google Sign-In successful: ${googleUser.email}');
-      }
-
-      final googleAuth = googleUser.authentication;
-      final idToken = googleAuth.idToken;
-
-      if (idToken == null) {
-        if (kDebugMode) {
-          debugPrint('Google authentication idToken is null');
-        }
-        throw AppException(
-          code: 'google-auth-failed',
-          message: 'Failed to get Google authentication tokens.',
-        );
-      }
-
-      final credential = GoogleAuthProvider.credential(
-        idToken: idToken,
-      );
-
-      final userCredential = await auth.signInWithCredential(credential);
-
-      await userCredential.user?.getIdToken(true);
-      
-      if (kDebugMode) {
-        debugPrint('Firebase Sign-In successful: ${userCredential.user?.email}');
-      }
-
-      return userCredential;
-    } on PlatformException catch (error) {
-      final message = (error.message ?? error.code).toLowerCase();
-      if (message.contains('developer_error') || message.contains('10')) {
-        throw AppException(
-          code: 'google-developer-error',
-          message:
-              'Google Sign-In configuration mismatch detected. Verify package name, SHA-1/SHA-256, and reinstall app after refreshing google-services.json.',
-        );
-      }
-
+    if (googleUser == null) {
+      // User dismissed the account picker.
       throw AppException(
-        code: 'google-sign-in-platform-error',
-        message: 'Google Sign-In failed on this device. Please retry.',
-        cause: error,
+        code: 'google-sign-in-canceled',
+        message: 'Sign-in was cancelled.',
       );
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('Google Sign-In error: $error');
-      }
-      rethrow;
     }
+
+    if (kDebugMode) debugPrint('[Auth] Google account: ${googleUser.email}');
+
+    final GoogleSignInAuthentication googleAuth =
+        await googleUser.authentication;
+
+    final String? idToken = googleAuth.idToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw AppException(
+        code: 'google-auth-no-token',
+        message:
+            'Could not get a sign-in token from Google. Please try again.',
+      );
+    }
+
+    final OAuthCredential credential =
+        GoogleAuthProvider.credential(idToken: idToken);
+
+    final UserCredential userCredential =
+        await auth.signInWithCredential(credential).timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => throw AppException(
+        code: 'firebase-sign-in-timeout',
+        message: 'Sign-in timed out. Check your internet connection.',
+      ),
+    );
+
+    if (kDebugMode) {
+      debugPrint('[Auth] Firebase sign-in OK: ${userCredential.user?.email}');
+    }
+
+    return userCredential;
   }
 
+  // ── Apple Sign-In ─────────────────────────────────────────────────────────
+
   Future<UserCredential> signInWithApple() async {
-    if (!Platform.isIOS) {
+    if (!Platform.isIOS && !Platform.isMacOS) {
       throw AppException(
         code: 'apple-not-supported',
-        message: 'Apple Sign-In is available on iOS only.',
+        message: 'Apple Sign-In is only available on iOS.',
       );
     }
 
@@ -153,78 +131,17 @@ class AuthService {
     return auth.signInWithCredential(oauthCredential);
   }
 
+  // ── Sign Out ──────────────────────────────────────────────────────────────
+
   Future<void> signOut() async {
-    try {
-      if (kDebugMode) {
-        debugPrint('Signing out...');
-      }
+    await FirestoreService.clearAllCaches();
+    ApiCredentialsService.instance.clearCache();
 
-      // Clear caches immediately (await disk cleanup too)
-      await FirestoreService.clearAllCaches();
-      ApiCredentialsService.instance.clearCache();
+    await Future.wait<void>([
+      _auth?.signOut().catchError((_) {}) ?? Future.value(),
+      _googleSignIn.signOut().catchError((_) => null),
+    ]).timeout(const Duration(seconds: 10), onTimeout: () => []);
 
-      // Run Firebase and Google sign out in parallel for speed
-      try {
-        await Future.wait([
-          _signOutFromFirebase(),
-          _signOutFromGoogle(),
-        ]).timeout(const Duration(seconds: 10));
-      } catch (e) {
-        // Continue even if one fails
-        if (kDebugMode) {
-          debugPrint('Sign out operation error: $e');
-        }
-      }
-
-      if (kDebugMode) {
-        debugPrint('Sign out successful - all caches cleared');
-      }
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('Sign out error: $error');
-      }
-      rethrow;
-    }
-  }
-
-  /// Sign out from Firebase authentication
-  Future<void> _signOutFromFirebase() async {
-    try {
-      final auth = _auth;
-      if (auth != null) {
-        await auth.signOut().timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            if (kDebugMode) {
-              debugPrint('Firebase sign out timeout, continuing...');
-            }
-          },
-        );
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Firebase sign out error: $e');
-      }
-    }
-  }
-
-  /// Sign out from Google (non-critical)
-  Future<void> _signOutFromGoogle() async {
-    try {
-      // Add timeout to prevent hanging
-      await _googleSignIn.signOut().timeout(
-        const Duration(seconds: 3),
-        onTimeout: () {
-          if (kDebugMode) {
-            debugPrint('Google sign out timeout, continuing...');
-          }
-        },
-      );
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Google sign out error: $e');
-      }
-      // Don't throw - this is non-critical
-    }
+    if (kDebugMode) debugPrint('[Auth] Signed out.');
   }
 }

@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
+import '../../features/insurance/insurance_screen.dart';
+import '../../features/profile/health_profile_screen.dart';
+import '../../features/records/records_vault_screen.dart';
+import '../../features/symptom_journal/symptom_journal_screen.dart';
 import '../../theme/app_theme.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -13,7 +17,11 @@ class HomeDashboardScreen extends StatefulWidget {
 }
 
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
-  int _tab = 0;
+  int _navIndex = 0;
+
+  void _go(String route) => Navigator.pushNamed(context, route);
+
+  void _onNav(int index) => setState(() => _navIndex = index);
 
   @override
   void initState() {
@@ -28,78 +36,274 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       body: IndexedStack(
-        index: _tab,
-        children: const [
-          _HomeTab(),
-          _PlaceholderTab(label: 'Records'),
-          _PlaceholderTab(label: 'Insurance'),
-          _PlaceholderTab(label: 'Profile'),
+        index: _navIndex,
+        children: [
+          _HomeTab(
+            onProfile: () => _onNav(4),
+            onAiChat: () => _go(AppRouter.aiChat),
+            onSymptomJournal: () => _onNav(1),
+            onHealthProfile: () => _onNav(4),
+            onMedications: () => _go(AppRouter.medications),
+            onRecords: () => _onNav(2),
+            onInsurance: () => _onNav(3),
+            onNewClaim: () => _go(AppRouter.newClaim),
+            onClaims: () => _go(AppRouter.claims),
+          ),
+          const SymptomJournalScreen(),
+          const RecordsVaultScreen(),
+          const InsuranceScreen(),
+          const HealthProfileScreen(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) {
-          if (i == 1) {
-            Navigator.pushNamed(context, AppRouter.recordsVault);
-            return;
-          }
-          if (i == 2) {
-            Navigator.pushNamed(context, AppRouter.insurance);
-            return;
-          }
-          if (i == 3) {
-            Navigator.pushNamed(context, AppRouter.healthProfile);
-            return;
-          }
-          setState(() => _tab = i);
-        },
+      floatingActionButton: _navIndex == 0
+          ? _GlossyFab(onTap: () => _go(AppRouter.aiChat))
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      bottomNavigationBar: GlossyBottomNav(
+        selectedIndex: _navIndex,
+        onSelect: _onNav,
         destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Home'),
-          NavigationDestination(
-              icon: Icon(Icons.folder_outlined),
-              selectedIcon: Icon(Icons.folder_rounded),
-              label: 'Records'),
-          NavigationDestination(
-              icon: Icon(Icons.shield_outlined),
-              selectedIcon: Icon(Icons.shield_rounded),
-              label: 'Insurance'),
-          NavigationDestination(
-              icon: Icon(Icons.person_outline_rounded),
-              selectedIcon: Icon(Icons.person_rounded),
-              label: 'Profile'),
+          GlossyNavDestination(
+            icon: Icons.home_outlined,
+            activeIcon: Icons.home_rounded,
+            label: 'Home',
+          ),
+          GlossyNavDestination(
+            icon: Icons.edit_note_outlined,
+            activeIcon: Icons.edit_note_rounded,
+            label: 'Journal',
+          ),
+          GlossyNavDestination(
+            icon: Icons.folder_outlined,
+            activeIcon: Icons.folder_rounded,
+            label: 'Records',
+          ),
+          GlossyNavDestination(
+            icon: Icons.shield_outlined,
+            activeIcon: Icons.shield_rounded,
+            label: 'Insurance',
+          ),
+          GlossyNavDestination(
+            icon: Icons.person_outline_rounded,
+            activeIcon: Icons.person_rounded,
+            label: 'Profile',
+          ),
         ],
-        backgroundColor: AppTheme.surfaceColor,
-        elevation: 0,
-        indicatorColor: AppTheme.primaryColor.withValues(alpha: 0.12),
       ),
     );
   }
 }
 
-// ── Home Tab ──────────────────────────────────────────────────────────────────
-
 class _HomeTab extends StatelessWidget {
-  const _HomeTab();
+  final VoidCallback onProfile;
+  final VoidCallback onAiChat;
+  final VoidCallback onSymptomJournal;
+  final VoidCallback onHealthProfile;
+  final VoidCallback onMedications;
+  final VoidCallback onRecords;
+  final VoidCallback onInsurance;
+  final VoidCallback onNewClaim;
+  final VoidCallback onClaims;
+
+  const _HomeTab({
+    required this.onProfile,
+    required this.onAiChat,
+    required this.onSymptomJournal,
+    required this.onHealthProfile,
+    required this.onMedications,
+    required this.onRecords,
+    required this.onInsurance,
+    required this.onNewClaim,
+    required this.onClaims,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _GreetingHeader()),
-        SliverToBoxAdapter(child: _HeroCard()),
-        SliverToBoxAdapter(child: _QuickActionsGrid()),
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
-      ],
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFE8F0FA), Color(0xFFF2F2F7)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(child: _Header(onProfile: onProfile)),
+            SliverToBoxAdapter(child: _AiPromptCard(onTap: onAiChat)),
+            SliverToBoxAdapter(child: _HealthOverview(onEdit: onHealthProfile)),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            SliverToBoxAdapter(
+              child: _FeatureSection(
+                label: 'AI & DAILY CARE',
+                items: [
+                  _MenuItem(
+                    icon: Icons.psychology_outlined,
+                    iconBg: const Color(0xFFE8F2FF),
+                    iconColor: AppTheme.primaryColor,
+                    title: 'AI Health Assistant',
+                    subtitle: 'Describe symptoms — get guidance from Gemini',
+                    onTap: onAiChat,
+                  ),
+                  _MenuItem(
+                    icon: Icons.calendar_today_outlined,
+                    iconBg: const Color(0xFFF2EEFF),
+                    iconColor: AppTheme.secondaryColor,
+                    title: 'Symptom Journal',
+                    subtitle: 'Log daily symptoms & AI trend analysis',
+                    onTap: onSymptomJournal,
+                  ),
+                ],
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _FeatureSection(
+                label: 'YOUR HEALTH DATA',
+                items: [
+                  _MenuItem(
+                    icon: Icons.person_outline_rounded,
+                    iconBg: const Color(0xFFE8F2FF),
+                    iconColor: AppTheme.primaryColor,
+                    title: 'Health Profile',
+                    subtitle: 'Allergies, food allergies, past diseases, contacts',
+                    onTap: onHealthProfile,
+                  ),
+                  _MenuItem(
+                    icon: Icons.medication_outlined,
+                    iconBg: const Color(0xFFE8FAF0),
+                    iconColor: AppTheme.successColor,
+                    title: 'Medications',
+                    subtitle: 'Active & past medicines, dosage, doctor notes',
+                    onTap: onMedications,
+                  ),
+                ],
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _FeatureSection(
+                label: 'REPORTS & DOCUMENTS',
+                items: [
+                  _MenuItem(
+                    icon: Icons.document_scanner_outlined,
+                    iconBg: const Color(0xFFFFF4E6),
+                    iconColor: AppTheme.warningColor,
+                    title: 'Scan & Analyze Reports',
+                    subtitle: 'Camera or gallery — Gemini summarizes results',
+                    onTap: onRecords,
+                  ),
+                  _MenuItem(
+                    icon: Icons.folder_open_outlined,
+                    iconBg: const Color(0xFFE8F6FC),
+                    iconColor: AppTheme.infoColor,
+                    title: 'Records Vault',
+                    subtitle: 'Prescriptions, lab reports & medical files',
+                    onTap: onRecords,
+                  ),
+                ],
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _FeatureSection(
+                label: 'INSURANCE & CLAIMS',
+                items: [
+                  _MenuItem(
+                    icon: Icons.shield_outlined,
+                    iconBg: const Color(0xFFFFF4E6),
+                    iconColor: AppTheme.warningColor,
+                    title: 'Insurance Policies',
+                    subtitle: 'Health & term insurance details in one place',
+                    onTap: onInsurance,
+                  ),
+                  _MenuItem(
+                    icon: Icons.add_chart_outlined,
+                    iconBg: const Color(0xFFE8F2FF),
+                    iconColor: AppTheme.primaryColor,
+                    title: 'File a Claim',
+                    subtitle: 'AI prepares your claim report for submission',
+                    onTap: onNewClaim,
+                  ),
+                  _MenuItem(
+                    icon: Icons.receipt_long_outlined,
+                    iconBg: const Color(0xFFF2F2F7),
+                    iconColor: AppTheme.textSecondary,
+                    title: 'My Claims',
+                    subtitle: 'Track status — fight rejections with AI legal help',
+                    onTap: onClaims,
+                    showDivider: false,
+                  ),
+                ],
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          ],
+        ),
+      ),
     );
   }
 }
 
-// ── Greeting Header ───────────────────────────────────────────────────────────
+class _GlossyFab extends StatelessWidget {
+  final VoidCallback onTap;
 
-class _GreetingHeader extends StatelessWidget {
+  const _GlossyFab({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8, right: 4),
+      decoration: BoxDecoration(
+        gradient: AppTheme.fabGradient,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withValues(alpha: 0.4),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(28),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Ask AI',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
+class _Header extends StatelessWidget {
+  final VoidCallback onProfile;
+
+  const _Header({required this.onProfile});
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<HealthDataProvider>();
@@ -109,40 +313,42 @@ class _GreetingHeader extends StatelessWidget {
         : hour < 17
             ? 'Good afternoon'
             : 'Good evening';
+    final initial = provider.displayName.isNotEmpty
+        ? provider.displayName[0].toUpperCase()
+        : 'U';
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(
-          AppTheme.xl, AppTheme.xl + 16, AppTheme.xl, AppTheme.md),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '$greeting,',
-                  style: AppTheme.bodyMedium
-                      .copyWith(color: AppTheme.textSecondary),
-                ),
+                Text(greeting, style: AppTheme.labelMedium),
+                const SizedBox(height: 4),
                 Text(
                   provider.displayName,
-                  style: AppTheme.headingLarge.copyWith(height: 1.1),
+                  style: AppTheme.headingLarge,
                 ),
               ],
             ),
           ),
+          _GlossyIconButton(
+            icon: Icons.notifications_none_rounded,
+            onTap: () {},
+          ),
+          const SizedBox(width: 10),
           GestureDetector(
-            onTap: () =>
-                Navigator.pushNamed(context, AppRouter.healthProfile),
+            onTap: onProfile,
             child: CircleAvatar(
               radius: 22,
-              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.12),
+              backgroundColor: AppTheme.primaryColor,
               child: Text(
-                provider.displayName.isNotEmpty
-                    ? provider.displayName[0].toUpperCase()
-                    : 'U',
+                initial,
                 style: const TextStyle(
-                  color: AppTheme.primaryColor,
+                  color: Colors.white,
                   fontWeight: FontWeight.w700,
                   fontSize: 18,
                 ),
@@ -155,162 +361,251 @@ class _GreetingHeader extends StatelessWidget {
   }
 }
 
-// ── Hero Card — AI Chat ───────────────────────────────────────────────────────
+// ── AI prompt ─────────────────────────────────────────────────────────────────
 
-class _HeroCard extends StatelessWidget {
+class _AiPromptCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AiPromptCard({required this.onTap});
+
   @override
   Widget build(BuildContext context) {
-    return GlossyCard(
-      gradient: AppTheme.primaryGradient,
-      margin: const EdgeInsets.symmetric(
-          horizontal: AppTheme.xl, vertical: AppTheme.sm),
-      padding: const EdgeInsets.all(AppTheme.xl),
-      onTap: () => Navigator.pushNamed(context, AppRouter.aiChat),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      child: GlossyCard(
+        gradient: AppTheme.primaryGradient,
+        borderRadius: BorderRadius.circular(18),
+        padding: const EdgeInsets.all(18),
+        onTap: onTap,
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+              ),
+              child: const Icon(
+                Icons.mic_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'What\'s bothering you?',
+                    style: AppTheme.headingSmall.copyWith(
+                      color: Colors.white,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Chat or speak — voice powered by Deepgram',
+                    style: AppTheme.bodySmall.copyWith(
+                      color: Colors.white.withValues(alpha: 0.92),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white.withValues(alpha: 0.9),
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Health overview grid ──────────────────────────────────────────────────────
+
+class _HealthOverview extends StatelessWidget {
+  final VoidCallback onEdit;
+
+  const _HealthOverview({required this.onEdit});
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = context.watch<HealthDataProvider>().profile;
+    final allergyCount = profile?.allAllergies.length ?? 0;
+    final conditionCount =
+        (profile?.pastDiseases.length ?? 0) +
+        (profile?.chronicConditions.length ?? 0);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Health at a glance', style: AppTheme.headingSmall),
+              const Spacer(),
+              TextButton(
+                onPressed: onEdit,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primaryColor,
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Edit'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricTile(
+                  label: 'Blood',
+                  value: profile?.bloodGroup.isNotEmpty == true
+                      ? profile!.bloodGroup
+                      : '—',
+                  icon: Icons.water_drop_outlined,
+                  iconBg: const Color(0xFFFFEBEA),
+                  iconColor: AppTheme.dangerColor,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MetricTile(
+                  label: 'BMI',
+                  value: profile != null && profile.bmi > 0
+                      ? profile.bmi.toStringAsFixed(1)
+                      : '—',
+                  icon: Icons.monitor_weight_outlined,
+                  iconBg: const Color(0xFFE8F2FF),
+                  iconColor: AppTheme.primaryColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricTile(
+                  label: 'Allergies',
+                  value: '$allergyCount',
+                  icon: Icons.warning_amber_outlined,
+                  iconBg: const Color(0xFFFFF4E6),
+                  iconColor: AppTheme.warningColor,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MetricTile(
+                  label: 'Conditions',
+                  value: '$conditionCount',
+                  icon: Icons.history_edu_outlined,
+                  iconBg: const Color(0xFFF2EEFF),
+                  iconColor: AppTheme.secondaryColor,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+
+  const _MetricTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlossyPanel(
+      padding: const EdgeInsets.all(14),
+      radius: 14,
+      enableBlur: true,
       child: Row(
         children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 22),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'AI HEALTH ASSISTANT',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppTheme.md),
-                const Text(
-                  'How are you\nfeeling today?',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
+                Text(label, style: AppTheme.labelSmall),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
-                    height: 1.2,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: AppTheme.sm),
-                const Text(
-                  'Describe your symptoms and get\nAI-powered guidance instantly.',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: AppTheme.lg),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppTheme.lg, vertical: AppTheme.sm),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: AppTheme.mediumRadius,
-                  ),
-                  child: const Text(
-                    'Start chat →',
-                    style: TextStyle(
-                      color: AppTheme.primaryColor,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: AppTheme.lg),
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.smart_toy_rounded,
-                color: Colors.white, size: 36),
-          ),
         ],
       ),
     );
   }
 }
 
-// ── Quick Actions Grid ────────────────────────────────────────────────────────
+// ── Feature sections ──────────────────────────────────────────────────────────
 
-class _QuickActionsGrid extends StatelessWidget {
+class _FeatureSection extends StatelessWidget {
+  final String label;
+  final List<_MenuItem> items;
+
+  const _FeatureSection({required this.label, required this.items});
+
   @override
   Widget build(BuildContext context) {
-    final actions = [
-      _Action(
-        icon: Icons.format_list_bulleted_rounded,
-        label: 'Symptom\nJournal',
-        color: const Color(0xFF7C3AED),
-        route: AppRouter.symptomJournal,
-      ),
-      _Action(
-        icon: Icons.medication_rounded,
-        label: 'Medication\nTracker',
-        color: AppTheme.surgeryColor,
-        route: AppRouter.medications,
-      ),
-      _Action(
-        icon: Icons.document_scanner_rounded,
-        label: 'Scan\nReport',
-        color: AppTheme.secondaryColor,
-        route: AppRouter.recordsVault,
-      ),
-      _Action(
-        icon: Icons.verified_user_rounded,
-        label: 'Insurance\nPolicies',
-        color: AppTheme.warningColor,
-        route: AppRouter.insurance,
-      ),
-      _Action(
-        icon: Icons.receipt_long_rounded,
-        label: 'File a\nClaim',
-        color: AppTheme.infoColor,
-        route: AppRouter.claims,
-      ),
-      _Action(
-        icon: Icons.gavel_rounded,
-        label: 'Fight\nRejection',
-        color: AppTheme.dangerColor,
-        route: AppRouter.claims,
-      ),
-    ];
-
     return Padding(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.xl, vertical: AppTheme.md),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Quick Actions',
-              style: AppTheme.headingSmall.copyWith(fontSize: 17)),
-          const SizedBox(height: AppTheme.md),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              childAspectRatio: 1.0,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 10),
+            child: Text(label, style: AppTheme.sectionLabel),
+          ),
+          GlossyPanel(
+            radius: 20,
+            enableBlur: true,
+            child: Column(
+              children: [
+                for (var i = 0; i < items.length; i++)
+                  items[i].copyWith(
+                    showDivider: i < items.length - 1,
+                  ),
+              ],
             ),
-            itemCount: actions.length,
-            itemBuilder: (ctx, i) => _ActionTile(action: actions[i]),
           ),
         ],
       ),
@@ -318,77 +613,127 @@ class _QuickActionsGrid extends StatelessWidget {
   }
 }
 
-class _Action {
+class _GlossyIconButton extends StatelessWidget {
   final IconData icon;
-  final String label;
-  final Color color;
-  final String route;
-  const _Action({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.route,
-  });
-}
+  final VoidCallback onTap;
 
-class _ActionTile extends StatelessWidget {
-  final _Action action;
-  const _ActionTile({required this.action});
+  const _GlossyIconButton({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, action.route),
+      onTap: onTap,
       child: Container(
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
-          borderRadius: AppTheme.mediumRadius,
-          border: Border.all(color: AppTheme.dividerColor),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: AppTheme.cardShadow,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: action.color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(action.icon, color: action.color, size: 22),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              action.label,
-              textAlign: TextAlign.center,
-              style: AppTheme.labelMedium.copyWith(
-                fontSize: 11,
-                color: AppTheme.textPrimary,
-                height: 1.3,
-              ),
-            ),
-          ],
-        ),
+        child: Icon(icon, size: 22, color: AppTheme.textSecondary),
       ),
     );
   }
 }
 
-// ── Placeholder Tab ───────────────────────────────────────────────────────────
+class _MenuItem extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool showDivider;
 
-class _PlaceholderTab extends StatelessWidget {
-  final String label;
-  const _PlaceholderTab({required this.label});
+  const _MenuItem({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.showDivider = true,
+  });
+
+  _MenuItem copyWith({bool? showDivider}) {
+    return _MenuItem(
+      icon: icon,
+      iconBg: iconBg,
+      iconColor: iconColor,
+      title: title,
+      subtitle: subtitle,
+      onTap: onTap,
+      showDivider: showDivider ?? this.showDivider,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Center(child: Text(label));
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: showDivider
+                ? null
+                : const BorderRadius.vertical(
+                    bottom: Radius.circular(16),
+                  ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: iconBg,
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(icon, color: iconColor, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: AppTheme.bodySmall.copyWith(fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppTheme.textTertiary,
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (showDivider)
+          Divider(
+            height: 1,
+            indent: 72,
+            color: AppTheme.dividerColor.withValues(alpha: 0.8),
+          ),
+      ],
+    );
   }
 }

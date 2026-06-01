@@ -46,10 +46,37 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
     'Spouse', 'Parent', 'Sibling', 'Child', 'Friend', 'Other'
   ];
 
+  String? _appliedProfileId;
+
   @override
   void initState() {
     super.initState();
     _initFromProfile(context.read<HealthDataProvider>().profile);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HealthDataProvider>().loadProfile();
+    });
+  }
+
+  void _applyProfileIfNeeded(PatientProfile? p) {
+    if (p == null || _editing || _appliedProfileId == p.id) return;
+    _appliedProfileId = p.id;
+    _firstNameCtrl.text = p.firstName;
+    _lastNameCtrl.text = p.lastName;
+    _heightCtrl.text = p.height > 0 ? '${p.height}' : '';
+    _weightCtrl.text = p.weight > 0 ? '${p.weight}' : '';
+    _phoneCtrl.text = p.contactNumber;
+    _emergencyNameCtrl.text = p.emergencyContactName;
+    _emergencyPhoneCtrl.text = p.emergencyContactPhone;
+    setState(() {
+      _gender = p.gender;
+      _bloodGroup = p.bloodGroup;
+      _emergencyRelation = p.emergencyContactRelation;
+      _dob = p.dateOfBirth.isNotEmpty ? DateTime.tryParse(p.dateOfBirth) : null;
+      _medAllergies = List<String>.from(p.medicalAllergies);
+      _foodAllergies = List<String>.from(p.foodAllergies);
+      _pastDiseases = List<String>.from(p.pastDiseases);
+      _chronicConditions = List<String>.from(p.chronicConditions);
+    });
   }
 
   void _initFromProfile(PatientProfile? p) {
@@ -171,6 +198,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = context.watch<HealthDataProvider>().profile;
+    _applyProfileIfNeeded(profile);
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,

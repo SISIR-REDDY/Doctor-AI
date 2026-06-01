@@ -119,10 +119,9 @@ $summary''';
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _aiTrend = 'Unable to analyze trends at this time.';
-          _loadingTrend = false;
-        });
+        setState(() => _loadingTrend = false);
+        final msg = e.toString().replaceFirst('Exception: ', '').trim();
+        setState(() => _aiTrend = msg.isEmpty ? 'Unable to analyze trends.' : msg);
       }
     }
   }

@@ -4,7 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
 import '../../core/config/firebase_config.dart';
+import '../../core/providers/health_data_provider.dart';
 import '../../features/auth/patient_onboarding_screen.dart';
 import '../../features/home/home_dashboard_screen.dart';
 import '../../services/firebase/api_credentials_service.dart';
@@ -75,9 +78,13 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
       if (kDebugMode) debugPrint('[AuthGate] API keys not ready: $e');
     });
 
-    _firestoreService.loadPatientProfile(user.uid).then((profile) {
+    _firestoreService.loadPatientProfile(user.uid).then((profile) async {
+      if (!mounted) return;
+      await context.read<HealthDataProvider>().loadProfile();
       if (mounted) setState(() => _needsOnboarding = profile == null);
-    }).catchError((_) {
+    }).catchError((_) async {
+      if (!mounted) return;
+      await context.read<HealthDataProvider>().loadProfile();
       if (mounted) setState(() => _needsOnboarding = false);
     });
   }

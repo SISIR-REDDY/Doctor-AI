@@ -1,51 +1,28 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+/// Firebase project settings — API keys are loaded from Firestore, not local files.
 class FirebaseConfig {
-  static String _env(String key, {String fallback = ''}) {
-    try {
-      return dotenv.env[key] ?? fallback;
-    } catch (_) {
-      return fallback;
-    }
-  }
+  static const bool isEnabled = true;
+  static const bool useEmulator = false;
+  static const String firestoreHost = 'localhost';
+  static const int firestorePort = 8080;
+  static const String authHost = 'localhost';
+  static const int authPort = 9099;
+  static const bool fcmEnabled = false;
+  static const String apiKeysCollection = 'app_runtime';
+  static const String apiKeysDocument = 'api_keys';
 
-  static bool get isEnabled =>
-      _env('FIREBASE_ENABLED', fallback: 'true').toLowerCase() == 'true';
-
-  static bool get useEmulator =>
-      _env('FIREBASE_USE_EMULATOR', fallback: 'false').toLowerCase() == 'true';
-
-  static String get firestoreHost =>
-      _env('FIRESTORE_EMULATOR_HOST', fallback: 'localhost');
-
-  static int get firestorePort =>
-      int.tryParse(_env('FIRESTORE_EMULATOR_PORT')) ?? 8080;
-
-  static String get authHost => _env('AUTH_EMULATOR_HOST', fallback: 'localhost');
-
-  static int get authPort => int.tryParse(_env('AUTH_EMULATOR_PORT')) ?? 9099;
-
-  static bool get fcmEnabled =>
-      _env('FCM_ENABLED', fallback: 'false').toLowerCase() == 'true';
-
-  static String get apiKeysCollection =>
-      _env('FIREBASE_KEYS_COLLECTION', fallback: 'app_runtime');
-
-  static String get apiKeysDocument =>
-      _env('FIREBASE_KEYS_DOCUMENT', fallback: 'api_keys');
-
-  static bool get isInitialized => true;
+  static const bool isInitialized = true;
 
   static Future<void> initialize() async {
     if (kDebugMode) {
-      debugPrint('[FirebaseConfig] initialize() is handled by FirebaseBootstrapService.');
+      debugPrint(
+        '[FirebaseConfig] initialize() is handled by FirebaseBootstrapService.',
+      );
     }
   }
 
-  static Future<bool> validateConnection() async {
-    return isEnabled;
-  }
+  static Future<bool> validateConnection() async => isEnabled;
 
   static Map<String, String> getProjectInfo() {
     return <String, String>{

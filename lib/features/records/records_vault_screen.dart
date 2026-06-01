@@ -9,8 +9,10 @@ import 'package:uuid/uuid.dart';
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
+import '../../core/errors/app_error_handler.dart';
 import '../../services/chatbot_service.dart';
 import '../../services/firebase/firestore_service.dart';
+import '../../services/firebase/storage_service.dart';
 import '../../theme/app_theme.dart';
 
 class RecordsVaultScreen extends StatefulWidget {
@@ -448,41 +450,68 @@ Format your response clearly with headings. Use simple language.''';
       if (mounted) {
         setState(() {
           _aiSummary = response;
+          _extractedText = response;
           _analyzing = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _aiSummary = 'AI analysis unavailable. You can still save this record manually.';
+          _aiSummary = '';
+          _extractedText = '';
           _analyzing = false;
         });
+        AppErrorHandler.showSnackBar(context, e);
       }
     }
   }
 
   Future<void> _save() async {
+    if (widget.uid.isEmpty) {
+      AppErrorHandler.showSnackBar(
+        context,
+        Exception('Sign in required to save records.'),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
+      final recordId = const Uuid().v4();
+      String imageUrl = '';
+      final uploaded = await StorageService().uploadDocumentImage(
+        filePath: widget.imagePath,
+        patientId: widget.uid,
+        scanId: recordId,
+      );
+      if (uploaded != null && uploaded.isNotEmpty) {
+        imageUrl = uploaded;
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Image could not be uploaded to cloud. Record saved with local copy only.',
+            ),
+          ),
+        );
+      }
+
       final record = MedicalRecord(
-        id: const Uuid().v4(),
+        id: recordId,
         userId: widget.uid,
         title: _titleCtrl.text.trim().isEmpty
             ? 'Medical Record ${DateFormat('dd MMM yyyy').format(DateTime.now())}'
             : _titleCtrl.text.trim(),
         recordType: _recordType,
         imagePath: widget.imagePath,
+        imageUrl: imageUrl,
         aiSummary: _aiSummary,
         extractedText: _extractedText,
-        isProcessed: true,
+        isProcessed: _aiSummary.isNotEmpty,
       );
       await widget.db.saveMedicalRecord(widget.uid, record);
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/errors/app_error_handler.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/chatbot_service.dart';
@@ -31,14 +32,7 @@ class _NewClaimScreenState extends State<NewClaimScreen> {
 
   DateTime? _admissionDate;
   DateTime? _dischargeDate;
-  String _status = 'pending';
-
-  final _statuses = [
-    'pending',
-    'under_review',
-    'approved',
-    'rejected',
-  ];
+  String? _selectedPolicyId;
 
   @override
   void dispose() {
@@ -100,10 +94,7 @@ Use professional language suitable for submission to the insurer.''';
           await ChatbotService().getGeminiResponse(prompt);
       if (mounted) setState(() => _claimReport = response);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _generatingReport = false);
     }
@@ -123,6 +114,7 @@ Use professional language suitable for submission to the insurer.''';
       final claim = InsuranceClaim(
         id: const Uuid().v4(),
         userId: uid,
+        policyId: _selectedPolicyId ?? '',
         policyNumber: _policyNumCtrl.text.trim(),
         insurer: _insurerCtrl.text.trim(),
         hospitalName: _hospitalCtrl.text.trim(),
@@ -134,16 +126,13 @@ Use professional language suitable for submission to the insurer.''';
             : '',
         diagnosis: _diagnosisCtrl.text.trim(),
         claimAmount: double.tryParse(_amountCtrl.text) ?? 0,
-        claimStatus: _status,
+        claimStatus: 'pending',
         claimReport: _claimReport,
       );
       await _db.saveClaim(uid, claim);
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
-      }
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -151,6 +140,7 @@ Use professional language suitable for submission to the insurer.''';
 
   @override
   Widget build(BuildContext context) {
+    final uid = context.watch<HealthDataProvider>().uid;
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -176,6 +166,54 @@ Use professional language suitable for submission to the insurer.''';
           _Card(children: [
             const Text('Policy Details', style: AppTheme.headingSmall),
             const SizedBox(height: AppTheme.lg),
+            if (uid != null)
+              StreamBuilder<List<InsurancePolicy>>(
+                stream: _db.watchPolicies(uid),
+                builder: (context, snap) {
+                  final policies = snap.data ?? [];
+                  if (policies.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppTheme.md),
+                      child: Text(
+                        'No saved policies. Add one under Insurance, or enter details below.',
+                        style: AppTheme.bodySmall,
+                      ),
+                    );
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppTheme.md),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedPolicyId != null &&
+                              policies.any((p) => p.id == _selectedPolicyId)
+                          ? _selectedPolicyId
+                          : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Link to saved policy',
+                      ),
+                      items: policies
+                          .map(
+                            (p) => DropdownMenuItem(
+                              value: p.id,
+                              child: Text(
+                                '${p.insurer} · ${p.policyNumber}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (id) {
+                        final policy =
+                            policies.firstWhere((p) => p.id == id);
+                        setState(() {
+                          _selectedPolicyId = id;
+                          _insurerCtrl.text = policy.insurer;
+                          _policyNumCtrl.text = policy.policyNumber;
+                        });
+                      },
+                    ),
+                  );
+                },
+              ),
             _TF('Insurance Company *', _insurerCtrl,
                 hint: 'e.g. Star Health'),
             const SizedBox(height: AppTheme.md),
@@ -221,24 +259,6 @@ Use professional language suitable for submission to the insurer.''';
           ]),
           const SizedBox(height: AppTheme.lg),
           _Card(children: [
-            Row(
-              children: [
-                const Expanded(
-                    child: Text('Claim Status',
-                        style: AppTheme.headingSmall)),
-                DropdownButton<String>(
-                  value: _status,
-                  underline: const SizedBox(),
-                  items: _statuses
-                      .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(_statusLabel(s))))
-                      .toList(),
-                  onChanged: (v) => setState(() => _status = v!),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppTheme.md),
             _TF('Additional Notes', _notesCtrl,
                 hint: 'Any relevant details...',
                 maxLines: 3,
@@ -329,16 +349,6 @@ Use professional language suitable for submission to the insurer.''';
         ],
       ),
     );
-  }
-
-  String _statusLabel(String s) {
-    const l = {
-      'pending': 'Pending',
-      'under_review': 'Under Review',
-      'approved': 'Approved',
-      'rejected': 'Rejected',
-    };
-    return l[s] ?? s;
   }
 }
 

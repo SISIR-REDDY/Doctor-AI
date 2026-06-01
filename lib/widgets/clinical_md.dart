@@ -4,8 +4,8 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 /// Renders AI-generated clinical text as formatted markdown.
 ///
 /// Handles the common mess Gemini returns:
-///  - `**bold**` labels
-///  - `- bullet` lists
+///  - `**bold**` section labels
+///  - `- bullet` lists (converts line-start `* ` bullets to `- `)
 ///  - `*italic*` notes
 ///  - bare plain text (no markdown) — renders cleanly as-is
 class ClinicalMd extends StatelessWidget {
@@ -23,6 +23,36 @@ class ClinicalMd extends StatelessWidget {
     this.bulletColor,
     this.selectable = false,
   });
+
+  /// Normalizes Gemini output so [MarkdownBody] renders lists and sections cleanly.
+  static String normalize(String raw) {
+    var s = raw.trim();
+    if (s.isEmpty) return s;
+
+    final lines = s.split('\n');
+    final out = <String>[];
+    for (final line in lines) {
+      final m = RegExp(r'^(\s*)\* (.+)$').firstMatch(line);
+      if (m != null && !line.trimLeft().startsWith('**')) {
+        out.add('${m[1]}- ${m[2]}');
+      } else {
+        final bullet = RegExp(r'^(\s*)•\s+(.+)$').firstMatch(line);
+        if (bullet != null) {
+          out.add('${bullet[1]}- ${bullet[2]}');
+        } else {
+          out.add(line);
+        }
+      }
+    }
+    s = out.join('\n');
+
+    s = s
+        .replaceAll(RegExp(r'```[a-z]*\n?', caseSensitive: false), '')
+        .replaceAll('```', '')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n');
+
+    return s.trim();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,13 +98,7 @@ class ClinicalMd extends StatelessWidget {
       ),
     );
 
-    // Strip any fenced code blocks (```...```) that Gemini occasionally
-    // wraps around structured output — they look like raw triple-backticks.
-    final cleaned = data
-        .replaceAll(RegExp(r'```[a-z]*\n?', caseSensitive: false), '')
-        .replaceAll('```', '')
-        .trim();
-
+    final cleaned = normalize(data);
     if (cleaned.isEmpty) return const SizedBox.shrink();
 
     return MarkdownBody(
