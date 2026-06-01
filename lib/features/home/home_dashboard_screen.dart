@@ -33,62 +33,68 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: IndexedStack(
-        index: _navIndex,
-        children: [
-          _HomeTab(
-            onProfile: () => _onNav(4),
-            onAiChat: () => _go(AppRouter.aiChat),
-            onSymptomJournal: () => _onNav(1),
-            onHealthProfile: () => _onNav(4),
-            onMedications: () => _go(AppRouter.medications),
-            onRecords: () => _onNav(2),
-            onInsurance: () => _onNav(3),
-            onNewClaim: () => _go(AppRouter.newClaim),
-            onClaims: () => _go(AppRouter.claims),
-          ),
-          const SymptomJournalScreen(),
-          const RecordsVaultScreen(),
-          const InsuranceScreen(),
-          const HealthProfileScreen(),
-        ],
-      ),
-      floatingActionButton: _navIndex == 0
-          ? _GlossyFab(onTap: () => _go(AppRouter.aiChat))
-          : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      bottomNavigationBar: GlossyBottomNav(
-        selectedIndex: _navIndex,
-        onSelect: _onNav,
-        destinations: const [
-          GlossyNavDestination(
-            icon: Icons.home_outlined,
-            activeIcon: Icons.home_rounded,
-            label: 'Home',
-          ),
-          GlossyNavDestination(
-            icon: Icons.edit_note_outlined,
-            activeIcon: Icons.edit_note_rounded,
-            label: 'Journal',
-          ),
-          GlossyNavDestination(
-            icon: Icons.folder_outlined,
-            activeIcon: Icons.folder_rounded,
-            label: 'Records',
-          ),
-          GlossyNavDestination(
-            icon: Icons.shield_outlined,
-            activeIcon: Icons.shield_rounded,
-            label: 'Insurance',
-          ),
-          GlossyNavDestination(
-            icon: Icons.person_outline_rounded,
-            activeIcon: Icons.person_rounded,
-            label: 'Profile',
-          ),
-        ],
+    return PopScope(
+      canPop: _navIndex == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _navIndex = 0);
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        body: IndexedStack(
+          index: _navIndex,
+          children: [
+            _HomeTab(
+              onProfile: () => _onNav(4),
+              onAiChat: () => _go(AppRouter.aiChat),
+              onSymptomJournal: () => _onNav(1),
+              onHealthProfile: () => _onNav(4),
+              onMedications: () => _go(AppRouter.medications),
+              onRecords: () => _onNav(2),
+              onInsurance: () => _onNav(3),
+              onNewClaim: () => _go(AppRouter.newClaim),
+              onClaims: () => _go(AppRouter.claims),
+            ),
+            const SymptomJournalScreen(),
+            const RecordsVaultScreen(),
+            const InsuranceScreen(),
+            const HealthProfileScreen(),
+          ],
+        ),
+        floatingActionButton: _navIndex == 0
+            ? _GlossyFab(onTap: () => _go(AppRouter.aiChat))
+            : null,
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        bottomNavigationBar: GlossyBottomNav(
+          selectedIndex: _navIndex,
+          onSelect: _onNav,
+          destinations: const [
+            GlossyNavDestination(
+              icon: Icons.home_outlined,
+              activeIcon: Icons.home_rounded,
+              label: 'Home',
+            ),
+            GlossyNavDestination(
+              icon: Icons.edit_note_outlined,
+              activeIcon: Icons.edit_note_rounded,
+              label: 'Journal',
+            ),
+            GlossyNavDestination(
+              icon: Icons.folder_outlined,
+              activeIcon: Icons.folder_rounded,
+              label: 'Records',
+            ),
+            GlossyNavDestination(
+              icon: Icons.shield_outlined,
+              activeIcon: Icons.shield_rounded,
+              label: 'Insurance',
+            ),
+            GlossyNavDestination(
+              icon: Icons.person_outline_rounded,
+              activeIcon: Icons.person_rounded,
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -122,9 +128,10 @@ class _HomeTab extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFE8F0FA), Color(0xFFF2F2F7)],
+          colors: [Color(0xFFD8E8FF), Color(0xFFEAF0FF), Color(0xFFF0F4FB)],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
+          stops: [0.0, 0.35, 1.0],
         ),
       ),
       child: SafeArea(
@@ -142,7 +149,7 @@ class _HomeTab extends StatelessWidget {
                 items: [
                   _MenuItem(
                     icon: Icons.psychology_outlined,
-                    iconBg: const Color(0xFFE8F2FF),
+                    iconBg: const Color(0xFFCEE5FF),
                     iconColor: AppTheme.primaryColor,
                     title: 'AI Health Assistant',
                     subtitle: 'Describe symptoms — get guidance from Gemini',
@@ -150,7 +157,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   _MenuItem(
                     icon: Icons.calendar_today_outlined,
-                    iconBg: const Color(0xFFF2EEFF),
+                    iconBg: const Color(0xFFE6E0FF),
                     iconColor: AppTheme.secondaryColor,
                     title: 'Symptom Journal',
                     subtitle: 'Log daily symptoms & AI trend analysis',
@@ -165,7 +172,7 @@ class _HomeTab extends StatelessWidget {
                 items: [
                   _MenuItem(
                     icon: Icons.person_outline_rounded,
-                    iconBg: const Color(0xFFE8F2FF),
+                    iconBg: const Color(0xFFCEE5FF),
                     iconColor: AppTheme.primaryColor,
                     title: 'Health Profile',
                     subtitle: 'Allergies, food allergies, past diseases, contacts',
@@ -173,7 +180,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   _MenuItem(
                     icon: Icons.medication_outlined,
-                    iconBg: const Color(0xFFE8FAF0),
+                    iconBg: const Color(0xFFCBF0DC),
                     iconColor: AppTheme.successColor,
                     title: 'Medications',
                     subtitle: 'Active & past medicines, dosage, doctor notes',
@@ -188,7 +195,7 @@ class _HomeTab extends StatelessWidget {
                 items: [
                   _MenuItem(
                     icon: Icons.document_scanner_outlined,
-                    iconBg: const Color(0xFFFFF4E6),
+                    iconBg: const Color(0xFFFFE8C8),
                     iconColor: AppTheme.warningColor,
                     title: 'Scan & Analyze Reports',
                     subtitle: 'Camera or gallery — Gemini summarizes results',
@@ -196,7 +203,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   _MenuItem(
                     icon: Icons.folder_open_outlined,
-                    iconBg: const Color(0xFFE8F6FC),
+                    iconBg: const Color(0xFFC8EDFF),
                     iconColor: AppTheme.infoColor,
                     title: 'Records Vault',
                     subtitle: 'Prescriptions, lab reports & medical files',
@@ -211,7 +218,7 @@ class _HomeTab extends StatelessWidget {
                 items: [
                   _MenuItem(
                     icon: Icons.shield_outlined,
-                    iconBg: const Color(0xFFFFF4E6),
+                    iconBg: const Color(0xFFFFE8C8),
                     iconColor: AppTheme.warningColor,
                     title: 'Insurance Policies',
                     subtitle: 'Health & term insurance details in one place',
@@ -219,7 +226,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   _MenuItem(
                     icon: Icons.add_chart_outlined,
-                    iconBg: const Color(0xFFE8F2FF),
+                    iconBg: const Color(0xFFCEE5FF),
                     iconColor: AppTheme.primaryColor,
                     title: 'File a Claim',
                     subtitle: 'AI prepares your claim report for submission',
@@ -227,7 +234,7 @@ class _HomeTab extends StatelessWidget {
                   ),
                   _MenuItem(
                     icon: Icons.receipt_long_outlined,
-                    iconBg: const Color(0xFFF2F2F7),
+                    iconBg: const Color(0xFFEEEEF5),
                     iconColor: AppTheme.textSecondary,
                     title: 'My Claims',
                     subtitle: 'Track status — fight rejections with AI legal help',
@@ -473,7 +480,7 @@ class _HealthOverview extends StatelessWidget {
                       ? profile!.bloodGroup
                       : '—',
                   icon: Icons.water_drop_outlined,
-                  iconBg: const Color(0xFFFFEBEA),
+                  iconBg: const Color(0xFFFFD8D6),
                   iconColor: AppTheme.dangerColor,
                 ),
               ),
@@ -485,7 +492,7 @@ class _HealthOverview extends StatelessWidget {
                       ? profile.bmi.toStringAsFixed(1)
                       : '—',
                   icon: Icons.monitor_weight_outlined,
-                  iconBg: const Color(0xFFE8F2FF),
+                  iconBg: const Color(0xFFCEE5FF),
                   iconColor: AppTheme.primaryColor,
                 ),
               ),
@@ -499,7 +506,7 @@ class _HealthOverview extends StatelessWidget {
                   label: 'Allergies',
                   value: '$allergyCount',
                   icon: Icons.warning_amber_outlined,
-                  iconBg: const Color(0xFFFFF4E6),
+                  iconBg: const Color(0xFFFFE8C8),
                   iconColor: AppTheme.warningColor,
                 ),
               ),
@@ -509,7 +516,7 @@ class _HealthOverview extends StatelessWidget {
                   label: 'Conditions',
                   value: '$conditionCount',
                   icon: Icons.history_edu_outlined,
-                  iconBg: const Color(0xFFF2EEFF),
+                  iconBg: const Color(0xFFE6E0FF),
                   iconColor: AppTheme.secondaryColor,
                 ),
               ),
