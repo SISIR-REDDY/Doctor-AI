@@ -417,7 +417,7 @@ Formatting rules (required):
         : _currentSession!.title;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFECEFF4),
+      backgroundColor: AppTheme.backgroundColor,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -465,7 +465,7 @@ Formatting rules (required):
                             fontSize: 16, fontWeight: FontWeight.w700)),
                     Text(
                       sessionTitle ?? 'Voice · Deepgram  ·  Gemini',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 11, color: AppTheme.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -637,7 +637,7 @@ class _MessageBubble extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isUser
                       ? AppTheme.primaryColor
-                      : Colors.white.withValues(alpha: 0.95),
+                      : AppTheme.surfaceColor.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(18),
                     topRight: const Radius.circular(18),
@@ -646,10 +646,13 @@ class _MessageBubble extends StatelessWidget {
                     bottomRight:
                         Radius.circular(isUser ? 4 : 18),
                   ),
+                  border: isUser
+                      ? null
+                      : Border.all(color: AppTheme.glassBorder, width: 0.8),
                   boxShadow: [
                     BoxShadow(
-                      color:
-                          Colors.black.withValues(alpha: 0.06),
+                      color: Colors.black
+                          .withValues(alpha: AppTheme.isDark ? 0.25 : 0.06),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -800,7 +803,7 @@ class _QuickPrompts extends StatelessWidget {
                       Text(p, style: const TextStyle(fontSize: 12)),
                   onPressed: () => onTap(p),
                   backgroundColor:
-                      Colors.white.withValues(alpha: 0.9),
+                      AppTheme.surfaceColor.withValues(alpha: 0.9),
                   side: BorderSide(
                       color: AppTheme.primaryColor
                           .withValues(alpha: 0.35)),
@@ -865,7 +868,7 @@ class _ChatInputBar extends StatelessWidget {
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.95),
+              color: AppTheme.surfaceColor.withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppTheme.borderColor),
             ),

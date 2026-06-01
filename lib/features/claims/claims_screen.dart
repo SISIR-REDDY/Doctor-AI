@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/insurance_regions.dart';
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
@@ -117,13 +118,13 @@ class _ClaimCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '₹${NumberFormat('#,##,###').format(claim.claimAmount.toInt())}',
+                  formatMoney(claim.effectiveAmount, claim.currencyCode),
                   style: AppTheme.bodyMedium.copyWith(
                       fontWeight: FontWeight.w700,
                       color: AppTheme.textPrimary),
                 ),
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert_rounded,
+                  icon: Icon(Icons.more_vert_rounded,
                       color: AppTheme.textTertiary, size: 18),
                   onSelected: (v) {
                     if (v == 'delete') onDelete();
@@ -139,16 +140,26 @@ class _ClaimCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppTheme.sm),
+            if (claim.title.isNotEmpty)
+              Text(claim.title,
+                  style: AppTheme.bodyMedium
+                      .copyWith(fontWeight: FontWeight.w700)),
             Text(claim.insurer,
                 style: AppTheme.bodyMedium
                     .copyWith(fontWeight: FontWeight.w600)),
-            Text(claim.hospitalName, style: AppTheme.bodySmall),
-            Text('Diagnosis: ${claim.diagnosis}',
-                style: AppTheme.bodySmall),
+            if (claim.hospitalName.isNotEmpty)
+              Text(claim.hospitalName, style: AppTheme.bodySmall),
+            if (claim.diagnosis.isNotEmpty)
+              Text('Diagnosis: ${claim.diagnosis}',
+                  style: AppTheme.bodySmall),
+            if (claim.expenses.isNotEmpty)
+              Text(
+                  '${claim.expenses.length} bill${claim.expenses.length == 1 ? '' : 's'}',
+                  style: AppTheme.labelSmall),
             const SizedBox(height: AppTheme.sm),
             Row(
               children: [
-                const Icon(Icons.calendar_today_rounded,
+                Icon(Icons.calendar_today_rounded,
                     size: 12, color: AppTheme.textTertiary),
                 const SizedBox(width: 4),
                 Text(
@@ -207,12 +218,12 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.receipt_long_outlined,
+          Icon(Icons.receipt_long_outlined,
               size: 64, color: AppTheme.textTertiary),
           const SizedBox(height: AppTheme.lg),
-          const Text('No claims filed yet', style: AppTheme.headingSmall),
+          Text('No claims filed yet', style: AppTheme.headingSmall),
           const SizedBox(height: AppTheme.sm),
-          const Text(
+          Text(
               'File insurance claims and track their\nstatus here. We\'ll help you fight rejections.',
               style: AppTheme.bodySmall,
               textAlign: TextAlign.center),

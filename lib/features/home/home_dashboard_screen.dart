@@ -126,12 +126,18 @@ class _HomeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFD8E8FF), Color(0xFFEAF0FF), Color(0xFFF0F4FB)],
+          colors: AppTheme.isDark
+              ? const [Color(0xFF16161E), Color(0xFF101015), Color(0xFF0B0B0F)]
+              : const [
+                  Color(0xFFD8E8FF),
+                  Color(0xFFEAF0FF),
+                  Color(0xFFF0F4FB),
+                ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          stops: [0.0, 0.35, 1.0],
+          stops: const [0.0, 0.35, 1.0],
         ),
       ),
       child: SafeArea(
@@ -568,7 +574,7 @@ class _MetricTile extends StatelessWidget {
                 Text(label, style: AppTheme.labelSmall),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: AppTheme.textPrimary,
@@ -708,7 +714,7 @@ class _MenuItem extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: AppTheme.textPrimary,
@@ -724,7 +730,7 @@ class _MenuItem extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right_rounded,
                     color: AppTheme.textTertiary,
                     size: 22,

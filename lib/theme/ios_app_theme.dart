@@ -278,7 +278,7 @@ class IosAppTheme {
     final Map<int, Color> swatch = {};
 
     // Extract RGB values using modern approach
-    final argb = color.value;
+    final argb = color.toARGB32();
     final r = (argb >> 16) & 0xFF;
     final g = (argb >> 8) & 0xFF;
     final b = argb & 0xFF;
@@ -297,7 +297,7 @@ class IosAppTheme {
       );
     }
 
-    return MaterialColor(color.value, swatch);
+    return MaterialColor(color.toARGB32(), swatch);
   }
 }
 

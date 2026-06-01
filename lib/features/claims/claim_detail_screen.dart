@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/insurance_regions.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/chatbot_service.dart';
+import 'add_expense_screen.dart' show kExpenseCategories, kExpenseCategoryIcons;
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -49,32 +51,44 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
     final profile = context.read<HealthDataProvider>().profile;
     final uid = context.read<HealthDataProvider>().uid;
     try {
+      final region = regionByCode(_claim.country);
+      final steps = region.escalationSteps.isEmpty
+          ? '   (use the standard internal-appeal → ombudsman → regulator path)'
+          : region.escalationSteps
+              .asMap()
+              .entries
+              .map((e) => '   ${e.key + 1}. ${e.value}')
+              .join('\n');
 
-      final prompt = '''You are an expert insurance claims advisor and consumer rights attorney in India. Analyze this rejected insurance claim and provide a comprehensive fight strategy.
+      final prompt =
+          '''You are an expert insurance claims advisor and consumer-rights advocate for ${region.name}. Analyze this rejected health insurance claim and give a comprehensive, country-specific strategy to fight it.
 
 Claim Details:
 - Patient: ${profile?.fullName ?? 'Patient'}
-- Insurance Company: ${_claim.insurer}
+- Insurer: ${_claim.insurer}
 - Policy Number: ${_claim.policyNumber}
-- Hospital: ${_claim.hospitalName}
+- Provider/Hospital: ${_claim.hospitalName}
 - Diagnosis: ${_claim.diagnosis}
-- Claim Amount: ₹${_claim.claimAmount.toInt()}
+- Claim Amount: ${formatMoney(_claim.effectiveAmount, _claim.currencyCode)}
 - Rejection Reason: ${reason.isEmpty ? _claim.rejectionReason : reason}
 
-Please provide:
-1. Analysis of the rejection grounds (is it valid or disputable?)
-2. Your rights as a policyholder under IRDAI regulations
-3. Step-by-step escalation strategy:
-   a. Internal appeal to the insurer
-   b. Insurance Ombudsman complaint
-   c. Consumer Forum / NCDRC option
-   d. IRDAI Grievance Cell
-4. Key legal provisions and policy clauses to cite
-5. Evidence and documents to gather
-6. Timeline and deadlines to follow
-7. Probability of success assessment
+Country context — ${region.name} (use this, do NOT give advice for other countries):
+- Regulator: ${region.regulator}
+- Independent dispute body: ${region.ombudsman}
+- Key consumer protections: ${region.keyRights}
+- Typical escalation path:
+$steps
 
-Use clear, actionable language. Be specific about relevant IRDAI regulations and consumer rights laws.''';
+Please provide:
+1. Whether the rejection grounds are valid or disputable, and why
+2. The policyholder's rights in ${region.name}
+3. A step-by-step escalation strategy specific to ${region.name} (reference the regulator, ombudsman and laws above, with deadlines)
+4. Key policy clauses and legal provisions to cite
+5. Evidence and documents to gather
+6. Timelines and deadlines to watch
+7. A realistic probability-of-success assessment
+
+Be specific and accurate for ${region.name}. Use clear, actionable language.''';
 
       final response =
           await ChatbotService().getGeminiResponse(prompt);
@@ -104,28 +118,30 @@ Use clear, actionable language. Be specific about relevant IRDAI regulations and
     final profile = context.read<HealthDataProvider>().profile;
     final uid2 = context.read<HealthDataProvider>().uid;
     try {
+      final region = regionByCode(_claim.country);
 
-      final prompt = '''Write a formal insurance claim appeal letter for the following rejected claim. The letter should be professionally written and ready to send to the insurance company.
+      final prompt =
+          '''Write a formal insurance claim appeal letter for a policyholder in ${region.name}, ready to send to the insurer.
 
 Details:
 - Policyholder: ${profile?.fullName ?? 'The Policyholder'}
-- Insurance Company: ${_claim.insurer}
+- Insurer: ${_claim.insurer}
 - Policy Number: ${_claim.policyNumber}
-- Hospital: ${_claim.hospitalName}
-- Admission to Discharge: ${_claim.admissionDate} to ${_claim.dischargeDate}
+- Provider/Hospital: ${_claim.hospitalName}
+- Service dates: ${_claim.admissionDate}${_claim.dischargeDate.isNotEmpty ? ' to ${_claim.dischargeDate}' : ''}
 - Diagnosis: ${_claim.diagnosis}
-- Rejected Claim Amount: ₹${_claim.claimAmount.toInt()}
+- Rejected Claim Amount: ${formatMoney(_claim.effectiveAmount, _claim.currencyCode)}
 - Rejection Reason: ${_claim.rejectionReason}
 
-Write a formal appeal letter that:
-1. Clearly identifies the claim and rejection
-2. Professionally disputes the rejection grounds
-3. Cites relevant policy terms and IRDAI regulations
-4. Requests reconsideration with urgency
-5. States intention to escalate if not resolved
-6. Is firm but professional in tone
+The letter must:
+1. Clearly identify the claim and the rejection
+2. Professionally dispute the rejection grounds
+3. Cite relevant policy terms and ${region.name} protections (${region.keyRights})
+4. Reference the right to escalate to ${region.ombudsman} and ${region.regulator} if unresolved
+5. Request written reconsideration within a clear, reasonable deadline
+6. Be firm but professional
 
-Format as a proper business letter with proper salutation, body paragraphs, and closing.''';
+Format as a proper business letter (sender block, date, recipient, subject line, salutation, body paragraphs, closing). Use ${region.currencyCode} for amounts. Output only the letter.''';
 
       final response =
           await ChatbotService().getGeminiResponse(prompt);
@@ -210,7 +226,7 @@ Format as a proper business letter with proper salutation, body paragraphs, and 
                         ),
                       ),
                       Text(
-                        '₹${NumberFormat('#,##,###').format(_claim.claimAmount.toInt())}',
+                        formatMoney(_claim.effectiveAmount, _claim.currencyCode),
                         style: AppTheme.headingMedium,
                       ),
                       Text(_claim.insurer, style: AppTheme.bodySmall),
@@ -224,14 +240,18 @@ Format as a proper business letter with proper salutation, body paragraphs, and 
 
           // Claim info
           _InfoSection(title: 'Claim Information', rows: [
-            _InfoRow(Icons.local_hospital_outlined, 'Hospital',
-                _claim.hospitalName),
-            _InfoRow(Icons.medical_information_outlined, 'Diagnosis',
-                _claim.diagnosis),
+            if (_claim.hospitalName.isNotEmpty)
+              _InfoRow(Icons.local_hospital_outlined,
+                  _claim.caseType == 'outpatient' ? 'Provider' : 'Hospital',
+                  _claim.hospitalName),
+            if (_claim.diagnosis.isNotEmpty)
+              _InfoRow(Icons.medical_information_outlined, 'Diagnosis',
+                  _claim.diagnosis),
             _InfoRow(Icons.numbers_rounded, 'Policy Number',
                 _claim.policyNumber.isEmpty ? '—' : _claim.policyNumber),
             if (_claim.admissionDate.isNotEmpty)
-              _InfoRow(Icons.calendar_today_outlined, 'Admission',
+              _InfoRow(Icons.calendar_today_outlined,
+                  _claim.caseType == 'outpatient' ? 'Visit' : 'Admission',
                   _claim.admissionDate),
             if (_claim.dischargeDate.isNotEmpty)
               _InfoRow(Icons.event_available_outlined, 'Discharge',
@@ -240,6 +260,13 @@ Format as a proper business letter with proper salutation, body paragraphs, and 
                 DateFormat('dd MMM yyyy').format(_claim.createdAt)),
           ]),
           const SizedBox(height: AppTheme.lg),
+
+          // Itemized bills
+          if (_claim.expenses.isNotEmpty) ...[
+            _BillsSection(
+                expenses: _claim.expenses, currencyCode: _claim.currencyCode),
+            const SizedBox(height: AppTheme.lg),
+          ],
 
           // Claim report
           if (_claim.claimReport.isNotEmpty) ...[
@@ -279,7 +306,7 @@ Format as a proper business letter with proper salutation, body paragraphs, and 
                     ],
                   ),
                   const SizedBox(height: AppTheme.sm),
-                  const Text(
+                  Text(
                       'Don\'t give up. Our AI will analyze the rejection and give you a step-by-step legal strategy.',
                       style: AppTheme.bodySmall),
                   const SizedBox(height: AppTheme.md),
@@ -513,7 +540,7 @@ class _ContentCardState extends State<_ContentCard> {
                         fontSize: 14)),
               ),
               IconButton(
-                icon: const Icon(Icons.copy_rounded,
+                icon: Icon(Icons.copy_rounded,
                     size: 18, color: AppTheme.textSecondary),
                 onPressed: widget.onCopy,
                 tooltip: 'Copy',
@@ -543,6 +570,83 @@ class _ContentCardState extends State<_ContentCard> {
               ),
             ),
           if (widget.extra != null) widget.extra!,
+        ],
+      ),
+    );
+  }
+}
+
+class _BillsSection extends StatelessWidget {
+  final List<CaseExpense> expenses;
+  final String currencyCode;
+  const _BillsSection({required this.expenses, required this.currencyCode});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = expenses.fold<double>(0, (s, e) => s + e.amount);
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.lg),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        borderRadius: AppTheme.mediumRadius,
+        border: Border.all(color: AppTheme.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Bills (${expenses.length})',
+                    style: AppTheme.headingSmall.copyWith(fontSize: 15)),
+              ),
+              Text(formatMoney(total, currencyCode),
+                  style: AppTheme.headingSmall
+                      .copyWith(fontSize: 15, color: AppTheme.primaryColor)),
+            ],
+          ),
+          const SizedBox(height: AppTheme.sm),
+          for (final e in expenses)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    kExpenseCategoryIcons[e.category] ??
+                        Icons.receipt_long_outlined,
+                    size: 18,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: AppTheme.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          e.vendor.isEmpty
+                              ? (kExpenseCategories[e.category] ?? 'Bill')
+                              : e.vendor,
+                          style: AppTheme.bodyMedium
+                              .copyWith(fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          [
+                            kExpenseCategories[e.category] ?? e.category,
+                            if (e.date.isNotEmpty) e.date,
+                          ].join(' · '),
+                          style: AppTheme.labelSmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(formatMoney(e.amount, currencyCode),
+                      style: AppTheme.bodyMedium
+                          .copyWith(fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
         ],
       ),
     );

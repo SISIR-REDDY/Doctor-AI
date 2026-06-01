@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/insurance_regions.dart';
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
@@ -83,10 +83,14 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = policies.where((p) => p.isActive).length;
-    final totalCoverage = policies
-        .where((p) => p.isActive)
-        .fold<double>(0, (sum, p) => sum + p.coverageAmount);
+    final activePolicies = policies.where((p) => p.isActive).toList();
+    final active = activePolicies.length;
+    final totalCoverage =
+        activePolicies.fold<double>(0, (sum, p) => sum + p.coverageAmount);
+    // Coverage may span policies in different currencies; format the headline
+    // total using the first active policy's currency (best-effort).
+    final headerCurrency =
+        activePolicies.isNotEmpty ? activePolicies.first.currencyCode : '';
 
     return Container(
       padding: const EdgeInsets.all(AppTheme.xl),
@@ -103,7 +107,7 @@ class _SummaryCard extends StatelessWidget {
                 const Text('Total Coverage',
                     style: TextStyle(color: Colors.white70, fontSize: 13)),
                 Text(
-                  '₹${NumberFormat('#,##,###').format(totalCoverage.toInt())}',
+                  formatMoney(totalCoverage, headerCurrency),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -145,7 +149,7 @@ class _PolicyCard extends StatelessWidget {
       required this.onEdit,
       required this.onDelete});
 
-  static const _typeColors = <String, Color>{
+  static Map<String, Color> get _typeColors => <String, Color>{
     'health': AppTheme.successColor,
     'term': AppTheme.infoColor,
     'critical_illness': AppTheme.dangerColor,
@@ -195,14 +199,14 @@ class _PolicyCard extends StatelessWidget {
                     color: AppTheme.textTertiary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text('Inactive',
+                  child: Text('Inactive',
                       style: TextStyle(
                           color: AppTheme.textTertiary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600)),
                 ),
               PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded,
+                icon: Icon(Icons.more_vert_rounded,
                     color: AppTheme.textTertiary, size: 20),
                 onSelected: (v) {
                   if (v == 'edit') onEdit();
@@ -232,15 +236,14 @@ class _PolicyCard extends StatelessWidget {
               Expanded(
                 child: _Stat(
                   label: 'Coverage',
-                  value:
-                      '₹${NumberFormat('#,##,###').format(policy.coverageAmount.toInt())}',
+                  value: formatMoney(policy.coverageAmount, policy.currencyCode),
                 ),
               ),
               Expanded(
                 child: _Stat(
                   label: 'Premium',
                   value:
-                      '₹${NumberFormat('#,##,###').format(policy.premiumAmount.toInt())}/${_shortFreq(policy.premiumFrequency)}',
+                      '${formatMoney(policy.premiumAmount, policy.currencyCode)}/${_shortFreq(policy.premiumFrequency)}',
                 ),
               ),
               if (policy.renewalDate.isNotEmpty)
@@ -256,7 +259,7 @@ class _PolicyCard extends StatelessWidget {
             const SizedBox(height: AppTheme.sm),
             Row(
               children: [
-                const Icon(Icons.person_pin_outlined,
+                Icon(Icons.person_pin_outlined,
                     size: 14, color: AppTheme.textTertiary),
                 const SizedBox(width: 4),
                 Text(
@@ -315,13 +318,13 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.shield_outlined,
+          Icon(Icons.shield_outlined,
               size: 64, color: AppTheme.textTertiary),
           const SizedBox(height: AppTheme.lg),
-          const Text('No insurance policies added',
+          Text('No insurance policies added',
               style: AppTheme.headingSmall),
           const SizedBox(height: AppTheme.sm),
-          const Text('Add your health or term insurance policies\nto keep them organised',
+          Text('Add your health or term insurance policies\nto keep them organised',
               style: AppTheme.bodySmall,
               textAlign: TextAlign.center),
         ],

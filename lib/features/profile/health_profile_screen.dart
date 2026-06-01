@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/providers/health_data_provider.dart';
+import '../../core/providers/theme_controller.dart';
 import '../../models/patient_models.dart';
 import '../../theme/app_theme.dart';
 
@@ -386,6 +387,13 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
           ),
           const SizedBox(height: AppTheme.lg),
 
+          // Appearance
+          const _Section(
+            title: 'Appearance',
+            children: [_AppearanceSelector()],
+          ),
+          const SizedBox(height: AppTheme.lg),
+
           // Sign out
           OutlinedButton.icon(
             onPressed: () async {
@@ -527,7 +535,7 @@ class _Section extends StatelessWidget {
         children: [
           Text(title, style: AppTheme.headingSmall.copyWith(fontSize: 15)),
           const SizedBox(height: AppTheme.md),
-          const Divider(color: AppTheme.dividerColor),
+          Divider(color: AppTheme.dividerColor),
           const SizedBox(height: AppTheme.md),
           ...children,
         ],
@@ -695,6 +703,78 @@ class _ChipSection extends StatelessWidget {
                   .toList(),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Appearance (Light / Dark / System) ───────────────────────────────────────
+
+class _AppearanceSelector extends StatelessWidget {
+  const _AppearanceSelector();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<ThemeController>();
+    const options = [
+      (ThemeMode.light, Icons.light_mode_rounded, 'Light'),
+      (ThemeMode.dark, Icons.dark_mode_rounded, 'Dark'),
+      (ThemeMode.system, Icons.brightness_auto_rounded, 'System'),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceMuted,
+        borderRadius: AppTheme.mediumRadius,
+      ),
+      child: Row(
+        children: options.map((opt) {
+          final selected = controller.themeMode == opt.$1;
+          return Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => controller.setThemeMode(opt.$1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                margin: const EdgeInsets.all(2),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected ? AppTheme.surfaceColor : Colors.transparent,
+                  borderRadius: AppTheme.smallRadius,
+                  boxShadow: selected ? AppTheme.cardShadow : null,
+                  border: selected
+                      ? Border.all(color: AppTheme.glassBorder, width: 0.8)
+                      : null,
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      opt.$2,
+                      size: 20,
+                      color: selected
+                          ? AppTheme.primaryColor
+                          : AppTheme.textTertiary,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      opt.$3,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w500,
+                        color: selected
+                            ? AppTheme.primaryColor
+                            : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

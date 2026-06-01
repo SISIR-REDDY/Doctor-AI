@@ -29,7 +29,7 @@ class ChatHistorySheet extends StatelessWidget {
       minChildSize: 0.4,
       expand: false,
       builder: (ctx, scrollCtrl) => Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppTheme.backgroundColor,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
@@ -61,7 +61,7 @@ class ChatHistorySheet extends StatelessWidget {
                         color: AppTheme.primaryColor, size: 20),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text('Chat History', style: AppTheme.headingSmall),
                   ),
                   TextButton.icon(
@@ -289,7 +289,7 @@ class _EmptyHistory extends StatelessWidget {
                 size: 34, color: AppTheme.primaryColor),
           ),
           const SizedBox(height: 16),
-          const Text('No chat history yet',
+          Text('No chat history yet',
               style: AppTheme.headingSmall),
           const SizedBox(height: 6),
           Text(

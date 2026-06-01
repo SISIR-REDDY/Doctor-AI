@@ -143,7 +143,7 @@ class _BrandHeader extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
+            Text(
               'Clinix',
               style: TextStyle(
                 fontSize: 32,
@@ -369,7 +369,7 @@ class _TrustStrip extends StatelessWidget {
             const SizedBox(width: 5),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w600,
@@ -379,7 +379,7 @@ class _TrustStrip extends StatelessWidget {
           ],
         );
 
-    const dot = SizedBox(
+    final dot = SizedBox(
         width: 3,
         height: 3,
         child: DecoratedBox(
@@ -439,7 +439,10 @@ class _SignInBlock extends StatelessWidget {
                 color: Colors.black54),
           ),
           backgroundColor: Colors.white,
-          foregroundColor: AppTheme.textPrimary,
+          // Google button stays white in both modes, so its label/icon must
+          // use a fixed dark color (not the brightness-aware textPrimary,
+          // which would turn light and vanish on white in dark mode).
+          foregroundColor: const Color(0xFF1C1C1E),
           isLoading: loadingGoogle,
           onPressed: onGoogle,
         ),
@@ -487,7 +490,7 @@ class _SignInBlock extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'By continuing you agree to secure handling of your health data.',
           textAlign: TextAlign.center,
           style: TextStyle(

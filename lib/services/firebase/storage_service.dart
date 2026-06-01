@@ -194,7 +194,7 @@ class StorageService {
       }
 
       final audioDir = await _getAudioDirectory();
-      final fileName = 'consultation_${sessionId}.m4a';
+      final fileName = 'consultation_$sessionId.m4a';
       final destinationPath = '${audioDir.path}/$fileName';
 
       // Copy file to permanent storage

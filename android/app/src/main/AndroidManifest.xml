@@ -1,6 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Bill / document scanning via image_picker camera capture. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Gallery access: Android 13+ uses scoped media perms; older uses storage. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="Clinix AI"
         android:name="${applicationName}"

@@ -403,7 +403,7 @@ class _Page2 extends StatelessWidget {
             keyboardType: TextInputType.phone,
             decoration: const InputDecoration(
               labelText: 'Your Phone Number',
-              hintText: '+91 98765 43210',
+              hintText: 'Phone number (with country code)',
               prefixIcon: Icon(Icons.phone_rounded, size: 18),
             ),
           ),
@@ -429,7 +429,7 @@ class _Page2 extends StatelessWidget {
             keyboardType: TextInputType.phone,
             decoration: const InputDecoration(
               labelText: 'Contact Phone',
-              hintText: '+91 98765 43210',
+              hintText: 'Phone number (with country code)',
               prefixIcon: Icon(Icons.call_outlined, size: 18),
             ),
           ),
@@ -466,7 +466,7 @@ class _Footer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(AppTheme.xl),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(top: BorderSide(color: AppTheme.dividerColor)),
       ),
@@ -476,7 +476,7 @@ class _Footer extends StatelessWidget {
             OutlinedButton(
               onPressed: onBack,
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppTheme.dividerColor),
+                side: BorderSide(color: AppTheme.dividerColor),
                 padding: const EdgeInsets.symmetric(
                     horizontal: AppTheme.lg, vertical: AppTheme.md),
                 shape: RoundedRectangleBorder(

@@ -256,7 +256,8 @@ class DataStateBuilder<T> extends StatelessWidget {
              );
     }
 
-    if (state.data == null || (isEmpty?.call(state.data) ?? false)) {
+    final data = state.data;
+    if (data == null || (isEmpty?.call(data) ?? false)) {
       return emptyBuilder?.call(context) ??
              const EmptyStateWidget(
                title: 'No data available',
@@ -264,7 +265,7 @@ class DataStateBuilder<T> extends StatelessWidget {
              );
     }
 
-    return builder(context, state.data!);
+    return builder(context, data);
   }
 }
 

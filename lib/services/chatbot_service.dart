@@ -24,10 +24,17 @@ class ChatbotService {
   String? _cachedModel;
   String? _cachedVersion;
 
-  /// Get API key from Firebase only (no local fallback)
+  /// Compile-time key, supplied via `--dart-define=GEMINI_API_KEY=...`.
+  /// Used as a fallback when no key is configured in Firestore (e.g. local
+  /// dev, or before the `app_runtime/api_keys` document is populated).
+  static const String _envGeminiKey =
+      String.fromEnvironment('GEMINI_API_KEY');
+
+  /// Resolves the Gemini key: Firestore first, then the `--dart-define` value.
   Future<String> _getGeminiApiKey() async {
     try {
-      final firebaseKey = await _credentialsService.getGeminiApiKey(forceRefresh: false);
+      final firebaseKey =
+          await _credentialsService.getGeminiApiKey(forceRefresh: false);
       if (firebaseKey.isNotEmpty) {
         debugPrint('[ChatbotService] ✅ Using Gemini API key from Firebase');
         return firebaseKey;
@@ -36,7 +43,13 @@ class ChatbotService {
       debugPrint('[ChatbotService] ⚠️ Firebase API key failed: $e');
     }
 
-    debugPrint('[ChatbotService] ❌ No valid Gemini API key found in Firebase');
+    if (_envGeminiKey.isNotEmpty) {
+      debugPrint('[ChatbotService] ✅ Using Gemini API key from --dart-define');
+      return _envGeminiKey;
+    }
+
+    debugPrint('[ChatbotService] ❌ No valid Gemini API key found '
+        '(Firestore app_runtime/api_keys or --dart-define=GEMINI_API_KEY)');
     return '';
   }
 

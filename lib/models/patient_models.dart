@@ -559,6 +559,10 @@ class InsurancePolicy {
   final String policyNumber;
   /// health | term | critical_illness | accidental | other
   final String policyType;
+  /// Country code from [InsuranceRegion], e.g. US/GB/CA/AU/EU/IN.
+  final String country;
+  /// ISO 4217 currency for this policy's amounts.
+  final String currencyCode;
   final double coverageAmount;
   final double premiumAmount;
   /// monthly | quarterly | annual
@@ -579,6 +583,8 @@ class InsurancePolicy {
     this.insurer = '',
     this.policyNumber = '',
     this.policyType = 'health',
+    this.country = '',
+    this.currencyCode = '',
     this.coverageAmount = 0,
     this.premiumAmount = 0,
     this.premiumFrequency = 'annual',
@@ -600,6 +606,8 @@ class InsurancePolicy {
     String? insurer,
     String? policyNumber,
     String? policyType,
+    String? country,
+    String? currencyCode,
     double? coverageAmount,
     double? premiumAmount,
     String? premiumFrequency,
@@ -619,6 +627,8 @@ class InsurancePolicy {
         insurer: insurer ?? this.insurer,
         policyNumber: policyNumber ?? this.policyNumber,
         policyType: policyType ?? this.policyType,
+        country: country ?? this.country,
+        currencyCode: currencyCode ?? this.currencyCode,
         coverageAmount: coverageAmount ?? this.coverageAmount,
         premiumAmount: premiumAmount ?? this.premiumAmount,
         premiumFrequency: premiumFrequency ?? this.premiumFrequency,
@@ -639,6 +649,8 @@ class InsurancePolicy {
         'insurer': insurer,
         'policyNumber': policyNumber,
         'policyType': policyType,
+        'country': country,
+        'currencyCode': currencyCode,
         'coverageAmount': coverageAmount,
         'premiumAmount': premiumAmount,
         'premiumFrequency': premiumFrequency,
@@ -659,6 +671,8 @@ class InsurancePolicy {
         insurer: (map['insurer'] ?? '').toString(),
         policyNumber: (map['policyNumber'] ?? '').toString(),
         policyType: (map['policyType'] ?? 'health').toString(),
+        country: (map['country'] ?? '').toString(),
+        currencyCode: (map['currencyCode'] ?? '').toString(),
         coverageAmount: (map['coverageAmount'] is num)
             ? (map['coverageAmount'] as num).toDouble()
             : double.tryParse(map['coverageAmount']?.toString() ?? '') ?? 0,
@@ -676,6 +690,97 @@ class InsurancePolicy {
         createdAt: _toDateTime(map['createdAt']),
         updatedAt: _toDateTime(map['updatedAt']),
       );
+}
+
+// ─── CaseExpense ──────────────────────────────────────────────────────────────
+
+/// A single itemized bill/receipt logged against an insurance [InsuranceClaim]
+/// (a "case"). Many expenses roll up into one case total.
+class CaseExpense {
+  final String id;
+
+  /// hospital | pharmacy | lab | consultation | imaging | procedure | other
+  final String category;
+  final String vendor;
+  final String date; // 'dd MMM yyyy'
+  final double amount;
+  final String documentUrl; // uploaded receipt (remote)
+  final String imagePath; // local receipt copy, if any
+  final String note;
+
+  /// True when fields were pre-filled by the AI bill scanner.
+  final bool aiExtracted;
+
+  const CaseExpense({
+    this.id = '',
+    this.category = 'other',
+    this.vendor = '',
+    this.date = '',
+    this.amount = 0,
+    this.documentUrl = '',
+    this.imagePath = '',
+    this.note = '',
+    this.aiExtracted = false,
+  });
+
+  CaseExpense copyWith({
+    String? id,
+    String? category,
+    String? vendor,
+    String? date,
+    double? amount,
+    String? documentUrl,
+    String? imagePath,
+    String? note,
+    bool? aiExtracted,
+  }) =>
+      CaseExpense(
+        id: id ?? this.id,
+        category: category ?? this.category,
+        vendor: vendor ?? this.vendor,
+        date: date ?? this.date,
+        amount: amount ?? this.amount,
+        documentUrl: documentUrl ?? this.documentUrl,
+        imagePath: imagePath ?? this.imagePath,
+        note: note ?? this.note,
+        aiExtracted: aiExtracted ?? this.aiExtracted,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'category': category,
+        'vendor': vendor,
+        'date': date,
+        'amount': amount,
+        'documentUrl': documentUrl,
+        'imagePath': imagePath,
+        'note': note,
+        'aiExtracted': aiExtracted,
+      };
+
+  factory CaseExpense.fromMap(Map<String, dynamic> map) => CaseExpense(
+        id: (map['id'] ?? '').toString(),
+        category: (map['category'] ?? 'other').toString(),
+        vendor: (map['vendor'] ?? '').toString(),
+        date: (map['date'] ?? '').toString(),
+        amount: (map['amount'] is num)
+            ? (map['amount'] as num).toDouble()
+            : double.tryParse(map['amount']?.toString() ?? '') ?? 0,
+        documentUrl: (map['documentUrl'] ?? '').toString(),
+        imagePath: (map['imagePath'] ?? '').toString(),
+        note: (map['note'] ?? '').toString(),
+        aiExtracted: map['aiExtracted'] == true,
+      );
+}
+
+List<CaseExpense> _toExpenseList(Object? raw) {
+  if (raw is List) {
+    return raw
+        .whereType<Map>()
+        .map((e) => CaseExpense.fromMap(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+  return const <CaseExpense>[];
 }
 
 // ─── InsuranceClaim ───────────────────────────────────────────────────────────
@@ -698,6 +803,19 @@ class InsuranceClaim {
   final String rejectionReason;
   final String fightAnalysis;
   final String appealLetter;
+
+  // ── Global "case" fields ──
+  /// Short label for the case, e.g. "Knee surgery – Apr 2026".
+  final String title;
+  /// Country code from [InsuranceRegion], e.g. US/GB/CA/AU/EU/IN.
+  final String country;
+  /// ISO 4217 currency for all amounts in this case.
+  final String currencyCode;
+  /// inpatient | outpatient
+  final String caseType;
+  /// Itemized bills that roll up into this case.
+  final List<CaseExpense> expenses;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -718,6 +836,11 @@ class InsuranceClaim {
     this.rejectionReason = '',
     this.fightAnalysis = '',
     this.appealLetter = '',
+    this.title = '',
+    this.country = '',
+    this.currencyCode = '',
+    this.caseType = 'inpatient',
+    this.expenses = const <CaseExpense>[],
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -726,6 +849,15 @@ class InsuranceClaim {
   bool get isRejected => claimStatus == 'rejected';
   bool get isApproved => claimStatus == 'approved';
   bool get hasFightAnalysis => fightAnalysis.isNotEmpty;
+
+  /// Sum of all itemized expenses.
+  double get totalExpenses =>
+      expenses.fold<double>(0, (sum, e) => sum + e.amount);
+
+  /// The amount to display/claim: the itemized total when bills exist,
+  /// otherwise the manually-entered [claimAmount].
+  double get effectiveAmount =>
+      expenses.isNotEmpty ? totalExpenses : claimAmount;
 
   InsuranceClaim copyWith({
     String? id,
@@ -744,6 +876,11 @@ class InsuranceClaim {
     String? rejectionReason,
     String? fightAnalysis,
     String? appealLetter,
+    String? title,
+    String? country,
+    String? currencyCode,
+    String? caseType,
+    List<CaseExpense>? expenses,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -764,6 +901,11 @@ class InsuranceClaim {
         rejectionReason: rejectionReason ?? this.rejectionReason,
         fightAnalysis: fightAnalysis ?? this.fightAnalysis,
         appealLetter: appealLetter ?? this.appealLetter,
+        title: title ?? this.title,
+        country: country ?? this.country,
+        currencyCode: currencyCode ?? this.currencyCode,
+        caseType: caseType ?? this.caseType,
+        expenses: expenses ?? this.expenses,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -785,6 +927,11 @@ class InsuranceClaim {
         'rejectionReason': rejectionReason,
         'fightAnalysis': fightAnalysis,
         'appealLetter': appealLetter,
+        'title': title,
+        'country': country,
+        'currencyCode': currencyCode,
+        'caseType': caseType,
+        'expenses': expenses.map((e) => e.toMap()).toList(),
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -808,6 +955,11 @@ class InsuranceClaim {
         rejectionReason: (map['rejectionReason'] ?? '').toString(),
         fightAnalysis: (map['fightAnalysis'] ?? '').toString(),
         appealLetter: (map['appealLetter'] ?? '').toString(),
+        title: (map['title'] ?? '').toString(),
+        country: (map['country'] ?? '').toString(),
+        currencyCode: (map['currencyCode'] ?? '').toString(),
+        caseType: (map['caseType'] ?? 'inpatient').toString(),
+        expenses: _toExpenseList(map['expenses']),
         createdAt: _toDateTime(map['createdAt']),
         updatedAt: _toDateTime(map['updatedAt']),
       );

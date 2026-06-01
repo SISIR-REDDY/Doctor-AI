@@ -240,7 +240,7 @@ class _SymptomCard extends StatelessWidget {
                       style: AppTheme.bodySmall),
                 Row(
                   children: [
-                    const Icon(Icons.access_time_rounded,
+                    Icon(Icons.access_time_rounded,
                         size: 12, color: AppTheme.textTertiary),
                     const SizedBox(width: 4),
                     Text(
@@ -258,7 +258,7 @@ class _SymptomCard extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline_rounded,
+            icon: Icon(Icons.delete_outline_rounded,
                 color: AppTheme.textTertiary, size: 20),
             onPressed: onDelete,
           ),
@@ -280,10 +280,10 @@ class _EmptyState extends StatelessWidget {
           Icon(Icons.edit_note_rounded,
               size: 64, color: AppTheme.textTertiary),
           const SizedBox(height: AppTheme.lg),
-          const Text('No symptoms logged yet',
+          Text('No symptoms logged yet',
               style: AppTheme.headingSmall),
           const SizedBox(height: AppTheme.sm),
-          const Text('Track your daily symptoms to get AI trend analysis',
+          Text('Track your daily symptoms to get AI trend analysis',
               style: AppTheme.bodySmall,
               textAlign: TextAlign.center),
         ],
@@ -352,7 +352,7 @@ class _AddSymptomSheetState extends State<_AddSymptomSheet> {
       padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
@@ -373,7 +373,7 @@ class _AddSymptomSheetState extends State<_AddSymptomSheet> {
                 ),
               ),
               const SizedBox(height: AppTheme.lg),
-              const Text('Log Symptom',
+              Text('Log Symptom',
                   style: AppTheme.headingSmall),
               const SizedBox(height: AppTheme.lg),
               TextField(

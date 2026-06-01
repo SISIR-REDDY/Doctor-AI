@@ -11,13 +11,19 @@ import 'firebase/api_credentials_service.dart';
 class DeepgramService {
   static const _listenUrl = 'https://api.deepgram.com/v1/listen';
 
+  /// Compile-time fallback, supplied via `--dart-define=DEEPGRAM_API_KEY=...`,
+  /// used when no key is configured in Firestore.
+  static const String _envKey = String.fromEnvironment('DEEPGRAM_API_KEY');
+
   Future<String> transcribeFile(String filePath) async {
-    final apiKey = await ApiCredentialsService.instance.getDeepgramApiKey();
+    var apiKey = await ApiCredentialsService.instance.getDeepgramApiKey();
+    if (apiKey.isEmpty) apiKey = _envKey;
     if (apiKey.isEmpty) {
       throw AppException(
         code: 'deepgram-not-configured',
         message:
-            'Voice input is not set up. Add deepgramApiKey in Firebase (app_runtime/api_keys).',
+            'Voice input is not set up. Add deepgramApiKey in Firebase '
+            '(app_runtime/api_keys) or pass --dart-define=DEEPGRAM_API_KEY.',
       );
     }
 

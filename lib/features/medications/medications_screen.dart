@@ -210,7 +210,7 @@ class _MedCard extends StatelessWidget {
                 ),
               ),
               PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded,
+                icon: Icon(Icons.more_vert_rounded,
                     color: AppTheme.textTertiary),
                 onSelected: (v) {
                   if (v == 'toggle') onToggle();
@@ -246,7 +246,7 @@ class _MedCard extends StatelessWidget {
           Row(
             children: [
               if (med.startDate.isNotEmpty) ...[
-                const Icon(Icons.calendar_today_rounded,
+                Icon(Icons.calendar_today_rounded,
                     size: 12, color: AppTheme.textTertiary),
                 const SizedBox(width: 4),
                 Text('Started: ${med.startDate}',
@@ -254,7 +254,7 @@ class _MedCard extends StatelessWidget {
               ],
               if (med.endDate.isNotEmpty) ...[
                 const SizedBox(width: 12),
-                const Icon(Icons.event_available_rounded,
+                Icon(Icons.event_available_rounded,
                     size: 12, color: AppTheme.textTertiary),
                 const SizedBox(width: 4),
                 Text('Until: ${med.endDate}',
@@ -369,7 +369,7 @@ class _AddMedSheetState extends State<_AddMedSheet> {
       padding:
           EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
@@ -390,7 +390,7 @@ class _AddMedSheetState extends State<_AddMedSheet> {
                 ),
               ),
               const SizedBox(height: AppTheme.lg),
-              const Text('Add Medication', style: AppTheme.headingSmall),
+              Text('Add Medication', style: AppTheme.headingSmall),
               const SizedBox(height: AppTheme.lg),
               TextField(
                 controller: _nameCtrl,

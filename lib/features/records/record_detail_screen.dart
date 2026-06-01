@@ -132,7 +132,7 @@ class _RecordImage extends StatelessWidget {
         borderRadius: AppTheme.largeRadius,
         border: Border.all(color: AppTheme.dividerColor),
       ),
-      child: const Center(
+      child: Center(
         child: Icon(Icons.description_outlined,
             size: 56, color: AppTheme.textTertiary),
       ),

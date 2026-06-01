@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/config/insurance_regions.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
@@ -30,9 +31,13 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
 
   String _policyType = 'health';
   String _frequency = 'annual';
+  String _country = kDefaultRegion.code;
   DateTime? _startDate;
   DateTime? _renewalDate;
   bool _isActive = true;
+
+  InsuranceRegion get _region => regionByCode(_country);
+  final _countryCodes = kInsuranceRegions.map((r) => r.code).toList();
 
   final _policyTypes = [
     'health',
@@ -64,6 +69,11 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
     _notesCtrl = TextEditingController(text: p?.notes ?? '');
     _policyType = p?.policyType ?? 'health';
     _frequency = p?.premiumFrequency ?? 'annual';
+    _country = (p != null && p.country.isNotEmpty)
+        ? p.country
+        : (p != null && p.currencyCode.isNotEmpty)
+            ? regionByCurrency(p.currencyCode).code
+            : kDefaultRegion.code;
     _isActive = p?.isActive ?? true;
     _startDate = p != null && p.startDate.isNotEmpty
         ? DateTime.tryParse(p.startDate)
@@ -113,6 +123,8 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
         insurer: _insurerCtrl.text.trim(),
         policyNumber: _policyNumCtrl.text.trim(),
         policyType: _policyType,
+        country: _country,
+        currencyCode: _region.currencyCode,
         coverageAmount: double.tryParse(_coverageCtrl.text) ?? 0,
         premiumAmount: double.tryParse(_premiumCtrl.text) ?? 0,
         premiumFrequency: _frequency,
@@ -166,14 +178,25 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
         padding: const EdgeInsets.all(AppTheme.lg),
         children: [
           _Card(children: [
-            const Text('Policy Details',
+            Text('Policy Details',
                 style: AppTheme.headingSmall),
             const SizedBox(height: AppTheme.lg),
             _TF('Insurance Company *', _insurerCtrl,
-                hint: 'e.g. HDFC ERGO, Star Health'),
+                hint: 'e.g. Aetna, Bupa, UnitedHealthcare'),
             const SizedBox(height: AppTheme.md),
             _TF('Policy Number *', _policyNumCtrl,
                 hint: 'e.g. HLT-123456789'),
+            const SizedBox(height: AppTheme.md),
+            _DD<String>(
+              label: 'Country',
+              value: _country,
+              items: _countryCodes,
+              display: (c) {
+                final r = regionByCode(c);
+                return '${r.flag}  ${r.name} (${r.currencyCode})';
+              },
+              onChanged: (v) => setState(() => _country = v!),
+            ),
             const SizedBox(height: AppTheme.md),
             _DD<String>(
               label: 'Policy Type',
@@ -185,17 +208,18 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
           ]),
           const SizedBox(height: AppTheme.lg),
           _Card(children: [
-            const Text('Coverage & Premium',
+            Text('Coverage & Premium',
                 style: AppTheme.headingSmall),
             const SizedBox(height: AppTheme.lg),
-            _TF('Coverage Amount (₹)', _coverageCtrl,
+            _TF('Coverage Amount (${_region.currencySymbol})', _coverageCtrl,
                 hint: 'e.g. 500000',
                 keyboardType: TextInputType.number),
             const SizedBox(height: AppTheme.md),
             Row(
               children: [
                 Expanded(
-                  child: _TF('Premium Amount (₹)', _premiumCtrl,
+                  child: _TF(
+                      'Premium Amount (${_region.currencySymbol})', _premiumCtrl,
                       hint: 'e.g. 12000',
                       keyboardType: TextInputType.number),
                 ),
@@ -215,7 +239,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
           ]),
           const SizedBox(height: AppTheme.lg),
           _Card(children: [
-            const Text('Dates', style: AppTheme.headingSmall),
+            Text('Dates', style: AppTheme.headingSmall),
             const SizedBox(height: AppTheme.lg),
             Row(
               children: [
@@ -239,9 +263,9 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
           ]),
           const SizedBox(height: AppTheme.lg),
           _Card(children: [
-            const Text('Nominee', style: AppTheme.headingSmall),
+            Text(_region.beneficiaryTerm, style: AppTheme.headingSmall),
             const SizedBox(height: AppTheme.lg),
-            _TF('Nominee Name', _nomineeNameCtrl,
+            _TF('${_region.beneficiaryTerm} Name', _nomineeNameCtrl,
                 hint: 'Full name',
                 capitalization: TextCapitalization.words),
             const SizedBox(height: AppTheme.md),
@@ -253,7 +277,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
           _Card(children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -267,7 +291,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                 Switch(
                   value: _isActive,
                   onChanged: (v) => setState(() => _isActive = v),
-                  activeColor: AppTheme.successColor,
+                  activeThumbColor: AppTheme.successColor,
                 ),
               ],
             ),

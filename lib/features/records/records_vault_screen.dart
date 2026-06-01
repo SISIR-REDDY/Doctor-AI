@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
+import '../../core/utils/media_permissions.dart';
 import '../../models/patient_models.dart';
 import '../../core/errors/app_error_handler.dart';
 import '../../services/chatbot_service.dart';
@@ -125,13 +126,16 @@ class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
 
   Future<void> _pickAndScan(BuildContext context, String uid) async {
     final source = await _showSourceDialog(context);
-    if (source == null) return;
+    if (source == null || !context.mounted) return;
+
+    if (source == ImageSource.camera) {
+      final ok = await MediaPermissions.ensureCamera(context);
+      if (!ok || !context.mounted) return;
+    }
 
     final picker = ImagePicker();
-    final XFile? file = source == ImageSource.camera
-        ? await picker.pickImage(source: ImageSource.camera, imageQuality: 85)
-        : await picker.pickImage(
-            source: ImageSource.gallery, imageQuality: 85);
+    final XFile? file =
+        await picker.pickImage(source: source, imageQuality: 85);
 
     if (file == null || !context.mounted) return;
 
@@ -249,7 +253,7 @@ class _RecordCard extends StatelessWidget {
       required this.onTap,
       required this.onDelete});
 
-  static const _typeColors = <String, Color>{
+  static Map<String, Color> get _typeColors => <String, Color>{
     'lab': AppTheme.infoColor,
     'imaging': AppTheme.neurologyColor,
     'prescription': AppTheme.surgeryColor,
@@ -343,7 +347,7 @@ class _RecordCard extends StatelessWidget {
               ),
             ),
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert_rounded,
+              icon: Icon(Icons.more_vert_rounded,
                   color: AppTheme.textTertiary, size: 20),
               onSelected: (v) {
                 if (v == 'delete') onDelete();
@@ -375,7 +379,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.folder_open_rounded,
+          Icon(Icons.folder_open_rounded,
               size: 64, color: AppTheme.textTertiary),
           const SizedBox(height: AppTheme.lg),
           Text(message,
@@ -524,7 +528,7 @@ Format your response clearly with headings. Use simple language.''';
           EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         height: MediaQuery.of(context).size.height * 0.85,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
@@ -543,7 +547,7 @@ Format your response clearly with headings. Use simple language.''';
                     ),
                   ),
                   const SizedBox(height: AppTheme.lg),
-                  const Text('Scan Result', style: AppTheme.headingSmall),
+                  Text('Scan Result', style: AppTheme.headingSmall),
                 ],
               ),
             ),
