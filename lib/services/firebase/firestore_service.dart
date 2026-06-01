@@ -289,21 +289,82 @@ class FirestoreService {
   }
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // CHAT SESSIONS
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Stream<List<ChatSession>> watchChatSessions(String uid) {
+    if (!_isFirebaseAvailable) return Stream.value([]);
+    return _sub(uid, 'chat_sessions')
+        .orderBy('updatedAt', descending: true)
+        .snapshots()
+        .map((s) =>
+            s.docs.map((d) => ChatSession.fromMap(d.data())).toList());
+  }
+
+  Future<ChatSession?> loadLatestChatSession(String uid) async {
+    if (!_isFirebaseAvailable) return null;
+    try {
+      final snap = await _sub(uid, 'chat_sessions')
+          .orderBy('updatedAt', descending: true)
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty) return null;
+      return ChatSession.fromMap(snap.docs.first.data());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveChatSession(String uid, ChatSession session) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'chat_sessions').doc(session.id).set(session.toMap());
+    } catch (e) {
+      final str = e.toString().toLowerCase();
+      final denied = str.contains('permission-denied') ||
+          str.contains('permission_denied') ||
+          str.contains('unauthorized');
+      throw AppException(
+        code: denied ? 'firestore-permission-denied' : 'save-session-failed',
+        message: denied
+            ? 'Chat session could not be saved — Firestore rules are blocking writes.'
+            : 'Unable to save chat session.',
+        cause: e,
+      );
+    }
+  }
+
+  Future<void> deleteChatSession(String uid, String sessionId) async {
+    if (!_isFirebaseAvailable) return;
+    try {
+      await _sub(uid, 'chat_sessions').doc(sessionId).delete();
+      await deleteChatThread(uid, sessionId);
+    } catch (e) {
+      throw AppException(
+        code: 'delete-session-failed',
+        message: 'Unable to delete chat session.',
+        cause: e,
+      );
+    }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // AI CHAT MESSAGES
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Stream<List<AiChatMessage>> watchChatMessages(String uid, String threadId) {
     if (!_isFirebaseAvailable) return Stream.value([]);
+    // Load all ai_chats ordered by timestamp and filter client-side.
+    // This avoids requiring a composite (threadId + timestamp) Firestore index
+    // while still supporting multiple sessions correctly.
     return _sub(uid, 'ai_chats')
         .orderBy('timestamp')
         .snapshots()
         .map((s) {
-      final list = s.docs
+      return s.docs
           .map((d) => AiChatMessage.fromMap(d.data()))
           .where((m) => m.threadId == threadId)
           .toList();
-      list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      return list;
     });
   }
 
@@ -312,11 +373,16 @@ class FirestoreService {
     try {
       await _sub(uid, 'ai_chats').doc(msg.id).set(msg.toMap());
     } catch (e) {
-      final denied = e.toString().contains('PERMISSION_DENIED');
+      final str = e.toString().toLowerCase();
+      final denied = str.contains('permission-denied') ||
+          str.contains('permission_denied') ||
+          str.contains('unauthorized');
       throw AppException(
         code: denied ? 'firestore-permission-denied' : 'save-chat-failed',
         message: denied
-            ? 'Chat could not be saved. In Firebase Console → Firestore → Rules, publish the rules from firestore.rules in this project (allows users/{uid}/ai_chats).'
+            ? 'Chat could not be saved — Firestore rules are blocking writes. '
+                'Open Firebase Console → Firestore → Rules and publish the '
+                'rules from firestore.rules (allows users/{uid}/ai_chats).'
             : 'Unable to save message.',
         cause: e,
       );

@@ -491,6 +491,65 @@ class AiChatMessage {
       );
 }
 
+// ─── ChatSession ─────────────────────────────────────────────────────────────
+
+class ChatSession {
+  final String id;
+  final String userId;
+  final String title;
+  final String lastMessage;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int messageCount;
+
+  ChatSession({
+    required this.id,
+    required this.userId,
+    this.title = 'New Chat',
+    this.lastMessage = '',
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    this.messageCount = 0,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
+
+  ChatSession copyWith({
+    String? title,
+    String? lastMessage,
+    DateTime? updatedAt,
+    int? messageCount,
+  }) =>
+      ChatSession(
+        id: id,
+        userId: userId,
+        title: title ?? this.title,
+        lastMessage: lastMessage ?? this.lastMessage,
+        createdAt: createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        messageCount: messageCount ?? this.messageCount,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'userId': userId,
+        'title': title,
+        'lastMessage': lastMessage,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+        'messageCount': messageCount,
+      };
+
+  factory ChatSession.fromMap(Map<String, dynamic> map) => ChatSession(
+        id: (map['id'] ?? '').toString(),
+        userId: (map['userId'] ?? '').toString(),
+        title: (map['title'] ?? 'New Chat').toString(),
+        lastMessage: (map['lastMessage'] ?? '').toString(),
+        createdAt: _toDateTime(map['createdAt']),
+        updatedAt: _toDateTime(map['updatedAt']),
+        messageCount: (map['messageCount'] as num?)?.toInt() ?? 0,
+      );
+}
+
 // ─── InsurancePolicy ─────────────────────────────────────────────────────────
 
 class InsurancePolicy {
