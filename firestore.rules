@@ -9,7 +9,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Patient user root + all subcollections (profile, symptoms, meds, records, ai_chats, etc.)
+    // Patient user root + all subcollections:
+    //   profile · symptoms · medications · records · insurance · claims
+    //   ai_chats (messages) · chat_sessions (session metadata)
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
