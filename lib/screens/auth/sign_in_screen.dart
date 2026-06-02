@@ -111,30 +111,39 @@ class _SignInScreenState extends State<SignInScreen> {
 class _BrandHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final logoSize = (screenWidth * 0.22).clamp(64.0, 96.0);
+    final borderRadius = logoSize * 0.26;
+
     return Column(
       children: [
         Container(
-          height: 72,
-          width: 72,
+          height: logoSize,
+          width: logoSize,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: AppTheme.primaryGradient,
+            borderRadius: BorderRadius.circular(borderRadius),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.primaryColor.withValues(alpha: 0.28),
-                blurRadius: 28,
-                offset: const Offset(0, 14),
+                color: AppTheme.primaryColor.withValues(alpha: 0.24),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(borderRadius),
             child: Image.asset(
-              'assets/images/docpilot_logo.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const Center(
-                child: Icon(Icons.health_and_safety_rounded,
-                    color: Colors.white, size: 34),
+              'assets/images/logo.png',
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  gradient: AppTheme.primaryGradient,
+                ),
+                child: const Center(
+                  child: Icon(Icons.health_and_safety_rounded,
+                      color: Colors.white, size: 34),
+                ),
               ),
             ),
           ),
@@ -146,7 +155,7 @@ class _BrandHeader extends StatelessWidget {
             Text(
               'Clinix',
               style: TextStyle(
-                fontSize: 32,
+                fontSize: (screenWidth * 0.082).clamp(26.0, 36.0),
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -1.0,
@@ -161,11 +170,11 @@ class _BrandHeader extends StatelessWidget {
                 gradient: AppTheme.primaryGradient,
                 borderRadius: BorderRadius.circular(7),
               ),
-              child: const Text(
+              child: Text(
                 'AI',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
+                  fontSize: (screenWidth * 0.046).clamp(15.0, 20.0),
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.4,
                   height: 1.1,
@@ -175,13 +184,18 @@ class _BrandHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        Text(
-          'Your personal health companion, powered by AI',
-          textAlign: TextAlign.center,
-          style: AppTheme.bodyMedium.copyWith(
-            color: AppTheme.textSecondary,
-            fontSize: 13.5,
-            height: 1.4,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+          child: Text(
+            'Your personal health companion, powered by AI',
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTheme.bodyMedium.copyWith(
+              color: AppTheme.textSecondary,
+              fontSize: 13.5,
+              height: 1.4,
+            ),
           ),
         ),
       ],
