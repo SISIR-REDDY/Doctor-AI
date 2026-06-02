@@ -21,6 +21,17 @@ class _SymptomJournalScreenState extends State<SymptomJournalScreen> {
   String? _aiTrend;
   bool _loadingTrend = false;
 
+  // Cache the stream so rebuilds (e.g. theme toggle) don't resubscribe/reload.
+  Stream<List<SymptomEntry>>? _stream;
+  String? _streamUid;
+  Stream<List<SymptomEntry>> _symptoms(String uid) {
+    if (_streamUid != uid) {
+      _streamUid = uid;
+      _stream = _db.watchSymptoms(uid);
+    }
+    return _stream!;
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = context.read<HealthDataProvider>().uid;
@@ -49,7 +60,7 @@ class _SymptomJournalScreenState extends State<SymptomJournalScreen> {
                   ),
                 Expanded(
                   child: StreamBuilder<List<SymptomEntry>>(
-                    stream: _db.watchSymptoms(uid),
+                    stream: _symptoms(uid),
                     builder: (ctx, snap) {
                       if (snap.connectionState ==
                           ConnectionState.waiting) {

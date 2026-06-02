@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
+import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
 
 class MedicationsScreen extends StatefulWidget {
@@ -72,6 +73,7 @@ class _MedicationsScreenState extends State<MedicationsScreen>
                       emptyIcon: Icons.medication_outlined,
                       onDelete: (m) => _delete(uid, m),
                       onToggle: (m) => _toggle(uid, m),
+                      onEdit: (m) => _showAddSheet(context, uid, existing: m),
                     ),
                     _MedList(
                       meds: past,
@@ -79,6 +81,7 @@ class _MedicationsScreenState extends State<MedicationsScreen>
                       emptyIcon: Icons.history_rounded,
                       onDelete: (m) => _delete(uid, m),
                       onToggle: (m) => _toggle(uid, m),
+                      onEdit: (m) => _showAddSheet(context, uid, existing: m),
                     ),
                   ],
                 );
@@ -96,19 +99,42 @@ class _MedicationsScreenState extends State<MedicationsScreen>
 
   Future<void> _delete(String uid, Medication med) async {
     await _db.deleteMedication(uid, med.id);
+    // Cancel any daily reminders scheduled for this medication.
+    for (final t in med.reminderTimes) {
+      await NotificationService.instance
+          .cancel(NotificationService.idFor('${med.id}|$t'));
+    }
   }
 
   Future<void> _toggle(String uid, Medication med) async {
-    await _db.saveMedication(
-        uid, med.copyWith(isActive: !med.isActive));
+    final updated = med.copyWith(isActive: !med.isActive);
+    await _db.saveMedication(uid, updated);
+    // Pause reminders when inactive; resume when active again.
+    for (final t in med.reminderTimes) {
+      final id = NotificationService.idFor('${med.id}|$t');
+      if (updated.isActive) {
+        final p = t.split(':');
+        await NotificationService.instance.scheduleDaily(
+          id: id,
+          title: 'Medication reminder',
+          body: med.dosage.isEmpty
+              ? 'Time to take ${med.name}'
+              : 'Time to take ${med.name} (${med.dosage})',
+          hour: int.tryParse(p[0]) ?? 8,
+          minute: int.tryParse(p.length > 1 ? p[1] : '0') ?? 0,
+        );
+      } else {
+        await NotificationService.instance.cancel(id);
+      }
+    }
   }
 
-  void _showAddSheet(BuildContext context, String uid) {
+  void _showAddSheet(BuildContext context, String uid, {Medication? existing}) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AddMedSheet(uid: uid, db: _db),
+      builder: (_) => _AddMedSheet(uid: uid, db: _db, existing: existing),
     );
   }
 }
@@ -121,6 +147,7 @@ class _MedList extends StatelessWidget {
   final IconData emptyIcon;
   final ValueChanged<Medication> onDelete;
   final ValueChanged<Medication> onToggle;
+  final ValueChanged<Medication> onEdit;
 
   const _MedList({
     required this.meds,
@@ -128,6 +155,7 @@ class _MedList extends StatelessWidget {
     required this.emptyIcon,
     required this.onDelete,
     required this.onToggle,
+    required this.onEdit,
   });
 
   @override
@@ -155,6 +183,7 @@ class _MedList extends StatelessWidget {
         med: meds[i],
         onDelete: () => onDelete(meds[i]),
         onToggle: () => onToggle(meds[i]),
+        onEdit: () => onEdit(meds[i]),
       ),
     );
   }
@@ -166,10 +195,12 @@ class _MedCard extends StatelessWidget {
   final Medication med;
   final VoidCallback onDelete;
   final VoidCallback onToggle;
+  final VoidCallback onEdit;
   const _MedCard(
       {required this.med,
       required this.onDelete,
-      required this.onToggle});
+      required this.onToggle,
+      required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -213,10 +244,12 @@ class _MedCard extends StatelessWidget {
                 icon: Icon(Icons.more_vert_rounded,
                     color: AppTheme.textTertiary),
                 onSelected: (v) {
+                  if (v == 'edit') onEdit();
                   if (v == 'toggle') onToggle();
                   if (v == 'delete') onDelete();
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
                   PopupMenuItem(
                     value: 'toggle',
                     child: Text(med.isActive
@@ -273,7 +306,8 @@ class _MedCard extends StatelessWidget {
 class _AddMedSheet extends StatefulWidget {
   final String uid;
   final FirestoreService db;
-  const _AddMedSheet({required this.uid, required this.db});
+  final Medication? existing;
+  const _AddMedSheet({required this.uid, required this.db, this.existing});
 
   @override
   State<_AddMedSheet> createState() => _AddMedSheetState();
@@ -289,6 +323,7 @@ class _AddMedSheetState extends State<_AddMedSheet> {
   String _frequency = 'Once daily';
   DateTime? _startDate;
   DateTime? _endDate;
+  final List<String> _reminderTimes = [];
   bool _saving = false;
 
   final _frequencies = [
@@ -301,6 +336,31 @@ class _AddMedSheetState extends State<_AddMedSheet> {
     'Weekly',
     'Other',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    if (e != null) {
+      _nameCtrl.text = e.name;
+      _dosageCtrl.text = e.dosage;
+      _purposeCtrl.text = e.purpose;
+      _doctorCtrl.text = e.prescribingDoctor;
+      _notesCtrl.text = e.notes;
+      _frequency = _frequencies.contains(e.frequency) ? e.frequency : 'Other';
+      _reminderTimes.addAll(e.reminderTimes);
+      if (e.startDate.isNotEmpty) {
+        try {
+          _startDate = DateFormat('dd MMM yyyy').parse(e.startDate);
+        } catch (_) {}
+      }
+      if (e.endDate.isNotEmpty) {
+        try {
+          _endDate = DateFormat('dd MMM yyyy').parse(e.endDate);
+        } catch (_) {}
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -330,12 +390,34 @@ class _AddMedSheetState extends State<_AddMedSheet> {
     }
   }
 
+  Future<void> _addReminderTime() async {
+    final t = await showTimePicker(
+        context: context, initialTime: const TimeOfDay(hour: 8, minute: 0));
+    if (t == null) return;
+    final hhmm =
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    if (!_reminderTimes.contains(hhmm)) {
+      setState(() {
+        _reminderTimes.add(hhmm);
+        _reminderTimes.sort();
+      });
+    }
+  }
+
+  String _prettyTime(String hhmm) {
+    final p = hhmm.split(':');
+    if (p.length != 2) return hhmm;
+    return TimeOfDay(hour: int.tryParse(p[0]) ?? 0, minute: int.tryParse(p[1]) ?? 0)
+        .format(context);
+  }
+
   Future<void> _save() async {
     if (_nameCtrl.text.trim().isEmpty) return;
     setState(() => _saving = true);
     try {
+      final existing = widget.existing;
       final med = Medication(
-        id: const Uuid().v4(),
+        id: existing?.id ?? const Uuid().v4(),
         userId: widget.uid,
         name: _nameCtrl.text.trim(),
         dosage: _dosageCtrl.text.trim(),
@@ -349,9 +431,36 @@ class _AddMedSheetState extends State<_AddMedSheet> {
             ? DateFormat('dd MMM yyyy').format(_endDate!)
             : '',
         notes: _notesCtrl.text.trim(),
-        isActive: true,
+        reminderTimes: List<String>.from(_reminderTimes),
+        isActive: existing?.isActive ?? true,
+        createdAt: existing?.createdAt,
       );
+
+      // Cancel any previously-scheduled reminders for this med (times may
+      // have changed since the last save).
+      for (final t in existing?.reminderTimes ?? const <String>[]) {
+        await NotificationService.instance
+            .cancel(NotificationService.idFor('${med.id}|$t'));
+      }
+
       await widget.db.saveMedication(widget.uid, med);
+
+      // Schedule a daily notification at each reminder time.
+      if (_reminderTimes.isNotEmpty && med.isActive) {
+        await NotificationService.instance.requestPermissions();
+        for (final t in _reminderTimes) {
+          final p = t.split(':');
+          await NotificationService.instance.scheduleDaily(
+            id: NotificationService.idFor('${med.id}|$t'),
+            title: 'Medication reminder',
+            body: med.dosage.isEmpty
+                ? 'Time to take ${med.name}'
+                : 'Time to take ${med.name} (${med.dosage})',
+            hour: int.tryParse(p[0]) ?? 8,
+            minute: int.tryParse(p.length > 1 ? p[1] : '0') ?? 0,
+          );
+        }
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -390,7 +499,8 @@ class _AddMedSheetState extends State<_AddMedSheet> {
                 ),
               ),
               const SizedBox(height: AppTheme.lg),
-              Text('Add Medication', style: AppTheme.headingSmall),
+              Text(widget.existing == null ? 'Add Medication' : 'Edit Medication',
+                  style: AppTheme.headingSmall),
               const SizedBox(height: AppTheme.lg),
               TextField(
                 controller: _nameCtrl,
@@ -467,6 +577,39 @@ class _AddMedSheetState extends State<_AddMedSheet> {
                   labelText: 'Notes (optional)',
                   hintText: 'Any special instructions...',
                 ),
+              ),
+              const SizedBox(height: AppTheme.lg),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Reminder times',
+                    style: AppTheme.labelLarge),
+              ),
+              const SizedBox(height: 2),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Get a daily notification to take this medication',
+                    style: AppTheme.labelSmall),
+              ),
+              const SizedBox(height: AppTheme.sm),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final t in _reminderTimes)
+                    InputChip(
+                      label: Text(_prettyTime(t)),
+                      avatar: const Icon(Icons.alarm_rounded, size: 16),
+                      onDeleted: () =>
+                          setState(() => _reminderTimes.remove(t)),
+                    ),
+                  ActionChip(
+                    avatar: const Icon(Icons.add_rounded,
+                        size: 16, color: AppTheme.primaryColor),
+                    label: const Text('Add time',
+                        style: TextStyle(color: AppTheme.primaryColor)),
+                    onPressed: _addReminderTime,
+                  ),
+                ],
               ),
               const SizedBox(height: AppTheme.xl),
               ElevatedButton(

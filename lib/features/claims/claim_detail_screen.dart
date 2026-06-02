@@ -23,6 +23,8 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
   late InsuranceClaim _claim;
   bool _generatingFight = false;
   bool _generatingAppeal = false;
+  bool _generatingAudit = false;
+  bool _generatingDispute = false;
   final _db = FirestoreService();
   final _rejectionCtrl = TextEditingController();
 
@@ -164,6 +166,115 @@ Format as a proper business letter (sender block, date, recipient, subject line,
     }
   }
 
+  Future<void> _auditBills() async {
+    if (_claim.expenses.isEmpty) {
+      _snack('Add itemized bills first, then run the audit.');
+      return;
+    }
+    setState(() => _generatingAudit = true);
+    final uid = context.read<HealthDataProvider>().uid;
+    try {
+      final region = regionByCode(_claim.country);
+      final itemized = _claim.expenses.map((e) {
+        final header =
+            '- ${kExpenseCategories[e.category] ?? e.category}: ${e.vendor.isEmpty ? 'Unknown provider' : e.vendor} — ${formatMoney(e.amount, _claim.currencyCode)}${e.date.isEmpty ? '' : ' (${e.date})'}';
+        final items = e.lineItems.trim();
+        if (items.isEmpty) return header;
+        final detail = items
+            .split('\n')
+            .where((l) => l.trim().isNotEmpty)
+            .map((l) => '    • ${l.trim()}')
+            .join('\n');
+        return '$header\n$detail';
+      }).join('\n');
+
+      final prompt =
+          '''You are a medical-billing auditor and patient advocate for ${region.name}. Review these itemized medical bills for likely billing errors and overcharges the patient can dispute to save money. Be rigorous but do not invent charges that are not listed.
+
+Case: ${_claim.caseType == 'outpatient' ? 'Outpatient' : 'Inpatient'}
+Diagnosis/Reason: ${_claim.diagnosis.isEmpty ? 'Not specified' : _claim.diagnosis}
+Provider: ${_claim.hospitalName.isEmpty ? 'Not specified' : _claim.hospitalName}
+Currency: ${_claim.currencyCode.isEmpty ? region.currencyCode : _claim.currencyCode}
+Total billed: ${formatMoney(_claim.totalExpenses, _claim.currencyCode)}
+
+Itemized bills:
+$itemized
+
+Analyze and report:
+1. Likely billing ERRORS — duplicate charges, unbundling, upcoding, or services unrelated to the diagnosis.
+2. Charges that look ABOVE typical/fair rates in ${region.name} — flag them with a reasonable expected range.
+3. Items that SHOULD be covered or waived (and why), given ${region.keyRights}.
+4. Surprise / balance-billing red flags under ${region.name} rules.
+5. For EACH flagged item: the estimated potential saving and the exact step to dispute it.
+6. A clear TOTAL estimated potential saving (a range is fine).
+
+If a charge looks reasonable, say so briefly. Use clear headings and ${region.currencyCode} amounts. End with a one-line summary of total potential savings.''';
+
+      final response = await ChatbotService().getGeminiResponse(prompt);
+      if (uid != null) {
+        final updated =
+            _claim.copyWith(auditReport: response, updatedAt: DateTime.now());
+        await _db.saveClaim(uid, updated);
+        if (mounted) setState(() => _claim = updated);
+      } else if (mounted) {
+        setState(() => _claim = _claim.copyWith(auditReport: response));
+      }
+    } catch (e) {
+      if (mounted) _snack(e.toString());
+    } finally {
+      if (mounted) setState(() => _generatingAudit = false);
+    }
+  }
+
+  Future<void> _generateDisputeLetter() async {
+    if (_claim.auditReport.isEmpty) {
+      _snack('Run the bill audit first, then draft the dispute letter.');
+      return;
+    }
+    setState(() => _generatingDispute = true);
+    final profile = context.read<HealthDataProvider>().profile;
+    final uid = context.read<HealthDataProvider>().uid;
+    try {
+      final region = regionByCode(_claim.country);
+      final prompt =
+          '''Write a formal medical-bill DISPUTE letter addressed to the billing department of the healthcare provider (not the insurer), for a patient in ${region.name}. The patient is contesting specific overcharges and billing errors found in an audit.
+
+Patient: ${profile?.fullName ?? 'The Patient'}
+Provider: ${_claim.hospitalName.isEmpty ? 'the provider' : _claim.hospitalName}
+Account/Policy ref: ${_claim.policyNumber.isEmpty ? 'N/A' : _claim.policyNumber}
+Total billed: ${formatMoney(_claim.totalExpenses, _claim.currencyCode)} (${_claim.currencyCode.isEmpty ? region.currencyCode : _claim.currencyCode})
+
+Audit findings to base the dispute on:
+${_claim.auditReport}
+
+The letter must:
+1. Request a fully itemized bill and the medical records/codes if not already provided.
+2. List each disputed charge and clearly state why it is incorrect or excessive (use the audit findings).
+3. Reference the patient's rights in ${region.name} (${region.keyRights}) and the option to escalate to ${region.ombudsman}.
+4. Request correction/refund of the specific amounts and a written response within a reasonable deadline.
+5. Be firm, factual, and professional.
+
+Format as a proper business letter (sender block, date, recipient billing department, subject line, salutation, body, closing). Use ${region.currencyCode} for amounts. Output only the letter.''';
+
+      final response = await ChatbotService().getGeminiResponse(prompt);
+      if (uid != null) {
+        final updated = _claim.copyWith(
+            disputeLetter: response, updatedAt: DateTime.now());
+        await _db.saveClaim(uid, updated);
+        if (mounted) setState(() => _claim = updated);
+      } else if (mounted) {
+        setState(() => _claim = _claim.copyWith(disputeLetter: response));
+      }
+    } catch (e) {
+      if (mounted) _snack(e.toString());
+    } finally {
+      if (mounted) setState(() => _generatingDispute = false);
+    }
+  }
+
+  void _snack(String msg) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(msg)));
+
   void _copy(String text) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -265,6 +376,64 @@ Format as a proper business letter (sender block, date, recipient, subject line,
           if (_claim.expenses.isNotEmpty) ...[
             _BillsSection(
                 expenses: _claim.expenses, currencyCode: _claim.currencyCode),
+            const SizedBox(height: AppTheme.lg),
+          ],
+
+          // Bill overcharge audit
+          if (_claim.expenses.isNotEmpty) ...[
+            _AuditCard(
+              loading: _generatingAudit,
+              hasReport: _claim.auditReport.isNotEmpty,
+              onRun: _generatingAudit ? null : _auditBills,
+            ),
+            if (_claim.auditReport.isNotEmpty) ...[
+              const SizedBox(height: AppTheme.lg),
+              _ContentCard(
+                title: 'Bill Audit — potential savings',
+                icon: Icons.savings_rounded,
+                color: AppTheme.successColor,
+                content: _claim.auditReport,
+                onCopy: () => _copy(_claim.auditReport),
+              ),
+              const SizedBox(height: AppTheme.md),
+              OutlinedButton.icon(
+                onPressed:
+                    _generatingDispute ? null : _generateDisputeLetter,
+                icon: _generatingDispute
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppTheme.successColor))
+                    : const Icon(Icons.edit_document,
+                        color: AppTheme.successColor, size: 18),
+                label: Text(
+                  _generatingDispute
+                      ? 'Drafting dispute letter…'
+                      : _claim.disputeLetter.isEmpty
+                          ? 'Generate dispute letter'
+                          : 'Regenerate dispute letter',
+                  style: const TextStyle(color: AppTheme.successColor),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppTheme.successColor),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: AppTheme.md),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: AppTheme.mediumRadius),
+                ),
+              ),
+              if (_claim.disputeLetter.isNotEmpty) ...[
+                const SizedBox(height: AppTheme.md),
+                _ContentCard(
+                  title: 'Dispute Letter (to provider billing)',
+                  icon: Icons.mail_outline_rounded,
+                  color: AppTheme.successColor,
+                  content: _claim.disputeLetter,
+                  onCopy: () => _copy(_claim.disputeLetter),
+                ),
+              ],
+            ],
             const SizedBox(height: AppTheme.lg),
           ],
 
@@ -647,6 +816,83 @@ class _BillsSection extends StatelessWidget {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Call-to-action card that runs the AI bill-overcharge audit.
+class _AuditCard extends StatelessWidget {
+  final bool loading;
+  final bool hasReport;
+  final VoidCallback? onRun;
+
+  const _AuditCard({
+    required this.loading,
+    required this.hasReport,
+    required this.onRun,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppTheme.lg),
+      decoration: BoxDecoration(
+        color: AppTheme.successColor.withValues(alpha: 0.06),
+        borderRadius: AppTheme.mediumRadius,
+        border:
+            Border.all(color: AppTheme.successColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.savings_rounded,
+                  color: AppTheme.successColor, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Find overcharges & billing errors',
+                    style: AppTheme.headingSmall.copyWith(fontSize: 15)),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppTheme.sm),
+          Text(
+            'AI reviews every bill for duplicate charges, inflated rates, and items that should be covered — and tells you exactly how to dispute them.',
+            style: AppTheme.bodySmall,
+          ),
+          const SizedBox(height: AppTheme.md),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onRun,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.successColor,
+                padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
+                shape: RoundedRectangleBorder(
+                    borderRadius: AppTheme.mediumRadius),
+              ),
+              icon: loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.search_rounded,
+                      color: Colors.white, size: 18),
+              label: Text(
+                loading
+                    ? 'Auditing bills…'
+                    : hasReport
+                        ? 'Re-run bill audit'
+                        : 'Audit my bills',
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
         ],
       ),
     );

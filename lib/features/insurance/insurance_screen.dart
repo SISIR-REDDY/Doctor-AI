@@ -8,13 +8,30 @@ import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
 
-class InsuranceScreen extends StatelessWidget {
+class InsuranceScreen extends StatefulWidget {
   const InsuranceScreen({super.key});
+
+  @override
+  State<InsuranceScreen> createState() => _InsuranceScreenState();
+}
+
+class _InsuranceScreenState extends State<InsuranceScreen> {
+  final db = FirestoreService();
+
+  // Cache the stream so rebuilds (e.g. theme toggle) don't resubscribe/reload.
+  Stream<List<InsurancePolicy>>? _stream;
+  String? _streamUid;
+  Stream<List<InsurancePolicy>> _policies(String uid) {
+    if (_streamUid != uid) {
+      _streamUid = uid;
+      _stream = db.watchPolicies(uid);
+    }
+    return _stream!;
+  }
 
   @override
   Widget build(BuildContext context) {
     final uid = context.read<HealthDataProvider>().uid;
-    final db = FirestoreService();
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -32,7 +49,7 @@ class InsuranceScreen extends StatelessWidget {
       body: uid == null
           ? const Center(child: Text('Please sign in'))
           : StreamBuilder<List<InsurancePolicy>>(
-              stream: db.watchPolicies(uid),
+              stream: _policies(uid),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());

@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
+import '../../core/providers/theme_controller.dart';
 import '../../features/insurance/insurance_screen.dart';
 import '../../features/profile/health_profile_screen.dart';
 import '../../features/records/records_vault_screen.dart';
 import '../../features/symptom_journal/symptom_journal_screen.dart';
+import '../../theme/app_animations.dart';
 import '../../theme/app_theme.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
@@ -33,6 +35,13 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Depend on the theme controller AND platform brightness so the whole tab
+    // tree (kept alive in the IndexedStack) rebuilds when the user toggles
+    // light/dark or the OS appearance changes — otherwise these persistent
+    // screens keep their old colors. The children below are intentionally NOT
+    // const so they actually rebuild on that change.
+    context.watch<ThemeController>();
+    MediaQuery.platformBrightnessOf(context);
     return PopScope(
       canPop: _navIndex == 0,
       onPopInvokedWithResult: (didPop, _) {
@@ -53,11 +62,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               onInsurance: () => _onNav(3),
               onNewClaim: () => _go(AppRouter.newClaim),
               onClaims: () => _go(AppRouter.claims),
+              onReminders: () => _go(AppRouter.reminders),
             ),
-            const SymptomJournalScreen(),
-            const RecordsVaultScreen(),
-            const InsuranceScreen(),
-            const HealthProfileScreen(),
+            SymptomJournalScreen(),
+            RecordsVaultScreen(),
+            InsuranceScreen(),
+            HealthProfileScreen(),
           ],
         ),
         floatingActionButton: _navIndex == 0
@@ -110,6 +120,7 @@ class _HomeTab extends StatelessWidget {
   final VoidCallback onInsurance;
   final VoidCallback onNewClaim;
   final VoidCallback onClaims;
+  final VoidCallback onReminders;
 
   const _HomeTab({
     required this.onProfile,
@@ -121,6 +132,7 @@ class _HomeTab extends StatelessWidget {
     required this.onInsurance,
     required this.onNewClaim,
     required this.onClaims,
+    required this.onReminders,
   });
 
   @override
@@ -146,11 +158,23 @@ class _HomeTab extends StatelessWidget {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(child: _Header(onProfile: onProfile)),
-            SliverToBoxAdapter(child: _AiPromptCard(onTap: onAiChat)),
-            SliverToBoxAdapter(child: _HealthOverview(onEdit: onHealthProfile)),
+            SliverToBoxAdapter(
+              child: SlideUpAnimation(
+                delay: const Duration(milliseconds: 40),
+                child: _AiPromptCard(onTap: onAiChat),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SlideUpAnimation(
+                delay: const Duration(milliseconds: 100),
+                child: _HealthOverview(onEdit: onHealthProfile),
+              ),
+            ),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
             SliverToBoxAdapter(
-              child: _FeatureSection(
+              child: SlideUpAnimation(
+                delay: const Duration(milliseconds: 160),
+                child: _FeatureSection(
                 label: 'AI & DAILY CARE',
                 items: [
                   _MenuItem(
@@ -169,11 +193,22 @@ class _HomeTab extends StatelessWidget {
                     subtitle: 'Log daily symptoms & AI trend analysis',
                     onTap: onSymptomJournal,
                   ),
+                  _MenuItem(
+                    icon: Icons.notifications_active_outlined,
+                    iconBg: const Color(0xFFCBF0DC),
+                    iconColor: AppTheme.successColor,
+                    title: 'Reminders & Schedule',
+                    subtitle: 'Medication doses, vaccinations & appointments',
+                    onTap: onReminders,
+                  ),
                 ],
+                ),
               ),
             ),
             SliverToBoxAdapter(
-              child: _FeatureSection(
+              child: SlideUpAnimation(
+                delay: const Duration(milliseconds: 220),
+                child: _FeatureSection(
                 label: 'YOUR HEALTH DATA',
                 items: [
                   _MenuItem(
@@ -193,10 +228,13 @@ class _HomeTab extends StatelessWidget {
                     onTap: onMedications,
                   ),
                 ],
+                ),
               ),
             ),
             SliverToBoxAdapter(
-              child: _FeatureSection(
+              child: SlideUpAnimation(
+                delay: const Duration(milliseconds: 280),
+                child: _FeatureSection(
                 label: 'REPORTS & DOCUMENTS',
                 items: [
                   _MenuItem(
@@ -216,10 +254,13 @@ class _HomeTab extends StatelessWidget {
                     onTap: onRecords,
                   ),
                 ],
+                ),
               ),
             ),
             SliverToBoxAdapter(
-              child: _FeatureSection(
+              child: SlideUpAnimation(
+                delay: const Duration(milliseconds: 340),
+                child: _FeatureSection(
                 label: 'INSURANCE & CLAIMS',
                 items: [
                   _MenuItem(
@@ -248,6 +289,7 @@ class _HomeTab extends StatelessWidget {
                     showDivider: false,
                   ),
                 ],
+                ),
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),

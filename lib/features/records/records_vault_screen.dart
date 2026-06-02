@@ -27,6 +27,17 @@ class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
   final _db = FirestoreService();
   String _filterType = 'All';
 
+  // Cache the stream so rebuilds (e.g. theme toggle) don't resubscribe/reload.
+  Stream<List<MedicalRecord>>? _stream;
+  String? _streamUid;
+  Stream<List<MedicalRecord>> _records(String uid) {
+    if (_streamUid != uid) {
+      _streamUid = uid;
+      _stream = _db.watchMedicalRecords(uid);
+    }
+    return _stream!;
+  }
+
   static const _types = [
     'All',
     'lab',
@@ -74,7 +85,7 @@ class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
                 ),
                 Expanded(
                   child: StreamBuilder<List<MedicalRecord>>(
-                    stream: _db.watchMedicalRecords(uid),
+                    stream: _records(uid),
                     builder: (ctx, snap) {
                       if (snap.connectionState ==
                           ConnectionState.waiting) {

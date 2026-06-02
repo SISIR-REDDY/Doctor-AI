@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_animations.dart';
+
 /// iOS-inspired glossy palette — system blue, soft surfaces, vibrant accents.
 ///
 /// Neutral surface/text tokens are *brightness-aware*: they resolve to a light
@@ -656,16 +658,11 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlossyPanel(
-      padding: padding,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: AppTheme.largeRadius,
-          child: child,
-        ),
-      ),
+    // PressableScale gives cheap tap feedback (and is a no-op when onTap is
+    // null), so non-interactive cards stay completely static.
+    return PressableScale(
+      onTap: onTap,
+      child: GlossyPanel(padding: padding, child: child),
     );
   }
 }
@@ -694,43 +691,39 @@ class GlossyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: margin,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: borderRadius,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: gradient,
-              color: gradient == null
-                  ? (backgroundColor ?? AppTheme.surfaceColor)
-                  : null,
-              borderRadius: borderRadius,
-              border: Border.all(
-                color: gradient != null
-                    ? Colors.white.withValues(alpha: 0.25)
-                    : AppTheme.glassBorder,
-                width: 0.8,
-              ),
-              boxShadow: AppTheme.cardShadow,
+      child: PressableScale(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: gradient,
+            color: gradient == null
+                ? (backgroundColor ?? AppTheme.surfaceColor)
+                : null,
+            borderRadius: borderRadius,
+            border: Border.all(
+              color: gradient != null
+                  ? Colors.white.withValues(alpha: 0.25)
+                  : AppTheme.glassBorder,
+              width: 0.8,
             ),
-            child: ClipRRect(
-              borderRadius: borderRadius,
-              child: Stack(
-                children: [
-                  if (gradient != null)
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: 72,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(gradient: AppTheme.glassShine),
-                      ),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: ClipRRect(
+            borderRadius: borderRadius,
+            child: Stack(
+              children: [
+                if (gradient != null)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 72,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(gradient: AppTheme.glassShine),
                     ),
-                  Padding(padding: padding, child: child),
-                ],
-              ),
+                  ),
+                Padding(padding: padding, child: child),
+              ],
             ),
           ),
         ),

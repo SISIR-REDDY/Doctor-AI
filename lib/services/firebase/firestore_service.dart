@@ -253,6 +253,96 @@ class FirestoreService {
   }
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // MEDICATION LOGS (adherence)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  /// Logs for a single day (date as 'yyyy-MM-dd'). Sorted in memory.
+  Stream<List<MedicationLog>> watchMedicationLogs(String uid, String date) {
+    if (!_isFirebaseAvailable) return Stream.value(const []);
+    return _sub(uid, 'medication_logs')
+        .where('date', isEqualTo: date)
+        .snapshots()
+        .map((s) {
+      final list =
+          s.docs.map((d) => MedicationLog.fromMap(d.data())).toList();
+      list.sort((a, b) => a.time.compareTo(b.time));
+      return list;
+    });
+  }
+
+  /// Logs on or after [sinceDate] ('yyyy-MM-dd'); used for adherence stats.
+  /// Date strings sort chronologically, so a single range filter suffices.
+  Stream<List<MedicationLog>> watchRecentMedicationLogs(
+      String uid, String sinceDate) {
+    if (!_isFirebaseAvailable) return Stream.value(const []);
+    return _sub(uid, 'medication_logs')
+        .where('date', isGreaterThanOrEqualTo: sinceDate)
+        .snapshots()
+        .map((s) => s.docs.map((d) => MedicationLog.fromMap(d.data())).toList());
+  }
+
+  Future<void> saveMedicationLog(String uid, MedicationLog log) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'medication_logs').doc(log.id).set(log.toMap());
+    } catch (e) {
+      throw AppException(
+          code: 'save-medlog-failed',
+          message: 'Unable to save dose.',
+          cause: e);
+    }
+  }
+
+  Future<void> deleteMedicationLog(String uid, String logId) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'medication_logs').doc(logId).delete();
+    } catch (e) {
+      throw AppException(
+          code: 'delete-medlog-failed',
+          message: 'Unable to update dose.',
+          cause: e);
+    }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // HEALTH REMINDERS (vaccination / appointment / custom)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Stream<List<HealthReminder>> watchReminders(String uid) {
+    if (!_isFirebaseAvailable) return Stream.value(const []);
+    return _sub(uid, 'reminders')
+        .orderBy('dateTime')
+        .snapshots()
+        .map((s) =>
+            s.docs.map((d) => HealthReminder.fromMap(d.data())).toList());
+  }
+
+  Future<void> saveReminder(String uid, HealthReminder reminder) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'reminders').doc(reminder.id).set(reminder.toMap());
+    } catch (e) {
+      throw AppException(
+          code: 'save-reminder-failed',
+          message: 'Unable to save reminder.',
+          cause: e);
+    }
+  }
+
+  Future<void> deleteReminder(String uid, String reminderId) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'reminders').doc(reminderId).delete();
+    } catch (e) {
+      throw AppException(
+          code: 'delete-reminder-failed',
+          message: 'Unable to delete reminder.',
+          cause: e);
+    }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // MEDICAL RECORDS
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

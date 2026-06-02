@@ -276,6 +276,8 @@ class Medication {
   final String purpose;
   final bool isActive;
   final String notes;
+  /// Daily reminder times as 'HH:mm' (24h), e.g. ['08:00','21:00'].
+  final List<String> reminderTimes;
   final DateTime createdAt;
 
   Medication({
@@ -290,6 +292,7 @@ class Medication {
     this.purpose = '',
     this.isActive = true,
     this.notes = '',
+    this.reminderTimes = const <String>[],
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -305,6 +308,7 @@ class Medication {
     String? purpose,
     bool? isActive,
     String? notes,
+    List<String>? reminderTimes,
     DateTime? createdAt,
   }) =>
       Medication(
@@ -319,6 +323,7 @@ class Medication {
         purpose: purpose ?? this.purpose,
         isActive: isActive ?? this.isActive,
         notes: notes ?? this.notes,
+        reminderTimes: reminderTimes ?? this.reminderTimes,
         createdAt: createdAt ?? this.createdAt,
       );
 
@@ -334,6 +339,7 @@ class Medication {
         'purpose': purpose,
         'isActive': isActive,
         'notes': notes,
+        'reminderTimes': reminderTimes,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -347,9 +353,173 @@ class Medication {
         endDate: (map['endDate'] ?? '').toString(),
         prescribingDoctor: (map['prescribingDoctor'] ?? '').toString(),
         purpose: (map['purpose'] ?? '').toString(),
-        isActive: map['isActive'] == true,
+        isActive: map['isActive'] != false,
         notes: (map['notes'] ?? '').toString(),
+        reminderTimes: _toStringList(map['reminderTimes']),
         createdAt: _toDateTime(map['createdAt']),
+      );
+}
+
+// ─── MedicationLog (adherence) ───────────────────────────────────────────────
+
+/// One logged dose event — whether the user took or skipped a scheduled dose.
+class MedicationLog {
+  final String id;
+  final String medicationId;
+  final String medicationName;
+  final String date; // 'yyyy-MM-dd'
+  final String time; // 'HH:mm' scheduled slot
+  final String status; // taken | skipped
+  final DateTime loggedAt;
+
+  MedicationLog({
+    this.id = '',
+    this.medicationId = '',
+    this.medicationName = '',
+    this.date = '',
+    this.time = '',
+    this.status = 'taken',
+    DateTime? loggedAt,
+  }) : loggedAt = loggedAt ?? DateTime.now();
+
+  bool get isTaken => status == 'taken';
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'medicationId': medicationId,
+        'medicationName': medicationName,
+        'date': date,
+        'time': time,
+        'status': status,
+        'loggedAt': loggedAt.toIso8601String(),
+      };
+
+  factory MedicationLog.fromMap(Map<String, dynamic> map) => MedicationLog(
+        id: (map['id'] ?? '').toString(),
+        medicationId: (map['medicationId'] ?? '').toString(),
+        medicationName: (map['medicationName'] ?? '').toString(),
+        date: (map['date'] ?? '').toString(),
+        time: (map['time'] ?? '').toString(),
+        status: (map['status'] ?? 'taken').toString(),
+        loggedAt: _toDateTime(map['loggedAt']),
+      );
+}
+
+// ─── HealthReminder (vaccination / appointment / custom) ─────────────────────
+
+/// A scheduled health item with a single date/time: a vaccination due date, a
+/// doctor appointment, or a free-form custom reminder.
+class HealthReminder {
+  final String id;
+  final String userId;
+
+  /// vaccination | appointment | custom
+  final String type;
+  final String title;
+  final String notes;
+
+  /// When it is due / scheduled.
+  final DateTime dateTime;
+
+  /// Clinic / doctor / place (mainly for appointments).
+  final String location;
+
+  /// Minutes before [dateTime] to fire the reminder (e.g. 60 = 1h before).
+  final int notifyMinutesBefore;
+
+  /// none | daily | weekly | monthly
+  final String recurrence;
+
+  final bool completed;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  HealthReminder({
+    this.id = '',
+    this.userId = '',
+    this.type = 'custom',
+    this.title = '',
+    this.notes = '',
+    DateTime? dateTime,
+    this.location = '',
+    this.notifyMinutesBefore = 0,
+    this.recurrence = 'none',
+    this.completed = false,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  })  : dateTime = dateTime ?? DateTime.now(),
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
+
+  bool get isRecurring => recurrence != 'none';
+
+  /// Recurring reminders repeat, so they're never "overdue".
+  bool get isOverdue =>
+      !completed && !isRecurring && dateTime.isBefore(DateTime.now());
+
+  /// The moment the reminder should fire.
+  DateTime get notifyAt =>
+      dateTime.subtract(Duration(minutes: notifyMinutesBefore));
+
+  HealthReminder copyWith({
+    String? id,
+    String? userId,
+    String? type,
+    String? title,
+    String? notes,
+    DateTime? dateTime,
+    String? location,
+    int? notifyMinutesBefore,
+    String? recurrence,
+    bool? completed,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) =>
+      HealthReminder(
+        id: id ?? this.id,
+        userId: userId ?? this.userId,
+        type: type ?? this.type,
+        title: title ?? this.title,
+        notes: notes ?? this.notes,
+        dateTime: dateTime ?? this.dateTime,
+        location: location ?? this.location,
+        notifyMinutesBefore: notifyMinutesBefore ?? this.notifyMinutesBefore,
+        recurrence: recurrence ?? this.recurrence,
+        completed: completed ?? this.completed,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'userId': userId,
+        'type': type,
+        'title': title,
+        'notes': notes,
+        'dateTime': dateTime.toIso8601String(),
+        'location': location,
+        'notifyMinutesBefore': notifyMinutesBefore,
+        'recurrence': recurrence,
+        'completed': completed,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  factory HealthReminder.fromMap(Map<String, dynamic> map) => HealthReminder(
+        id: (map['id'] ?? '').toString(),
+        userId: (map['userId'] ?? '').toString(),
+        type: (map['type'] ?? 'custom').toString(),
+        title: (map['title'] ?? '').toString(),
+        notes: (map['notes'] ?? '').toString(),
+        dateTime: _toDateTime(map['dateTime']),
+        location: (map['location'] ?? '').toString(),
+        notifyMinutesBefore: (map['notifyMinutesBefore'] is num)
+            ? (map['notifyMinutesBefore'] as num).toInt()
+            : int.tryParse(map['notifyMinutesBefore']?.toString() ?? '') ?? 0,
+        recurrence: (map['recurrence'] ?? 'none').toString(),
+        completed: map['completed'] == true,
+        createdAt: _toDateTime(map['createdAt']),
+        updatedAt: _toDateTime(map['updatedAt']),
       );
 }
 
@@ -708,6 +878,10 @@ class CaseExpense {
   final String imagePath; // local receipt copy, if any
   final String note;
 
+  /// Raw itemized line-items extracted from the bill by the scanner, e.g.
+  /// "Room charge — 12,000\nMRI scan — 8,500". Powers line-item overcharge audit.
+  final String lineItems;
+
   /// True when fields were pre-filled by the AI bill scanner.
   final bool aiExtracted;
 
@@ -720,6 +894,7 @@ class CaseExpense {
     this.documentUrl = '',
     this.imagePath = '',
     this.note = '',
+    this.lineItems = '',
     this.aiExtracted = false,
   });
 
@@ -732,6 +907,7 @@ class CaseExpense {
     String? documentUrl,
     String? imagePath,
     String? note,
+    String? lineItems,
     bool? aiExtracted,
   }) =>
       CaseExpense(
@@ -743,6 +919,7 @@ class CaseExpense {
         documentUrl: documentUrl ?? this.documentUrl,
         imagePath: imagePath ?? this.imagePath,
         note: note ?? this.note,
+        lineItems: lineItems ?? this.lineItems,
         aiExtracted: aiExtracted ?? this.aiExtracted,
       );
 
@@ -755,6 +932,7 @@ class CaseExpense {
         'documentUrl': documentUrl,
         'imagePath': imagePath,
         'note': note,
+        'lineItems': lineItems,
         'aiExtracted': aiExtracted,
       };
 
@@ -769,6 +947,7 @@ class CaseExpense {
         documentUrl: (map['documentUrl'] ?? '').toString(),
         imagePath: (map['imagePath'] ?? '').toString(),
         note: (map['note'] ?? '').toString(),
+        lineItems: (map['lineItems'] ?? '').toString(),
         aiExtracted: map['aiExtracted'] == true,
       );
 }
@@ -803,6 +982,10 @@ class InsuranceClaim {
   final String rejectionReason;
   final String fightAnalysis;
   final String appealLetter;
+  /// AI bill-overcharge audit result (flagged errors + estimated savings).
+  final String auditReport;
+  /// AI-drafted letter to the provider's billing dept disputing overcharges.
+  final String disputeLetter;
 
   // ── Global "case" fields ──
   /// Short label for the case, e.g. "Knee surgery – Apr 2026".
@@ -836,6 +1019,8 @@ class InsuranceClaim {
     this.rejectionReason = '',
     this.fightAnalysis = '',
     this.appealLetter = '',
+    this.auditReport = '',
+    this.disputeLetter = '',
     this.title = '',
     this.country = '',
     this.currencyCode = '',
@@ -876,6 +1061,8 @@ class InsuranceClaim {
     String? rejectionReason,
     String? fightAnalysis,
     String? appealLetter,
+    String? auditReport,
+    String? disputeLetter,
     String? title,
     String? country,
     String? currencyCode,
@@ -901,6 +1088,8 @@ class InsuranceClaim {
         rejectionReason: rejectionReason ?? this.rejectionReason,
         fightAnalysis: fightAnalysis ?? this.fightAnalysis,
         appealLetter: appealLetter ?? this.appealLetter,
+        auditReport: auditReport ?? this.auditReport,
+        disputeLetter: disputeLetter ?? this.disputeLetter,
         title: title ?? this.title,
         country: country ?? this.country,
         currencyCode: currencyCode ?? this.currencyCode,
@@ -927,6 +1116,8 @@ class InsuranceClaim {
         'rejectionReason': rejectionReason,
         'fightAnalysis': fightAnalysis,
         'appealLetter': appealLetter,
+        'auditReport': auditReport,
+        'disputeLetter': disputeLetter,
         'title': title,
         'country': country,
         'currencyCode': currencyCode,
@@ -955,6 +1146,8 @@ class InsuranceClaim {
         rejectionReason: (map['rejectionReason'] ?? '').toString(),
         fightAnalysis: (map['fightAnalysis'] ?? '').toString(),
         appealLetter: (map['appealLetter'] ?? '').toString(),
+        auditReport: (map['auditReport'] ?? '').toString(),
+        disputeLetter: (map['disputeLetter'] ?? '').toString(),
         title: (map['title'] ?? '').toString(),
         country: (map['country'] ?? '').toString(),
         currencyCode: (map['currencyCode'] ?? '').toString(),

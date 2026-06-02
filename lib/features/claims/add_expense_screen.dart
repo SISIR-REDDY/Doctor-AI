@@ -63,6 +63,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   DateTime? _date;
   String _imagePath = '';
   String _documentUrl = '';
+  String _lineItems = '';
   bool _aiExtracted = false;
 
   bool _scanning = false;
@@ -80,6 +81,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       _date = e.date.isNotEmpty ? _tryParseDate(e.date) : null;
       _imagePath = e.imagePath;
       _documentUrl = e.documentUrl;
+      _lineItems = e.lineItems;
       _aiExtracted = e.aiExtracted;
     }
   }
@@ -141,6 +143,7 @@ Return ONLY a JSON object (no markdown fences, no commentary) with these keys:
 - "amount": number — the TOTAL payable amount as a plain number (no currency symbol, no commas); 0 if unreadable
 - "date": string — the bill date formatted as "DD MMM YYYY" (e.g. "12 Apr 2026"), else ""
 - "category": one of "hospital","pharmacy","lab","consultation","imaging","procedure","other"
+- "lineItems": string — every individual charge line copied verbatim, one per line as "description — amount" (keep quantities/codes if shown). Empty string if the bill has no itemized lines.
 If a field is unreadable, use "" or 0. Output the JSON object only.''';
 
       final response = await ChatbotService().getGeminiVisionResponse(
@@ -163,6 +166,8 @@ If a field is unreadable, use "" or 0. Output the JSON object only.''';
           if (parsed != null) _date = parsed;
           final cat = (data['category'] ?? '').toString();
           if (kExpenseCategories.containsKey(cat)) _category = cat;
+          final items = (data['lineItems'] ?? '').toString().trim();
+          if (items.isNotEmpty) _lineItems = items;
           _aiExtracted = true;
         });
         _snack('Bill scanned — review the details below.');
@@ -248,6 +253,7 @@ If a field is unreadable, use "" or 0. Output the JSON object only.''';
         documentUrl: documentUrl,
         imagePath: _imagePath,
         note: _noteCtrl.text.trim(),
+        lineItems: _lineItems,
         aiExtracted: _aiExtracted,
       );
       if (mounted) Navigator.pop(context, expense);

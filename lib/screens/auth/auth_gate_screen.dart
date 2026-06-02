@@ -14,6 +14,7 @@ import '../../services/firebase/api_credentials_service.dart';
 import '../../services/firebase/auth_service.dart';
 import '../../services/firebase/firebase_bootstrap_service.dart';
 import '../../services/firebase/firestore_service.dart';
+import '../../services/push_notification_service.dart';
 import 'sign_in_screen.dart';
 
 class AuthGateScreen extends StatefulWidget {
@@ -77,6 +78,9 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     ApiCredentialsService.instance.preload().catchError((e) {
       if (kDebugMode) debugPrint('[AuthGate] API keys not ready: $e');
     });
+
+    // Associate this device's FCM token with the signed-in user for push.
+    PushNotificationService.instance.registerForUser(user.uid);
 
     _firestoreService.loadPatientProfile(user.uid).then((profile) async {
       if (!mounted) return;

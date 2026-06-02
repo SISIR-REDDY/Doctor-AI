@@ -8,6 +8,7 @@ import '../../features/insurance/add_policy_screen.dart';
 import '../../features/insurance/insurance_screen.dart';
 import '../../features/medications/medications_screen.dart';
 import '../../features/profile/health_profile_screen.dart';
+import '../../features/reminders/reminders_screen.dart';
 import '../../features/records/record_detail_screen.dart';
 import '../../features/records/records_vault_screen.dart';
 import '../../features/symptom_journal/symptom_journal_screen.dart';
@@ -25,6 +26,7 @@ class AppRouter {
   static const String claims = '/claims';
   static const String newClaim = '/newClaim';
   static const String claimDetail = '/claimDetail';
+  static const String reminders = '/reminders';
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -39,6 +41,9 @@ class AppRouter {
 
       case medications:
         return _slide(const MedicationsScreen(), settings);
+
+      case reminders:
+        return _slide(const RemindersScreen(), settings);
 
       case recordsVault:
         return _slide(const RecordsVaultScreen(), settings);

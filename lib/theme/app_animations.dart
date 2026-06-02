@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 
+/// True when the OS requests reduced motion (accessibility "remove animations"
+/// / battery saver). Entrance animations skip to their end state so the app
+/// never animates when the device or user asks it not to — important on old
+/// or low-power hardware.
+bool get kReduceMotion =>
+    WidgetsBinding.instance.platformDispatcher.accessibilityFeatures
+        .disableAnimations;
+
 /// App-wide animation constants and utilities
 class AppAnimations {
   // Duration constants
@@ -61,9 +69,13 @@ class _FadeInAnimationState extends State<FadeInAnimation>
       curve: widget.curve,
     );
 
-    Future.delayed(widget.delay, () {
-      if (mounted) _controller.forward();
-    });
+    if (kReduceMotion) {
+      _controller.value = 1.0; // skip animation on low-end / reduce-motion
+    } else {
+      Future.delayed(widget.delay, () {
+        if (mounted) _controller.forward();
+      });
+    }
   }
 
   @override
@@ -132,9 +144,13 @@ class _SlideUpAnimationState extends State<SlideUpAnimation>
       curve: widget.curve,
     ));
 
-    Future.delayed(widget.delay, () {
-      if (mounted) _controller.forward();
-    });
+    if (kReduceMotion) {
+      _controller.value = 1.0; // skip animation on low-end / reduce-motion
+    } else {
+      Future.delayed(widget.delay, () {
+        if (mounted) _controller.forward();
+      });
+    }
   }
 
   @override
@@ -494,6 +510,55 @@ class _RotationAnimationState extends State<RotationAnimation>
     return RotationTransition(
       turns: _controller,
       child: widget.child,
+    );
+  }
+}
+
+/// Subtle "press" feedback: scales the child down slightly while held, then
+/// springs back. Purely a [Transform] (GPU-cheap), so it stays smooth on old
+/// devices; honours reduce-motion by disabling the scale.
+///
+/// Wrap tappable surfaces with this and pass [onTap]. If [onTap] is null it is
+/// transparent (no gesture handling, no scaling).
+class PressableScale extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double pressedScale;
+
+  const PressableScale({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.pressedScale = 0.97,
+  });
+
+  @override
+  State<PressableScale> createState() => _PressableScaleState();
+}
+
+class _PressableScaleState extends State<PressableScale> {
+  bool _pressed = false;
+
+  void _set(bool v) {
+    if (_pressed != v) setState(() => _pressed = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.onTap == null) return widget.child;
+    final scale = (_pressed && !kReduceMotion) ? widget.pressedScale : 1.0;
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => _set(true),
+      onTapUp: (_) => _set(false),
+      onTapCancel: () => _set(false),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedScale(
+        scale: scale,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
     );
   }
 }
