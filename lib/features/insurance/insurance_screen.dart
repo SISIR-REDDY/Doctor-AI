@@ -328,22 +328,22 @@ class _PolicyCard extends StatelessWidget {
     required this.onDelete,
   });
 
-  // Two-stop gradients — left-to-right on a landscape card
+  // Vibrant two-stop gradients per policy type
   static const _typeGradients = <String, List<Color>>{
-    'health': [Color(0xFF00B140), Color(0xFF007A2F)],
-    'term': [Color(0xFF1A56DB), Color(0xFF6C3FC5)],
-    'critical_illness': [Color(0xFFD90000), Color(0xFF7B0000)],
-    'accidental': [Color(0xFFE07B00), Color(0xFF7B3A00)],
-    'other': [Color(0xFF3A3A4C), Color(0xFF1C1C28)],
+    'health': [Color(0xFF11998E), Color(0xFF38EF7D)],
+    'term': [Color(0xFF4776E6), Color(0xFF8E54E9)],
+    'critical_illness': [Color(0xFFFF416C), Color(0xFFFF4B2B)],
+    'accidental': [Color(0xFFF7971E), Color(0xFFFFD200)],
+    'other': [Color(0xFF6A11CB), Color(0xFF2575FC)],
   };
 
-  // Accent circle pair colours (Mastercard-style overlapping circles)
+  // Overlapping circle colours (network badge, bottom-right of card)
   static const _networkColors = <String, List<Color>>{
-    'health': [Color(0xFF80FFB0), Color(0xFF00E676)],
-    'term': [Color(0xFF90CAF9), Color(0xFF5C6BC0)],
-    'critical_illness': [Color(0xFFFF8A80), Color(0xFFFF1744)],
-    'accidental': [Color(0xFFFFCC80), Color(0xFFFF6D00)],
-    'other': [Color(0xFF9E9E9E), Color(0xFF616161)],
+    'health': [Color(0xFF38EF7D), Color(0xFF00B09B)],
+    'term': [Color(0xFF8E54E9), Color(0xFF4776E6)],
+    'critical_illness': [Color(0xFFFF4B2B), Color(0xFFFF416C)],
+    'accidental': [Color(0xFFFFD200), Color(0xFFF7971E)],
+    'other': [Color(0xFF2575FC), Color(0xFF6A11CB)],
   };
 
   static const _typeIcons = <String, IconData>{
@@ -475,21 +475,7 @@ class _PolicyCard extends StatelessWidget {
 
                     const Spacer(),
 
-                    // Row 2: EMV chip + contactless icon
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _ChipWidget(),
-                        const SizedBox(width: 12),
-                        Icon(Icons.wifi_rounded,
-                            color: Colors.white.withValues(alpha: 0.5),
-                            size: 18),
-                      ],
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Row 3: Policy number (card-number style)
+                    // Policy number (card-number style)
                     Text(
                       _formatCardNumber(policy.policyNumber),
                       style: TextStyle(
@@ -587,56 +573,6 @@ class _PolicyCard extends StatelessWidget {
 }
 
 // ── Card sub-widgets ──────────────────────────────────────────────────────────
-
-/// Golden EMV chip (like on a real payment card).
-class _ChipWidget extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 38, height: 28,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFD4AF37), Color(0xFFF5D06B), Color(0xFFC8960C)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: CustomPaint(painter: _ChipPainter()),
-    );
-  }
-}
-
-class _ChipPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFB8860B).withValues(alpha: 0.5)
-      ..strokeWidth = 0.8
-      ..style = PaintingStyle.stroke;
-
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-
-    // Centre square
-    final r = 4.0;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(cx, cy), width: r * 2, height: r * 2),
-        const Radius.circular(1),
-      ),
-      paint,
-    );
-    // Lines to edges
-    canvas.drawLine(Offset(cx - r, cy), Offset(0, cy), paint);
-    canvas.drawLine(Offset(cx + r, cy), Offset(size.width, cy), paint);
-    canvas.drawLine(Offset(cx, cy - r), Offset(cx, 0), paint);
-    canvas.drawLine(Offset(cx, cy + r), Offset(cx, size.height), paint);
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
-}
 
 /// Mastercard-style overlapping circles as a network logo.
 class _NetworkLogo extends StatelessWidget {
