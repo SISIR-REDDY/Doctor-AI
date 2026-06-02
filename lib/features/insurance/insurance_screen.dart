@@ -315,7 +315,7 @@ class _StatPill extends StatelessWidget {
       );
 }
 
-// ── Colourful Policy Card ─────────────────────────────────────────────────────
+// ── Payment-card style Policy Card ───────────────────────────────────────────
 
 class _PolicyCard extends StatelessWidget {
   final InsurancePolicy policy;
@@ -328,12 +328,22 @@ class _PolicyCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  // Two-stop gradients — left-to-right on a landscape card
   static const _typeGradients = <String, List<Color>>{
-    'health': [Color(0xFF00C853), Color(0xFF009624)],
-    'term': [Color(0xFF0055E5), Color(0xFF5856D6)],
-    'critical_illness': [Color(0xFFFF3B30), Color(0xFFD00000)],
-    'accidental': [Color(0xFFFF9500), Color(0xFFE65100)],
-    'other': [Color(0xFF636366), Color(0xFF3A3A3C)],
+    'health': [Color(0xFF00B140), Color(0xFF007A2F)],
+    'term': [Color(0xFF1A56DB), Color(0xFF6C3FC5)],
+    'critical_illness': [Color(0xFFD90000), Color(0xFF7B0000)],
+    'accidental': [Color(0xFFE07B00), Color(0xFF7B3A00)],
+    'other': [Color(0xFF3A3A4C), Color(0xFF1C1C28)],
+  };
+
+  // Accent circle pair colours (Mastercard-style overlapping circles)
+  static const _networkColors = <String, List<Color>>{
+    'health': [Color(0xFF80FFB0), Color(0xFF00E676)],
+    'term': [Color(0xFF90CAF9), Color(0xFF5C6BC0)],
+    'critical_illness': [Color(0xFFFF8A80), Color(0xFFFF1744)],
+    'accidental': [Color(0xFFFFCC80), Color(0xFFFF6D00)],
+    'other': [Color(0xFF9E9E9E), Color(0xFF616161)],
   };
 
   static const _typeIcons = <String, IconData>{
@@ -345,7 +355,7 @@ class _PolicyCard extends StatelessWidget {
   };
 
   static const _typeLabels = <String, String>{
-    'health': 'Health',
+    'health': 'Health Insurance',
     'term': 'Term Life',
     'critical_illness': 'Critical Illness',
     'accidental': 'Accidental',
@@ -360,247 +370,359 @@ class _PolicyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors =
-        _typeGradients[policy.policyType] ?? _typeGradients['other']!;
+    final colors = _typeGradients[policy.policyType] ?? _typeGradients['other']!;
+    final netColors = _networkColors[policy.policyType] ?? _networkColors['other']!;
     final icon = _typeIcons[policy.policyType] ?? Icons.policy_rounded;
     final label = _typeLabels[policy.policyType] ?? 'Other';
     final freq = _freqShort[policy.premiumFrequency] ?? 'yr';
     final inactive = !policy.isActive;
 
     return Opacity(
-      opacity: inactive ? 0.65 : 1.0,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: colors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: inactive
-              ? null
-              : [
-                  BoxShadow(
-                    color: colors.first.withValues(alpha: 0.4),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-        ),
-        child: Stack(
-          children: [
-            // Decorative circles
-            Positioned(
-              right: -20, top: -20,
-              child: Container(
-                width: 100, height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
-              ),
+      opacity: inactive ? 0.6 : 1.0,
+      child: AspectRatio(
+        // Standard payment card ratio 85.6 × 53.98 mm ≈ 1.586
+        aspectRatio: 1.586,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: colors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            Positioned(
-              right: 30, bottom: -30,
-              child: Container(
-                width: 80, height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
-              ),
-            ),
-
-            // Card content
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Top row: icon + type badge + menu
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(icon, color: Colors.white, size: 18),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          inactive ? '$label · Inactive' : label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert_rounded,
-                            color: Colors.white.withValues(alpha: 0.8),
-                            size: 20),
-                        color: AppTheme.surfaceColor,
-                        onSelected: (v) {
-                          if (v == 'edit') onEdit();
-                          if (v == 'delete') onDelete();
-                        },
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(
-                              value: 'edit', child: Text('Edit')),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Delete',
-                                style:
-                                    TextStyle(color: AppTheme.dangerColor)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Company name
-                  Text(
-                    policy.insurer,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.3,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: inactive
+                ? null
+                : [
+                    BoxShadow(
+                      color: colors.first.withValues(alpha: 0.45),
+                      blurRadius: 24,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 10),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Policy No: ${policy.policyNumber}',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      fontSize: 12,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Divider
-                  Container(
-                    height: 1,
-                    color: Colors.white.withValues(alpha: 0.2),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Stats row
-                  Row(
-                    children: [
-                      _CardStat(
-                        label: 'Coverage',
-                        value: formatMoney(
-                            policy.coverageAmount, policy.currencyCode),
-                      ),
-                      _VerticalDivider(),
-                      if (policy.premiumAmount > 0) ...[
-                        _CardStat(
-                          label: 'Premium',
-                          value:
-                              '${formatMoney(policy.premiumAmount, policy.currencyCode)}/$freq',
-                        ),
-                        _VerticalDivider(),
-                      ],
-                      if (policy.renewalDate.isNotEmpty)
-                        _CardStat(
-                          label: 'Renewal',
-                          value: _formatDate(policy.renewalDate),
-                        ),
-                    ],
-                  ),
-
-                  // Nominee
-                  if (policy.nomineeName.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Row(children: [
-                      Icon(Icons.person_pin_rounded,
-                          size: 13,
-                          color: Colors.white.withValues(alpha: 0.65)),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${policy.nomineeName}  ·  ${policy.nomineeRelation}',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.75),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ]),
                   ],
-                ],
+          ),
+          child: Stack(
+            children: [
+              // ── Background texture — diagonal stripe pattern ─────────────
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: CustomPaint(painter: _StripePainter()),
+                ),
               ),
-            ),
-          ],
+
+              // ── Large translucent circle (top-right) ────────────────────
+              Positioned(
+                right: -30, top: -30,
+                child: Container(
+                  width: 140, height: 140,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.07),
+                  ),
+                ),
+              ),
+
+              // ── Card content ─────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 18, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Row 1: type label + 3-dot menu
+                    Row(
+                      children: [
+                        Icon(icon,
+                            color: Colors.white.withValues(alpha: 0.9),
+                            size: 15),
+                        const SizedBox(width: 6),
+                        Text(
+                          inactive ? '$label  ·  Inactive' : label,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        const Spacer(),
+                        SizedBox(
+                          width: 32, height: 32,
+                          child: PopupMenuButton<String>(
+                            padding: EdgeInsets.zero,
+                            icon: Icon(Icons.more_horiz_rounded,
+                                color: Colors.white.withValues(alpha: 0.8),
+                                size: 20),
+                            color: AppTheme.surfaceColor,
+                            onSelected: (v) {
+                              if (v == 'edit') onEdit();
+                              if (v == 'delete') onDelete();
+                            },
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                  value: 'edit', child: Text('Edit')),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete',
+                                    style: TextStyle(
+                                        color: AppTheme.dangerColor)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const Spacer(),
+
+                    // Row 2: EMV chip + contactless icon
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _ChipWidget(),
+                        const SizedBox(width: 12),
+                        Icon(Icons.wifi_rounded,
+                            color: Colors.white.withValues(alpha: 0.5),
+                            size: 18),
+                      ],
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Row 3: Policy number (card-number style)
+                    Text(
+                      _formatCardNumber(policy.policyNumber),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 3,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+
+                    const Spacer(),
+
+                    // Row 4 (bottom): insurer name + coverage / renewal + network logo
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Insurer
+                              Text(
+                                policy.insurer.toUpperCase(),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              // Coverage + renewal side by side
+                              Row(
+                                children: [
+                                  _MiniStat(
+                                    label: 'COVERAGE',
+                                    value: formatMoney(policy.coverageAmount,
+                                        policy.currencyCode),
+                                  ),
+                                  if (policy.renewalDate.isNotEmpty) ...[
+                                    const SizedBox(width: 18),
+                                    _MiniStat(
+                                      label: 'VALID THRU',
+                                      value: _shortDate(policy.renewalDate),
+                                    ),
+                                  ],
+                                  if (policy.premiumAmount > 0) ...[
+                                    const SizedBox(width: 18),
+                                    _MiniStat(
+                                      label: 'PREMIUM',
+                                      value:
+                                          '${formatMoney(policy.premiumAmount, policy.currencyCode)}/$freq',
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Mastercard-style overlapping circles
+                        _NetworkLogo(colors: netColors),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  String _formatDate(String raw) {
-    final d = DateTime.tryParse(raw);
-    if (d == null) return raw;
-    return '${d.day} ${_months[d.month - 1]} ${d.year}';
+  /// Groups alphanumeric chars into blocks of 4, separated by spaces.
+  String _formatCardNumber(String raw) {
+    final clean = raw.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+    final buf = StringBuffer();
+    for (int i = 0; i < clean.length; i++) {
+      if (i > 0 && i % 4 == 0) buf.write('  ');
+      buf.write(clean[i]);
+    }
+    return buf.toString();
   }
 
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
+  /// Returns MM/YY from an ISO date string, e.g. "2026-06-01" → "06/26".
+  String _shortDate(String raw) {
+    final d = DateTime.tryParse(raw);
+    if (d == null) return raw;
+    return '${d.month.toString().padLeft(2, '0')}/${d.year.toString().substring(2)}';
+  }
 }
 
-class _CardStat extends StatelessWidget {
+// ── Card sub-widgets ──────────────────────────────────────────────────────────
+
+/// Golden EMV chip (like on a real payment card).
+class _ChipWidget extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38, height: 28,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFD4AF37), Color(0xFFF5D06B), Color(0xFFC8960C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: CustomPaint(painter: _ChipPainter()),
+    );
+  }
+}
+
+class _ChipPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFB8860B).withValues(alpha: 0.5)
+      ..strokeWidth = 0.8
+      ..style = PaintingStyle.stroke;
+
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+
+    // Centre square
+    final r = 4.0;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cy), width: r * 2, height: r * 2),
+        const Radius.circular(1),
+      ),
+      paint,
+    );
+    // Lines to edges
+    canvas.drawLine(Offset(cx - r, cy), Offset(0, cy), paint);
+    canvas.drawLine(Offset(cx + r, cy), Offset(size.width, cy), paint);
+    canvas.drawLine(Offset(cx, cy - r), Offset(cx, 0), paint);
+    canvas.drawLine(Offset(cx, cy + r), Offset(cx, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+/// Mastercard-style overlapping circles as a network logo.
+class _NetworkLogo extends StatelessWidget {
+  final List<Color> colors;
+  const _NetworkLogo({required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 52, height: 30,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 0,
+            child: Container(
+              width: 30, height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors[0].withValues(alpha: 0.75),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            child: Container(
+              width: 30, height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors[1].withValues(alpha: 0.75),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact two-line stat (label + value) used on the card bottom row.
+class _MiniStat extends StatelessWidget {
   final String label;
   final String value;
-  const _CardStat({required this.label, required this.value});
+  const _MiniStat({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) => Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.65),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500)),
-            const SizedBox(height: 2),
-            Text(value,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700),
-                overflow: TextOverflow.ellipsis),
-          ],
-        ),
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              )),
+          const SizedBox(height: 1),
+          Text(value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+              overflow: TextOverflow.ellipsis),
+        ],
       );
 }
 
-class _VerticalDivider extends StatelessWidget {
+/// Subtle diagonal stripe texture painted on the card background.
+class _StripePainter extends CustomPainter {
   @override
-  Widget build(BuildContext context) => Container(
-        width: 1,
-        height: 30,
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        color: Colors.white.withValues(alpha: 0.2),
-      );
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.03)
+      ..strokeWidth = 16
+      ..style = PaintingStyle.stroke;
+
+    const spacing = 28.0;
+    for (double x = -size.height; x < size.width + size.height; x += spacing) {
+      canvas.drawLine(Offset(x, 0), Offset(x + size.height, size.height), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
 }
 
 // ── Floating Add Policy button ────────────────────────────────────────────────
