@@ -206,7 +206,19 @@ class ChatbotService {
     required String prompt,
     String? imagePath,
   }) async {
-    debugPrint('\n=== GEMINI VISION PROMPT ===');
+    return getGeminiVisionResponseMulti(
+      prompt: prompt,
+      imagePaths: imagePath != null && imagePath.isNotEmpty ? [imagePath] : [],
+    );
+  }
+
+  /// Analyze one or more images in a single Gemini call.
+  /// All images are sent as separate [inline_data] parts in one request.
+  Future<String> getGeminiVisionResponseMulti({
+    required String prompt,
+    required List<String> imagePaths,
+  }) async {
+    debugPrint('\n=== GEMINI VISION PROMPT (${imagePaths.length} images) ===');
     debugPrint(prompt);
 
     final apiKey = await _getGeminiApiKey();
@@ -217,11 +229,10 @@ class ChatbotService {
       );
     }
 
-    final List<Map<String, dynamic>> parts = [
-      {"text": prompt}
-    ];
+    final List<Map<String, dynamic>> parts = [{'text': prompt}];
 
-    if (imagePath != null && imagePath.isNotEmpty) {
+    for (final imagePath in imagePaths) {
+      if (imagePath.isEmpty) continue;
       try {
         final file = File(imagePath);
         if (await file.exists()) {
@@ -229,19 +240,17 @@ class ChatbotService {
           final imageBase64 = base64Encode(imageBytes);
 
           String mimeType = 'image/jpeg';
-          if (imagePath.toLowerCase().endsWith('.png')) {
+          final lower = imagePath.toLowerCase();
+          if (lower.endsWith('.png')) {
             mimeType = 'image/png';
-          } else if (imagePath.toLowerCase().endsWith('.gif')) {
+          } else if (lower.endsWith('.gif')) {
             mimeType = 'image/gif';
-          } else if (imagePath.toLowerCase().endsWith('.webp')) {
+          } else if (lower.endsWith('.webp')) {
             mimeType = 'image/webp';
           }
 
           parts.add({
-            'inline_data': {
-              'mime_type': mimeType,
-              'data': imageBase64,
-            },
+            'inline_data': {'mime_type': mimeType, 'data': imageBase64},
           });
         }
       } catch (e) {

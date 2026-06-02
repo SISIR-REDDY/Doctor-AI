@@ -531,8 +531,14 @@ class MedicalRecord {
   final String title;
   /// lab | imaging | prescription | discharge | vaccination | other
   final String recordType;
+  /// Local path of the first (or only) page — used for immediate display.
   final String imagePath;
+  /// Cloud URL of the first (or only) page — kept for backward compatibility.
   final String imageUrl;
+  /// Cloud URLs for all pages of a multi-page scan. Always includes [imageUrl]
+  /// as its first element when non-empty. Legacy single-page records have an
+  /// empty list; callers should fall back to [imageUrl] in that case.
+  final List<String> imageUrls;
   final String extractedText;
   final String aiSummary;
   final bool isProcessed;
@@ -548,6 +554,7 @@ class MedicalRecord {
     this.recordType = 'other',
     this.imagePath = '',
     this.imageUrl = '',
+    this.imageUrls = const <String>[],
     this.extractedText = '',
     this.aiSummary = '',
     this.isProcessed = false,
@@ -558,6 +565,10 @@ class MedicalRecord {
   })  : recordDate = recordDate ?? DateTime.now(),
         uploadedAt = uploadedAt ?? DateTime.now();
 
+  /// All displayable cloud URLs: [imageUrls] when non-empty, else [imageUrl].
+  List<String> get allImageUrls =>
+      imageUrls.isNotEmpty ? imageUrls : (imageUrl.isNotEmpty ? [imageUrl] : []);
+
   MedicalRecord copyWith({
     String? id,
     String? userId,
@@ -565,6 +576,7 @@ class MedicalRecord {
     String? recordType,
     String? imagePath,
     String? imageUrl,
+    List<String>? imageUrls,
     String? extractedText,
     String? aiSummary,
     bool? isProcessed,
@@ -580,6 +592,7 @@ class MedicalRecord {
         recordType: recordType ?? this.recordType,
         imagePath: imagePath ?? this.imagePath,
         imageUrl: imageUrl ?? this.imageUrl,
+        imageUrls: imageUrls ?? this.imageUrls,
         extractedText: extractedText ?? this.extractedText,
         aiSummary: aiSummary ?? this.aiSummary,
         isProcessed: isProcessed ?? this.isProcessed,
@@ -596,6 +609,7 @@ class MedicalRecord {
         'recordType': recordType,
         'imagePath': imagePath,
         'imageUrl': imageUrl,
+        'imageUrls': imageUrls,
         'extractedText': extractedText,
         'aiSummary': aiSummary,
         'isProcessed': isProcessed,
@@ -612,6 +626,7 @@ class MedicalRecord {
         recordType: (map['recordType'] ?? 'other').toString(),
         imagePath: (map['imagePath'] ?? '').toString(),
         imageUrl: (map['imageUrl'] ?? '').toString(),
+        imageUrls: _toStringList(map['imageUrls']),
         extractedText: (map['extractedText'] ?? '').toString(),
         aiSummary: (map['aiSummary'] ?? '').toString(),
         isProcessed: map['isProcessed'] == true,

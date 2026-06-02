@@ -268,30 +268,76 @@ class StorageService {
     }
   }
 
+  /// Returns MIME type + storage extension for a given local file path.
+  static ({String mime, String ext}) _mimeFor(String filePath) {
+    final lower = filePath.toLowerCase();
+    if (lower.endsWith('.png')) return (mime: 'image/png', ext: 'png');
+    if (lower.endsWith('.gif')) return (mime: 'image/gif', ext: 'gif');
+    if (lower.endsWith('.webp')) return (mime: 'image/webp', ext: 'webp');
+    if (lower.endsWith('.heic') || lower.endsWith('.heif')) {
+      return (mime: 'image/heic', ext: 'heic');
+    }
+    return (mime: 'image/jpeg', ext: 'jpg');
+  }
+
+  /// Uploads a single document page to Firebase Storage.
+  /// Returns the download URL, or null if Firebase is unavailable or the
+  /// file does not exist. Throws on any other error so the caller can
+  /// distinguish "no Firebase" from "real upload failure".
   Future<String?> uploadDocumentImage({
     required String filePath,
     required String patientId,
     required String scanId,
   }) async {
-    try {
-      final sourceFile = File(filePath);
-      if (!await sourceFile.exists()) return null;
-
-      final storage = _storage;
-      if (storage == null) return null;
-
-      final ref = storage.ref().child('document_scans/$patientId/$scanId.jpg');
-      await ref.putFile(
-        sourceFile,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      return await ref.getDownloadURL();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[StorageService] Firebase scan upload failed: $e');
-      }
+    final sourceFile = File(filePath);
+    if (!await sourceFile.exists()) {
+      debugPrint('[StorageService] File not found: $filePath');
       return null;
     }
+
+    final storage = _storage;
+    if (storage == null) {
+      debugPrint('[StorageService] Firebase Storage not available');
+      return null;
+    }
+
+    final (:mime, :ext) = _mimeFor(filePath);
+    final ref =
+        storage.ref().child('document_scans/$patientId/$scanId.$ext');
+    await ref.putFile(sourceFile, SettableMetadata(contentType: mime));
+    return await ref.getDownloadURL();
+  }
+
+  /// Uploads all pages of a multi-page document scan in parallel.
+  ///
+  /// Returns a list of successfully uploaded URLs (same length as [filePaths]
+  /// minus any that failed). Each page is stored at:
+  ///   `document_scans/{patientId}/{recordId}_page_{i}.{ext}`
+  ///
+  /// Failures are logged individually; the method does NOT throw — it returns
+  /// whatever URLs succeeded so the caller can save a partial record.
+  Future<List<String>> uploadDocumentImages({
+    required List<String> filePaths,
+    required String patientId,
+    required String recordId,
+  }) async {
+    final futures = <Future<String?>>[];
+
+    for (int i = 0; i < filePaths.length; i++) {
+      futures.add(
+        uploadDocumentImage(
+          filePath: filePaths[i],
+          patientId: patientId,
+          scanId: '${recordId}_page_$i',
+        ).catchError((Object e) {
+          debugPrint('[StorageService] Page $i upload failed: $e');
+          return null;
+        }),
+      );
+    }
+
+    final results = await Future.wait(futures);
+    return results.whereType<String>().where((u) => u.isNotEmpty).toList();
   }
 
   bool _isRemoteUrl(String value) {
