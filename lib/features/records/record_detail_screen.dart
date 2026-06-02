@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/widgets/ai_summary_view.dart';
 import '../../models/patient_models.dart';
 import '../../theme/app_theme.dart';
 
@@ -39,41 +40,18 @@ class RecordDetailScreen extends StatelessWidget {
             ]),
             const SizedBox(height: AppTheme.lg),
             if (record.aiSummary.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(AppTheme.lg),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.06),
-                  borderRadius: AppTheme.mediumRadius,
-                  border: Border.all(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.auto_awesome_rounded,
-                            color: AppTheme.primaryColor, size: 20),
-                        const SizedBox(width: 8),
-                        Text('AI Summary',
-                            style: AppTheme.labelLarge.copyWith(
-                                color: AppTheme.primaryColor)),
-                      ],
-                    ),
-                    const SizedBox(height: AppTheme.md),
-                    Text(record.aiSummary, style: AppTheme.bodyMedium),
-                  ],
-                ),
+              AiSummaryView(
+                content: record.aiSummary,
+                title: 'AI Summary',
               ),
             if (record.extractedText.isNotEmpty &&
                 record.extractedText != record.aiSummary) ...[
               const SizedBox(height: AppTheme.lg),
-              _InfoCard(children: [
-                Text('Full analysis', style: AppTheme.labelLarge),
-                const SizedBox(height: AppTheme.sm),
-                Text(record.extractedText, style: AppTheme.bodyMedium),
-              ]),
+              AiSummaryView(
+                content: record.extractedText,
+                title: 'Full Analysis',
+                icon: Icons.description_outlined,
+              ),
             ],
           ],
         ),
@@ -82,18 +60,95 @@ class RecordDetailScreen extends StatelessWidget {
   }
 }
 
-class _RecordImage extends StatelessWidget {
+class _RecordImage extends StatefulWidget {
   final MedicalRecord record;
   const _RecordImage({required this.record});
 
   @override
+  State<_RecordImage> createState() => _RecordImageState();
+}
+
+class _RecordImageState extends State<_RecordImage> {
+  final _ctrl = PageController();
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final url = record.imageUrl.trim();
-    if (url.startsWith('http')) {
+    final urls = widget.record.allImageUrls;
+
+    // Multi-page cloud images
+    if (urls.length > 1) {
+      return Column(
+        children: [
+          ClipRRect(
+            borderRadius: AppTheme.largeRadius,
+            child: SizedBox(
+              height: 220,
+              child: PageView.builder(
+                controller: _ctrl,
+                itemCount: urls.length,
+                onPageChanged: (i) => setState(() => _page = i),
+                itemBuilder: (_, i) => Image.network(
+                  urls[i],
+                  fit: BoxFit.cover,
+                  loadingBuilder: (_, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      color: AppTheme.surfaceVariant,
+                      alignment: Alignment.center,
+                      child: const CircularProgressIndicator(strokeWidth: 2),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => _placeholder(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ...List.generate(
+                urls.length,
+                (i) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: _page == i ? 16 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: _page == i
+                        ? AppTheme.primaryColor
+                        : AppTheme.dividerColor,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${_page + 1} / ${urls.length}',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textTertiary,
+                    fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Single cloud URL
+    if (urls.length == 1) {
       return ClipRRect(
         borderRadius: AppTheme.largeRadius,
         child: Image.network(
-          url,
+          urls.first,
           fit: BoxFit.cover,
           height: 220,
           loadingBuilder: (_, child, progress) {
@@ -110,11 +165,13 @@ class _RecordImage extends StatelessWidget {
       );
     }
 
-    if (record.imagePath.isNotEmpty && File(record.imagePath).existsSync()) {
+    // Fallback to local file (cached path, no cloud upload succeeded)
+    if (widget.record.imagePath.isNotEmpty &&
+        File(widget.record.imagePath).existsSync()) {
       return ClipRRect(
         borderRadius: AppTheme.largeRadius,
         child: Image.file(
-          File(record.imagePath),
+          File(widget.record.imagePath),
           fit: BoxFit.cover,
           height: 220,
         ),
@@ -124,20 +181,18 @@ class _RecordImage extends StatelessWidget {
     return _placeholder();
   }
 
-  Widget _placeholder() {
-    return Container(
-      height: 160,
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
-        borderRadius: AppTheme.largeRadius,
-        border: Border.all(color: AppTheme.dividerColor),
-      ),
-      child: Center(
-        child: Icon(Icons.description_outlined,
-            size: 56, color: AppTheme.textTertiary),
-      ),
-    );
-  }
+  Widget _placeholder() => Container(
+        height: 160,
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceVariant,
+          borderRadius: AppTheme.largeRadius,
+          border: Border.all(color: AppTheme.dividerColor),
+        ),
+        child: Center(
+          child: Icon(Icons.description_outlined,
+              size: 56, color: AppTheme.textTertiary),
+        ),
+      );
 }
 
 class _InfoCard extends StatelessWidget {

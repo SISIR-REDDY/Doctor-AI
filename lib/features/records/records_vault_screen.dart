@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../core/utils/media_permissions.dart';
+import '../../core/widgets/ai_summary_view.dart';
 import '../../models/patient_models.dart';
 import '../../core/errors/app_error_handler.dart';
 import '../../services/chatbot_service.dart';
@@ -136,55 +138,66 @@ class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
   }
 
   Future<void> _pickAndScan(BuildContext context, String uid) async {
-    final source = await _showSourceDialog(context);
+    final source = await _showSourceSheet(context);
     if (source == null || !context.mounted) return;
 
-    if (source == ImageSource.camera) {
+    final picker = ImagePicker();
+    final List<String> imagePaths = [];
+
+    if (source == ImageSource.gallery) {
+      final files = await picker.pickMultiImage(imageQuality: 85);
+      if (files.isEmpty || !context.mounted) return;
+      imagePaths.addAll(files.map((f) => f.path));
+    } else {
+      // Camera: allow multiple shots with a review sheet between each
       final ok = await MediaPermissions.ensureCamera(context);
       if (!ok || !context.mounted) return;
+
+      while (true) {
+        final file =
+            await picker.pickImage(source: ImageSource.camera, imageQuality: 85);
+        if (file == null || !context.mounted) break;
+        imagePaths.add(file.path);
+
+        final addMore = await _showCameraReviewSheet(context, imagePaths);
+        if (addMore != true || !context.mounted) break;
+      }
     }
 
-    final picker = ImagePicker();
-    final XFile? file =
-        await picker.pickImage(source: source, imageQuality: 85);
-
-    if (file == null || !context.mounted) return;
-
-    _showScanningSheet(context, uid, file.path);
+    if (imagePaths.isEmpty || !context.mounted) return;
+    _showScanningSheet(context, uid, imagePaths);
   }
 
-  Future<ImageSource?> _showSourceDialog(BuildContext context) async {
-    return showDialog<ImageSource>(
+  /// Attractive bottom sheet to pick camera vs gallery.
+  Future<ImageSource?> _showSourceSheet(BuildContext context) {
+    return showModalBottomSheet<ImageSource>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Add Record'),
-        content: const Text('Choose how to add your medical document:'),
-        actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.camera_alt_rounded),
-            label: const Text('Camera'),
-            onPressed: () =>
-                Navigator.pop(context, ImageSource.camera),
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.photo_library_rounded),
-            label: const Text('Gallery'),
-            onPressed: () =>
-                Navigator.pop(context, ImageSource.gallery),
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SourceSheet(),
+    );
+  }
+
+  /// After each camera capture, shows thumbnails of all captured photos
+  /// and asks whether to add more or finish. Returns true = take another.
+  Future<bool?> _showCameraReviewSheet(
+      BuildContext context, List<String> captured) {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      builder: (_) => _CameraReviewSheet(capturedPaths: captured),
     );
   }
 
   void _showScanningSheet(
-      BuildContext context, String uid, String imagePath) {
+      BuildContext context, String uid, List<String> imagePaths) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       isDismissible: false,
-      builder: (_) => _ScanSheet(uid: uid, imagePath: imagePath, db: _db),
+      builder: (_) =>
+          _ScanSheet(uid: uid, imagePaths: imagePaths, db: _db),
     );
   }
 }
@@ -403,14 +416,342 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+// ── Source picker sheet ───────────────────────────────────────────────────────
+
+class _SourceSheet extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor.withValues(alpha: 0.95),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.dividerColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.add_photo_alternate_rounded,
+                        color: AppTheme.primaryColor, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Add Medical Record', style: AppTheme.headingSmall),
+                      Text('Choose your source',
+                          style: AppTheme.bodySmall
+                              .copyWith(color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SourceOption(
+                      icon: Icons.camera_alt_rounded,
+                      label: 'Camera',
+                      sublabel: 'Take multiple\nphotos',
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF007AFF), Color(0xFF5AC8FA)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      onTap: () =>
+                          Navigator.pop(context, ImageSource.camera),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _SourceOption(
+                      icon: Icons.photo_library_rounded,
+                      label: 'Gallery',
+                      sublabel: 'Select multiple\nimages at once',
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF5856D6), Color(0xFFAF52DE)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      onTap: () =>
+                          Navigator.pop(context, ImageSource.gallery),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SourceOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String sublabel;
+  final LinearGradient gradient;
+  final VoidCallback onTap;
+
+  const _SourceOption({
+    required this.icon,
+    required this.label,
+    required this.sublabel,
+    required this.gradient,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: gradient.colors.first.withValues(alpha: 0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: Colors.white, size: 32),
+            const SizedBox(height: 12),
+            Text(label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                )),
+            const SizedBox(height: 4),
+            Text(sublabel,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: 12,
+                  height: 1.4,
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Camera review sheet ───────────────────────────────────────────────────────
+
+class _CameraReviewSheet extends StatelessWidget {
+  final List<String> capturedPaths;
+  const _CameraReviewSheet({required this.capturedPaths});
+
+  @override
+  Widget build(BuildContext context) {
+    final count = capturedPaths.length;
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceColor.withValues(alpha: 0.97),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.dividerColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 18),
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.successColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle_rounded,
+                            color: AppTheme.successColor, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$count ${count == 1 ? 'photo' : 'photos'} captured',
+                          style: const TextStyle(
+                            color: AppTheme.successColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  Text('Swipe to review',
+                      style: AppTheme.bodySmall
+                          .copyWith(color: AppTheme.textTertiary)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              // Thumbnail strip
+              SizedBox(
+                height: 90,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: count,
+                  itemBuilder: (_, i) => Container(
+                    width: 72,
+                    margin: const EdgeInsets.only(right: 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppTheme.primaryColor, width: 2),
+                    ),
+                    child: Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.file(
+                            File(capturedPaths[i]),
+                            width: 72,
+                            height: 90,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 4,
+                          right: 4,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '${i + 1}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                      label: const Text('Take Another'),
+                      onPressed: () => Navigator.pop(context, true),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryColor,
+                        side: const BorderSide(
+                            color: AppTheme.primaryColor, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF34C759), Color(0xFF30B35A)],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.successColor
+                                .withValues(alpha: 0.35),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.check_rounded,
+                            color: Colors.white, size: 18),
+                        label: Text(
+                          'Done  ·  $count ${count == 1 ? 'page' : 'pages'}',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700),
+                        ),
+                        onPressed: () => Navigator.pop(context, false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Scan Sheet ────────────────────────────────────────────────────────────────
 
 class _ScanSheet extends StatefulWidget {
   final String uid;
-  final String imagePath;
+  final List<String> imagePaths;
   final FirestoreService db;
   const _ScanSheet(
-      {required this.uid, required this.imagePath, required this.db});
+      {required this.uid, required this.imagePaths, required this.db});
 
   @override
   State<_ScanSheet> createState() => _ScanSheetState();
@@ -418,6 +759,8 @@ class _ScanSheet extends StatefulWidget {
 
 class _ScanSheetState extends State<_ScanSheet> {
   final _titleCtrl = TextEditingController();
+  final _pageCtrl = PageController();
+  int _currentPage = 0;
   String _recordType = 'lab';
   bool _analyzing = false;
   bool _saving = false;
@@ -442,25 +785,35 @@ class _ScanSheetState extends State<_ScanSheet> {
   @override
   void dispose() {
     _titleCtrl.dispose();
+    _pageCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _analyze() async {
     setState(() => _analyzing = true);
     try {
-      const prompt =
-          '''Analyze this medical document image. Please provide:
+      final pageCount = widget.imagePaths.length;
+      final prompt = pageCount == 1
+          ? '''Analyze this medical document image. Please provide:
 1. Document type (lab report, prescription, imaging report, discharge summary, etc.)
 2. Key findings or values in plain language
 3. A brief 2-3 sentence summary that a patient can easily understand
 4. Any important values or results that are abnormal or need attention
 5. Suggested follow-up actions if any
 
+Format your response clearly with headings. Use simple language.'''
+          : '''Analyze this multi-page medical document ($pageCount pages provided). Please provide:
+1. Document type (lab report, prescription, imaging report, discharge summary, etc.)
+2. Key findings or values from ALL pages in plain language
+3. A brief 2-3 sentence summary that a patient can easily understand
+4. Any important values or results that are abnormal or need attention across any page
+5. Suggested follow-up actions if any
+
 Format your response clearly with headings. Use simple language.''';
 
-      final response = await ChatbotService().getGeminiVisionResponse(
+      final response = await ChatbotService().getGeminiVisionResponseMulti(
         prompt: prompt,
-        imagePath: widget.imagePath,
+        imagePaths: widget.imagePaths,
       );
       if (mounted) {
         setState(() {
@@ -492,22 +845,34 @@ Format your response clearly with headings. Use simple language.''';
     setState(() => _saving = true);
     try {
       final recordId = const Uuid().v4();
-      String imageUrl = '';
-      final uploaded = await StorageService().uploadDocumentImage(
-        filePath: widget.imagePath,
+
+      // Upload all pages in parallel; get back only the URLs that succeeded.
+      final imageUrls = await StorageService().uploadDocumentImages(
+        filePaths: widget.imagePaths,
         patientId: widget.uid,
-        scanId: recordId,
+        recordId: recordId,
       );
-      if (uploaded != null && uploaded.isNotEmpty) {
-        imageUrl = uploaded;
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Image could not be uploaded to cloud. Record saved with local copy only.',
+
+      if (mounted) {
+        final total = widget.imagePaths.length;
+        final uploaded = imageUrls.length;
+        if (uploaded == 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not upload images to cloud. Record saved with local copy only.',
+              ),
             ),
-          ),
-        );
+          );
+        } else if (uploaded < total) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '$uploaded of $total pages uploaded. ${total - uploaded} page(s) failed — record saved with partial cloud backup.',
+              ),
+            ),
+          );
+        }
       }
 
       final record = MedicalRecord(
@@ -517,8 +882,9 @@ Format your response clearly with headings. Use simple language.''';
             ? 'Medical Record ${DateFormat('dd MMM yyyy').format(DateTime.now())}'
             : _titleCtrl.text.trim(),
         recordType: _recordType,
-        imagePath: widget.imagePath,
-        imageUrl: imageUrl,
+        imagePath: widget.imagePaths.first,
+        imageUrl: imageUrls.isNotEmpty ? imageUrls.first : '',
+        imageUrls: imageUrls,
         aiSummary: _aiSummary,
         extractedText: _extractedText,
         isProcessed: _aiSummary.isNotEmpty,
@@ -534,6 +900,7 @@ Format your response clearly with headings. Use simple language.''';
 
   @override
   Widget build(BuildContext context) {
+    final pageCount = widget.imagePaths.length;
     return Padding(
       padding:
           EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -541,7 +908,7 @@ Format your response clearly with headings. Use simple language.''';
         height: MediaQuery.of(context).size.height * 0.85,
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           children: [
@@ -558,70 +925,128 @@ Format your response clearly with headings. Use simple language.''';
                     ),
                   ),
                   const SizedBox(height: AppTheme.lg),
-                  Text('Scan Result', style: AppTheme.headingSmall),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Scan Result', style: AppTheme.headingSmall),
+                      if (pageCount > 1) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '$pageCount pages',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.xl),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: AppTheme.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Preview image
-                    ClipRRect(
-                      borderRadius: AppTheme.mediumRadius,
-                      child: Image.file(
-                        File(widget.imagePath),
-                        height: 160,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    const SizedBox(height: AppTheme.lg),
-                    // AI Analysis
-                    Container(
-                      padding: const EdgeInsets.all(AppTheme.lg),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                    // ── Image preview (PageView for multi, plain for single) ──
+                    if (pageCount == 1)
+                      ClipRRect(
                         borderRadius: AppTheme.mediumRadius,
-                        border: Border.all(
-                          color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                        child: Image.file(
+                          File(widget.imagePaths.first),
+                          height: 160,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    else ...[
+                      ClipRRect(
+                        borderRadius: AppTheme.mediumRadius,
+                        child: SizedBox(
+                          height: 160,
+                          child: PageView.builder(
+                            controller: _pageCtrl,
+                            itemCount: pageCount,
+                            onPageChanged: (i) =>
+                                setState(() => _currentPage = i),
+                            itemBuilder: (_, i) => Image.file(
+                              File(widget.imagePaths[i]),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.auto_awesome_rounded,
-                                  color: AppTheme.primaryColor, size: 18),
-                              const SizedBox(width: 8),
-                              const Text('AI Analysis',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.primaryColor,
-                                      fontSize: 14)),
-                              const Spacer(),
-                              if (_analyzing)
-                                const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppTheme.primaryColor),
-                                ),
-                            ],
+                      const SizedBox(height: AppTheme.sm),
+                      // Dot indicators
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          pageCount,
+                          (i) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: _currentPage == i ? 16 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: _currentPage == i
+                                  ? AppTheme.primaryColor
+                                  : AppTheme.dividerColor,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
                           ),
-                          const SizedBox(height: AppTheme.sm),
-                          Text(
-                            _analyzing
-                                ? 'Analyzing your document...'
-                                : _aiSummary,
-                            style: AppTheme.bodySmall.copyWith(height: 1.6),
-                          ),
-                        ],
+                        ),
                       ),
+                      const SizedBox(height: AppTheme.sm),
+                      // Thumbnail strip
+                      SizedBox(
+                        height: 56,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: pageCount,
+                          itemBuilder: (_, i) => GestureDetector(
+                            onTap: () => _pageCtrl.animateToPage(i,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut),
+                            child: Container(
+                              width: 48,
+                              height: 56,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _currentPage == i
+                                      ? AppTheme.primaryColor
+                                      : AppTheme.dividerColor,
+                                  width: _currentPage == i ? 2 : 1,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(7),
+                                child: Image.file(
+                                  File(widget.imagePaths[i]),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: AppTheme.lg),
+                    // ── AI Analysis ──────────────────────────────────────────
+                    AiSummaryView(
+                      content: _aiSummary,
+                      isLoading: _analyzing,
                     ),
                     const SizedBox(height: AppTheme.lg),
                     TextField(
@@ -634,9 +1059,9 @@ Format your response clearly with headings. Use simple language.''';
                     ),
                     const SizedBox(height: AppTheme.md),
                     DropdownButtonFormField<String>(
-                      value: _recordType,
-                      decoration:
-                          const InputDecoration(labelText: 'Record Type'),
+                      initialValue: _recordType,
+                      decoration: const InputDecoration(
+                          labelText: 'Record Type'),
                       items: _types
                           .map((t) => DropdownMenuItem(
                               value: t,
@@ -661,8 +1086,7 @@ Format your response clearly with headings. Use simple language.''';
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white))
+                                  strokeWidth: 2, color: Colors.white))
                           : const Text('Save Record',
                               style: TextStyle(
                                   fontWeight: FontWeight.w600,
