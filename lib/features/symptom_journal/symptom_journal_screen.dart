@@ -8,6 +8,7 @@ import '../../models/patient_models.dart';
 import '../../services/chatbot_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios18_components.dart';
 
 class SymptomJournalScreen extends StatefulWidget {
   const SymptomJournalScreen({super.key});
@@ -39,7 +40,15 @@ class _SymptomJournalScreenState extends State<SymptomJournalScreen> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Symptom Journal'),
+        titleSpacing: 18,
+        toolbarHeight: 64,
+        title: Text('Journal',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.6,
+              color: AppTheme.textPrimary,
+            )),
         actions: [
           IconButton(
             icon: const Icon(Icons.auto_awesome_rounded),
@@ -72,12 +81,15 @@ class _SymptomJournalScreenState extends State<SymptomJournalScreen> {
                         return _EmptyState();
                       }
                       return ListView.builder(
-                        padding: const EdgeInsets.all(AppTheme.lg),
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(18, 12, 18, 120),
                         itemCount: entries.length,
-                        itemBuilder: (_, i) => _SymptomCard(
-                          entry: entries[i],
-                          onDelete: () =>
-                              _delete(uid, entries[i].id),
+                        itemBuilder: (_, i) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _SymptomCard(
+                            entry: entries[i],
+                            onDelete: () => _delete(uid, entries[i].id),
+                          ),
                         ),
                       );
                     },
@@ -211,12 +223,12 @@ class _SymptomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: AppTheme.md),
       padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.mediumRadius,
-        border: Border.all(color: AppTheme.dividerColor),
+        borderRadius: DS.squircle(DS.rLg),
+        border: Border.all(color: AppTheme.glassBorder, width: 0.7),
+        boxShadow: DS.softShadow(),
       ),
       child: Row(
         children: [
@@ -424,7 +436,7 @@ class _AddSymptomSheetState extends State<_AddSymptomSheet> {
               ),
               const SizedBox(height: AppTheme.md),
               DropdownButtonFormField<String>(
-                value: _timeOfDay,
+                initialValue: _timeOfDay,
                 decoration:
                     const InputDecoration(labelText: 'Time of Day'),
                 items: _times

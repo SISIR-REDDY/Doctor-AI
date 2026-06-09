@@ -15,6 +15,8 @@ import '../../services/firebase/auth_service.dart';
 import '../../services/firebase/firebase_bootstrap_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/push_notification_service.dart';
+import '../../services/consent_service.dart';
+import '../../features/legal/consent_gate_screen.dart';
 import 'sign_in_screen.dart';
 
 class AuthGateScreen extends StatefulWidget {
@@ -31,6 +33,8 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
   bool _isLoading = true;
   bool _isSignedIn = false;
   bool _needsOnboarding = false;
+  bool _consentChecked = false;
+  bool _hasConsent = false;
   String? _preloadedKeysForUid;
 
   StreamSubscription<User?>? _authSub;
@@ -38,6 +42,14 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
   @override
   void initState() {
     super.initState();
+    ConsentService.instance.hasAccepted().then((v) {
+      if (mounted) {
+        setState(() {
+          _hasConsent = v;
+          _consentChecked = true;
+        });
+      }
+    });
     if (FirebaseConfig.isEnabled && FirebaseBootstrapService.isInitialized) {
       _authSub = _authService.authStateChanges().listen(_onAuthChanged);
       Future.delayed(const Duration(seconds: 4), () {
@@ -145,6 +157,16 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
         );
       }
       return const HomeDashboardScreen();
+    }
+
+    // Block first-run sign-in behind the consent gate (App Review 1.4.1).
+    if (_consentChecked && !_hasConsent) {
+      return ConsentGateScreen(
+        onAccepted: () async {
+          await ConsentService.instance.accept();
+          if (mounted) setState(() => _hasConsent = true);
+        },
+      );
     }
 
     return const SignInScreen();

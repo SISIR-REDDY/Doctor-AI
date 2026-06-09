@@ -4,8 +4,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/providers/health_data_provider.dart';
 import '../../core/providers/theme_controller.dart';
+import '../../core/errors/app_error_handler.dart';
+import '../../features/legal/legal_screens.dart';
 import '../../models/patient_models.dart';
+import '../../services/firebase/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios18_components.dart';
 
 class HealthProfileScreen extends StatefulWidget {
   const HealthProfileScreen({super.key});
@@ -17,6 +21,7 @@ class HealthProfileScreen extends StatefulWidget {
 class _HealthProfileScreenState extends State<HealthProfileScreen> {
   bool _editing = false;
   bool _saving = false;
+  bool _deleting = false;
 
   late TextEditingController _firstNameCtrl;
   late TextEditingController _lastNameCtrl;
@@ -204,7 +209,15 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Health Profile'),
+        titleSpacing: 18,
+        toolbarHeight: 64,
+        title: Text('Profile',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.6,
+              color: AppTheme.textPrimary,
+            )),
         actions: [
           if (!_editing)
             TextButton(
@@ -428,10 +441,86 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
                   borderRadius: AppTheme.mediumRadius),
             ),
           ),
+          const SizedBox(height: AppTheme.xl),
+
+          // Legal & Privacy
+          InsetSection(
+            children: [
+              InsetRow(
+                icon: Icons.shield_outlined,
+                iconColor: AppTheme.primaryColor,
+                title: 'Legal & Privacy',
+                subtitle: 'Policies, terms & disclaimers',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const LegalHubScreen()),
+                ),
+              ),
+            ],
+          ),
+
+          // Delete account (App Store Guideline 5.1.1(v))
+          TextButton.icon(
+            onPressed: _deleting ? null : _confirmDeleteAccount,
+            icon: _deleting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.delete_forever_rounded,
+                    color: AppTheme.dangerColor, size: 20),
+            label: Text(_deleting ? 'Deleting…' : 'Delete Account',
+                style: const TextStyle(
+                    color: AppTheme.dangerColor,
+                    fontWeight: FontWeight.w600)),
+          ),
+          Text(
+            'Permanently deletes your account and all your data.',
+            textAlign: TextAlign.center,
+            style: AppTheme.bodySmall.copyWith(color: AppTheme.textTertiary),
+          ),
           const SizedBox(height: AppTheme.xxl),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Account?'),
+        content: const Text(
+          'This permanently deletes your account and ALL your data — records, '
+          'medications, reminders, insurance policies, claims, and chats. This '
+          'cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.dangerColor),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await AuthService().deleteAccount();
+      // Auth state change propagates the user back to the sign-in screen.
+    } catch (e) {
+      if (mounted) {
+        setState(() => _deleting = false);
+        AppErrorHandler.showSnackBar(context, e);
+      }
+    }
   }
 }
 
@@ -527,8 +616,9 @@ class _Section extends StatelessWidget {
       padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.mediumRadius,
-        border: Border.all(color: AppTheme.dividerColor),
+        borderRadius: DS.squircle(DS.rLg),
+        border: Border.all(color: AppTheme.glassBorder, width: 0.7),
+        boxShadow: DS.softShadow(),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -600,7 +690,7 @@ class _DropdownField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DropdownButtonFormField<String>(
-        value: value,
+        initialValue: value,
         decoration: InputDecoration(labelText: label),
         items: items
             .map((i) =>
@@ -637,8 +727,9 @@ class _ChipSection extends StatelessWidget {
       padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.mediumRadius,
-        border: Border.all(color: AppTheme.dividerColor),
+        borderRadius: DS.squircle(DS.rLg),
+        border: Border.all(color: AppTheme.glassBorder, width: 0.7),
+        boxShadow: DS.softShadow(),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

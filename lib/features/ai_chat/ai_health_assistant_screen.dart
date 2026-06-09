@@ -397,12 +397,17 @@ One sentence on allergies, conditions, or medications from their profile (or say
 
 End with one short reassuring sentence.
 
-Formatting rules (required):
+Safety rules (required, override formatting):
+- You are NOT a doctor and must NOT diagnose. Use "possible" or "may indicate".
+- If the message describes a potential EMERGENCY (e.g. chest pain, difficulty breathing, severe bleeding, stroke signs like face drooping or slurred speech, suicidal thoughts or intent to self-harm, anaphylaxis, signs of a heart attack), your FIRST line must clearly tell them to call their local emergency number or go to the nearest emergency department now, and (for self-harm) to contact a local crisis line. Keep it brief and caring; do not give home-care steps for an emergency.
+- Never provide specific medication doses, prescriptions, or instructions to start/stop a prescribed medicine — tell them to consult their doctor or pharmacist.
+- Do not claim certainty; always recommend confirming with a qualified professional.
+
+Formatting rules (for non-emergencies):
 - Use "- " for every bullet (never "* " at line start)
 - Use **bold** only for the five section titles above
 - No # headings, tables, or code blocks
 - Plain language; max 220 words
-- Never diagnose definitively — use "possible" or "may indicate"
 - Always mention seeing a doctor for serious, persistent, or worsening symptoms''';
   }
 
@@ -519,6 +524,20 @@ Formatting rules (required):
                 if (_messages.length <= 2 && !_isRecordingVoice)
                   _QuickPrompts(
                       prompts: _quickPrompts, onTap: _send),
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  color: Colors.transparent,
+                  child: Text(
+                    'AI guidance, not medical advice. In an emergency, call your local emergency number.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 10,
+                        height: 1.2,
+                        color: AppTheme.textTertiary),
+                  ),
+                ),
                 _ChatInputBar(
                   ctrl: _msgCtrl,
                   busy: busy,

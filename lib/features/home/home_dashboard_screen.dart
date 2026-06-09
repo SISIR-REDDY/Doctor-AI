@@ -182,7 +182,7 @@ class _HomeTab extends StatelessWidget {
                     iconBg: const Color(0xFFCEE5FF),
                     iconColor: AppTheme.primaryColor,
                     title: 'AI Health Assistant',
-                    subtitle: 'Describe symptoms — get guidance from Gemini',
+                    subtitle: 'Ask general health questions (not medical advice)',
                     onTap: onAiChat,
                   ),
                   _MenuItem(
@@ -276,7 +276,7 @@ class _HomeTab extends StatelessWidget {
                     iconBg: const Color(0xFFCEE5FF),
                     iconColor: AppTheme.primaryColor,
                     title: 'File a Claim',
-                    subtitle: 'AI prepares your claim report for submission',
+                    subtitle: 'Organize bills and prepare a claim document',
                     onTap: onNewClaim,
                   ),
                   _MenuItem(
@@ -284,7 +284,7 @@ class _HomeTab extends StatelessWidget {
                     iconBg: const Color(0xFFEEEEF5),
                     iconColor: AppTheme.textSecondary,
                     title: 'My Claims',
-                    subtitle: 'Track status — fight rejections with AI legal help',
+                    subtitle: 'Track status and understand a rejection',
                     onTap: onClaims,
                     showDivider: false,
                   ),

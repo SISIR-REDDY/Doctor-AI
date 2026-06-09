@@ -144,4 +144,69 @@ class AuthService {
 
     if (kDebugMode) debugPrint('[Auth] Signed out.');
   }
+
+  // ── Account deletion (App Store Guideline 5.1.1(v)) ───────────────────────
+
+  /// Permanently deletes the signed-in user's data AND their auth account.
+  ///
+  /// Order matters: we delete Firestore data first (the user is still
+  /// authenticated, so security rules permit it), then the auth user. If the
+  /// auth deletion needs a fresh login, we re-authenticate with the original
+  /// provider and retry once. Throws [AppException] on failure.
+  Future<void> deleteAccount() async {
+    final user = _auth?.currentUser;
+    if (user == null) {
+      throw const AppException(
+        code: 'no-user',
+        message: 'You are not signed in.',
+      );
+    }
+    final uid = user.uid;
+
+    try {
+      // 1. Wipe all Firestore data while still authenticated.
+      await FirestoreService().deleteAllUserData(uid);
+
+      // 2. Delete the auth account (may require recent login).
+      try {
+        await user.delete();
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'requires-recent-login') {
+          await _reauthenticate(user);
+          await user.delete();
+        } else {
+          rethrow;
+        }
+      }
+
+      // 3. Clear local caches/sessions.
+      await FirestoreService.clearAllCaches();
+      ApiCredentialsService.instance.clearCache();
+      await _googleSignIn.signOut().catchError((_) => null);
+    } catch (e) {
+      throw AppException(
+        code: 'delete-account-failed',
+        message:
+            'Could not fully delete your account. Please sign in again and retry.',
+        cause: e,
+      );
+    }
+  }
+
+  /// Re-runs the provider sign-in to obtain a fresh credential for a sensitive
+  /// operation (account deletion). Picks the provider from the user's record.
+  Future<void> _reauthenticate(User user) async {
+    final providers =
+        user.providerData.map((p) => p.providerId).toList();
+    if (providers.contains('google.com')) {
+      await signInWithGoogle();
+    } else if (providers.contains('apple.com')) {
+      await signInWithApple();
+    } else {
+      throw const AppException(
+        code: 'reauth-unsupported',
+        message: 'Please sign out and sign back in, then delete your account.',
+      );
+    }
+  }
 }

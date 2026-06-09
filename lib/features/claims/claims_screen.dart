@@ -8,6 +8,7 @@ import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios18_components.dart';
 
 class ClaimsScreen extends StatelessWidget {
   const ClaimsScreen({super.key});
@@ -17,43 +18,61 @@ class ClaimsScreen extends StatelessWidget {
     final uid = context.read<HealthDataProvider>().uid;
     final db = FirestoreService();
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(title: const Text('Insurance Claims')),
-      body: uid == null
-          ? const Center(child: Text('Please sign in'))
-          : StreamBuilder<List<InsuranceClaim>>(
-              stream: db.watchClaims(uid),
-              builder: (ctx, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final claims = snap.data ?? [];
-                if (claims.isEmpty) {
-                  return _EmptyState();
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.all(AppTheme.lg),
-                  itemCount: claims.length,
-                  itemBuilder: (_, i) => _ClaimCard(
-                    claim: claims[i],
-                    onTap: () => Navigator.pushNamed(
-                        context, AppRouter.claimDetail,
-                        arguments: claims[i]),
-                    onDelete: () =>
-                        db.deleteClaim(uid, claims[i].id),
-                  ),
-                );
-              },
-            ),
+    return LargeTitleScaffold(
+      title: 'Claims',
+      subtitle: 'Track claims and generate insurer-ready packets',
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () =>
-            Navigator.pushNamed(context, AppRouter.newClaim),
+        onPressed: () => Navigator.pushNamed(context, AppRouter.newClaim),
         icon: const Icon(Icons.add_rounded),
         label: const Text('File Claim'),
-        backgroundColor: AppTheme.infoColor,
+        backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
       ),
+      slivers: [
+        if (uid == null)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: Text('Please sign in')),
+          )
+        else
+          StreamBuilder<List<InsuranceClaim>>(
+            stream: db.watchClaims(uid),
+            builder: (ctx, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final claims = snap.data ?? [];
+              if (claims.isEmpty) {
+                return SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _EmptyState(),
+                );
+              }
+              return SliverPadding(
+                padding:
+                    const EdgeInsets.fromLTRB(DS.gutter, 8, DS.gutter, 120),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, i) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _ClaimCard(
+                        claim: claims[i],
+                        onTap: () => Navigator.pushNamed(
+                            context, AppRouter.claimDetail,
+                            arguments: claims[i]),
+                        onDelete: () => db.deleteClaim(uid, claims[i].id),
+                      ),
+                    ),
+                    childCount: claims.length,
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 }
@@ -87,19 +106,20 @@ class _ClaimCard extends StatelessWidget {
         _statusColors[claim.claimStatus] ?? AppTheme.textSecondary;
     final icon = _statusIcons[claim.claimStatus] ?? Icons.help_outline;
 
-    return GestureDetector(
+    return DSPressable(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: AppTheme.md),
         padding: const EdgeInsets.all(AppTheme.lg),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
-          borderRadius: AppTheme.mediumRadius,
+          borderRadius: DS.squircle(DS.rLg),
           border: Border.all(
             color: claim.isRejected
-                ? AppTheme.dangerColor.withValues(alpha: 0.3)
-                : AppTheme.dividerColor,
+                ? AppTheme.dangerColor.withValues(alpha: 0.35)
+                : AppTheme.glassBorder,
+            width: claim.isRejected ? 1 : 0.7,
           ),
+          boxShadow: DS.softShadow(),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,10 +198,10 @@ class _ClaimCard extends StatelessWidget {
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.gavel_rounded,
+                        Icon(Icons.help_outline_rounded,
                             color: AppTheme.dangerColor, size: 12),
                         SizedBox(width: 4),
-                        Text('Fight →',
+                        Text('Review →',
                             style: TextStyle(
                                 color: AppTheme.dangerColor,
                                 fontSize: 11,
@@ -224,7 +244,7 @@ class _EmptyState extends StatelessWidget {
           Text('No claims filed yet', style: AppTheme.headingSmall),
           const SizedBox(height: AppTheme.sm),
           Text(
-              'File insurance claims and track their\nstatus here. We\'ll help you fight rejections.',
+              'Organize your insurance claims and track\ntheir status. Prepare documents and understand\nyour options if a claim is rejected.',
               style: AppTheme.bodySmall,
               textAlign: TextAlign.center),
         ],

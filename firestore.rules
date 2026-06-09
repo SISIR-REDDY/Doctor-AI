@@ -3,7 +3,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Shared API keys document — authenticated read only (no client writes).
+    // ⚠️ SECURITY: API keys document.
+    // Any authenticated client that can READ this document can extract the
+    // Gemini & Deepgram keys and abuse your billing. Rules cannot hide a value
+    // the client is allowed to read. Before scaling / public launch, move these
+    // calls BEHIND a backend you control (e.g. a Cloud Function or Cloud Run
+    // proxy that holds the keys server-side and is called with the user's
+    // Firebase ID token), then set `allow read: if false;` here.
     match /app_runtime/{document=**} {
       allow read: if request.auth != null;
       allow write: if false;

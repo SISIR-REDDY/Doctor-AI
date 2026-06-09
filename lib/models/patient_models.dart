@@ -539,6 +539,13 @@ class MedicalRecord {
   /// as its first element when non-empty. Legacy single-page records have an
   /// empty list; callers should fall back to [imageUrl] in that case.
   final List<String> imageUrls;
+  /// Durable on-device copies of every page (in app-documents storage, not the
+  /// volatile picker cache). These back the record offline and are the source
+  /// for retrying a failed cloud upload, so a record is never silently lost.
+  final List<String> localImagePaths;
+  /// True when every page has a cloud URL (fully backed up). False means some
+  /// pages live only on this device and should be retried when online.
+  final bool isSynced;
   final String extractedText;
   final String aiSummary;
   final bool isProcessed;
@@ -555,6 +562,8 @@ class MedicalRecord {
     this.imagePath = '',
     this.imageUrl = '',
     this.imageUrls = const <String>[],
+    this.localImagePaths = const <String>[],
+    this.isSynced = false,
     this.extractedText = '',
     this.aiSummary = '',
     this.isProcessed = false,
@@ -577,6 +586,8 @@ class MedicalRecord {
     String? imagePath,
     String? imageUrl,
     List<String>? imageUrls,
+    List<String>? localImagePaths,
+    bool? isSynced,
     String? extractedText,
     String? aiSummary,
     bool? isProcessed,
@@ -593,6 +604,8 @@ class MedicalRecord {
         imagePath: imagePath ?? this.imagePath,
         imageUrl: imageUrl ?? this.imageUrl,
         imageUrls: imageUrls ?? this.imageUrls,
+        localImagePaths: localImagePaths ?? this.localImagePaths,
+        isSynced: isSynced ?? this.isSynced,
         extractedText: extractedText ?? this.extractedText,
         aiSummary: aiSummary ?? this.aiSummary,
         isProcessed: isProcessed ?? this.isProcessed,
@@ -610,6 +623,8 @@ class MedicalRecord {
         'imagePath': imagePath,
         'imageUrl': imageUrl,
         'imageUrls': imageUrls,
+        'localImagePaths': localImagePaths,
+        'isSynced': isSynced,
         'extractedText': extractedText,
         'aiSummary': aiSummary,
         'isProcessed': isProcessed,
@@ -627,6 +642,8 @@ class MedicalRecord {
         imagePath: (map['imagePath'] ?? '').toString(),
         imageUrl: (map['imageUrl'] ?? '').toString(),
         imageUrls: _toStringList(map['imageUrls']),
+        localImagePaths: _toStringList(map['localImagePaths']),
+        isSynced: map['isSynced'] == true,
         extractedText: (map['extractedText'] ?? '').toString(),
         aiSummary: (map['aiSummary'] ?? '').toString(),
         isProcessed: map['isProcessed'] == true,

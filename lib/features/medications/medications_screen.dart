@@ -8,6 +8,7 @@ import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios18_components.dart';
 
 class MedicationsScreen extends StatefulWidget {
   const MedicationsScreen({super.key});
@@ -40,7 +41,15 @@ class _MedicationsScreenState extends State<MedicationsScreen>
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Medications'),
+        titleSpacing: DS.gutter,
+        title: Text('Medications',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.6,
+              color: AppTheme.textPrimary,
+            )),
+        toolbarHeight: 64,
         bottom: TabBar(
           controller: _tabs,
           tabs: const [
@@ -50,6 +59,8 @@ class _MedicationsScreenState extends State<MedicationsScreen>
           labelColor: AppTheme.primaryColor,
           unselectedLabelColor: AppTheme.textSecondary,
           indicatorColor: AppTheme.primaryColor,
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         ),
       ),
       body: uid == null
@@ -90,8 +101,8 @@ class _MedicationsScreenState extends State<MedicationsScreen>
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddSheet(context, uid ?? ''),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add Medication'),
-        backgroundColor: AppTheme.surgeryColor,
+        label: const Text('Add'),
+        backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
       ),
     );
@@ -177,13 +188,17 @@ class _MedList extends StatelessWidget {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(AppTheme.lg),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(DS.gutter, DS.gutter, DS.gutter, 120),
       itemCount: meds.length,
-      itemBuilder: (_, i) => _MedCard(
-        med: meds[i],
-        onDelete: () => onDelete(meds[i]),
-        onToggle: () => onToggle(meds[i]),
-        onEdit: () => onEdit(meds[i]),
+      itemBuilder: (_, i) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _MedCard(
+          med: meds[i],
+          onDelete: () => onDelete(meds[i]),
+          onToggle: () => onToggle(meds[i]),
+          onEdit: () => onEdit(meds[i]),
+        ),
       ),
     );
   }
@@ -205,12 +220,12 @@ class _MedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: AppTheme.md),
       padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.mediumRadius,
-        border: Border.all(color: AppTheme.dividerColor),
+        borderRadius: DS.squircle(DS.rLg),
+        border: Border.all(color: AppTheme.glassBorder, width: 0.7),
+        boxShadow: DS.softShadow(),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,14 +233,14 @@ class _MedCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: AppTheme.surgeryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppTheme.successColor.withValues(alpha: 0.12),
+                  borderRadius: DS.squircle(12),
                 ),
                 child: const Icon(Icons.medication_rounded,
-                    color: AppTheme.surgeryColor, size: 22),
+                    color: AppTheme.successColor, size: 22),
               ),
               const SizedBox(width: AppTheme.md),
               Expanded(
@@ -521,7 +536,7 @@ class _AddMedSheetState extends State<_AddMedSheet> {
               ),
               const SizedBox(height: AppTheme.md),
               DropdownButtonFormField<String>(
-                value: _frequency,
+                initialValue: _frequency,
                 decoration:
                     const InputDecoration(labelText: 'Frequency'),
                 items: _frequencies
@@ -615,7 +630,7 @@ class _AddMedSheetState extends State<_AddMedSheet> {
               ElevatedButton(
                 onPressed: _saving ? null : _save,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.surgeryColor,
+                  backgroundColor: AppTheme.primaryColor,
                   padding: const EdgeInsets.symmetric(
                       vertical: AppTheme.md),
                   shape: RoundedRectangleBorder(

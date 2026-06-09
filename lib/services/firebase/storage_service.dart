@@ -340,6 +340,92 @@ class StorageService {
     return results.whereType<String>().where((u) => u.isNotEmpty).toList();
   }
 
+  // ── Durable record storage ──────────────────────────────────────────────────
+  //
+  // image_picker / camera return paths in the OS *temp* cache, which is purged
+  // on reboot or under storage pressure. Previously a record whose cloud upload
+  // failed kept only that volatile path → the image was silently lost. We now
+  // always copy pages into a persistent app-documents folder first, so every
+  // record has a recoverable local copy regardless of cloud state.
+
+  Future<Directory> _getRecordImagesDirectory() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final dir = Directory('${appDir.path}/record_images');
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// Copies each picked page into persistent app storage and returns the new
+  /// durable paths (same order, failed copies dropped). Safe to call before
+  /// upload — these paths survive restarts and back the record offline.
+  Future<List<String>> persistDocumentImages({
+    required List<String> filePaths,
+    required String recordId,
+  }) async {
+    final dir = await _getRecordImagesDirectory();
+    final out = <String>[];
+    for (int i = 0; i < filePaths.length; i++) {
+      try {
+        final src = File(filePaths[i]);
+        if (!await src.exists()) continue;
+        final (:mime, :ext) = _mimeFor(filePaths[i]);
+        final dest =
+            '${dir.path}${Platform.pathSeparator}${recordId}_page_$i.$ext';
+        await src.copy(dest);
+        out.add(dest);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[StorageService] persist page $i failed: $e');
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Persists pages locally AND attempts cloud upload, returning both so the
+  /// record always has a durable local copy plus whatever URLs succeeded.
+  ///
+  /// `localPaths` are guaranteed to outlive the app session; `remoteUrls` may
+  /// be shorter (or empty) if Storage is unavailable — those pages can be
+  /// retried later via [retryUpload] using the durable local paths.
+  Future<({List<String> localPaths, List<String> remoteUrls})>
+      saveDocumentImages({
+    required List<String> filePaths,
+    required String patientId,
+    required String recordId,
+  }) async {
+    final localPaths = await persistDocumentImages(
+      filePaths: filePaths,
+      recordId: recordId,
+    );
+
+    // Upload from the durable copies (not the temp picker paths).
+    final sources = localPaths.isNotEmpty ? localPaths : filePaths;
+    final remoteUrls = await uploadDocumentImages(
+      filePaths: sources,
+      patientId: patientId,
+      recordId: recordId,
+    );
+
+    return (localPaths: localPaths, remoteUrls: remoteUrls);
+  }
+
+  /// Re-attempts cloud upload for a record whose pages live only locally.
+  /// Returns the URLs that now succeeded (empty if still offline).
+  Future<List<String>> retryUpload({
+    required List<String> localPaths,
+    required String patientId,
+    required String recordId,
+  }) {
+    return uploadDocumentImages(
+      filePaths: localPaths,
+      patientId: patientId,
+      recordId: recordId,
+    );
+  }
+
   bool _isRemoteUrl(String value) {
     final trimmed = value.trim();
     return trimmed.startsWith('http://') || trimmed.startsWith('https://');

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
@@ -17,6 +18,7 @@ import '../../services/chatbot_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/firebase/storage_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios18_components.dart';
 
 class RecordsVaultScreen extends StatefulWidget {
   const RecordsVaultScreen({super.key});
@@ -28,6 +30,42 @@ class RecordsVaultScreen extends StatefulWidget {
 class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
   final _db = FirestoreService();
   String _filterType = 'All';
+  String _query = '';
+
+  // Tracks record ids we've already tried to re-sync this session so the
+  // background retry doesn't fire repeatedly on every stream emission.
+  final Set<String> _retriedIds = {};
+
+  /// Best-effort: re-upload any record that's still local-only. Runs quietly in
+  /// the background and persists the resulting cloud URLs back to Firestore.
+  Future<void> _resyncPending(String uid, List<MedicalRecord> records) async {
+    final pending = records.where((r) =>
+        !r.isSynced &&
+        r.localImagePaths.isNotEmpty &&
+        !_retriedIds.contains(r.id));
+    for (final r in pending) {
+      _retriedIds.add(r.id);
+      try {
+        final urls = await StorageService().retryUpload(
+          localPaths: r.localImagePaths,
+          patientId: uid,
+          recordId: r.id,
+        );
+        if (urls.length >= r.localImagePaths.length) {
+          await _db.saveMedicalRecord(
+            uid,
+            r.copyWith(
+              imageUrl: urls.first,
+              imageUrls: urls,
+              isSynced: true,
+            ),
+          );
+        }
+      } catch (_) {
+        // Stay local; will retry next session.
+      }
+    }
+  }
 
   // Cache the stream so rebuilds (e.g. theme toggle) don't resubscribe/reload.
   Stream<List<MedicalRecord>>? _stream;
@@ -64,76 +102,125 @@ class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
   Widget build(BuildContext context) {
     final uid = context.read<HealthDataProvider>().uid;
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text('Medical Records'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_rounded),
-            onPressed: () => _pickAndScan(context, uid ?? ''),
-          ),
-        ],
-      ),
-      body: uid == null
-          ? const Center(child: Text('Please sign in'))
-          : Column(
-              children: [
-                _TypeFilter(
-                  types: _types,
-                  labels: _typeLabels,
-                  selected: _filterType,
-                  onChanged: (t) => setState(() => _filterType = t),
-                ),
-                Expanded(
-                  child: StreamBuilder<List<MedicalRecord>>(
-                    stream: _records(uid),
-                    builder: (ctx, snap) {
-                      if (snap.connectionState ==
-                          ConnectionState.waiting) {
-                        return const Center(
-                            child: CircularProgressIndicator());
-                      }
-                      final all = snap.data ?? [];
-                      final filtered = _filterType == 'All'
-                          ? all
-                          : all
-                              .where((r) => r.recordType == _filterType)
-                              .toList();
-
-                      if (filtered.isEmpty) {
-                        return _EmptyState(
-                            message: _filterType == 'All'
-                                ? 'No records yet.\nTap + to scan or upload a document.'
-                                : 'No ${_typeLabels[_filterType]} records.');
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(AppTheme.lg),
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) => _RecordCard(
-                          record: filtered[i],
-                          onTap: () => Navigator.pushNamed(
-                            context,
-                            AppRouter.recordDetail,
-                            arguments: filtered[i],
-                          ),
-                          onDelete: () => _db.deleteMedicalRecord(
-                              uid, filtered[i].id),
-                        ),
-                      );
-                    },
+    return LargeTitleScaffold(
+      title: 'Records',
+      subtitle: 'Your medical documents, summarized by AI',
+      floatingActionButton: uid == null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _pickAndScan(context, uid),
+              icon: const Icon(Icons.document_scanner_rounded),
+              label: const Text('Scan'),
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+      slivers: [
+        if (uid == null)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: Text('Please sign in')),
+          )
+        else ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(DS.gutter, 4, DS.gutter, 4),
+              child: TextField(
+                onChanged: (v) => setState(() => _query = v.trim()),
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Search records, results, values…',
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppTheme.surfaceColor,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: DS.squircle(14),
+                    borderSide: BorderSide(color: AppTheme.glassBorder),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: DS.squircle(14),
+                    borderSide: BorderSide(color: AppTheme.glassBorder),
                   ),
                 ),
-              ],
+              ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _pickAndScan(context, uid ?? ''),
-        icon: const Icon(Icons.document_scanner_rounded),
-        label: const Text('Scan / Upload'),
-        backgroundColor: AppTheme.secondaryColor,
-        foregroundColor: Colors.white,
-      ),
+          ),
+          SliverToBoxAdapter(
+            child: _TypeFilter(
+              types: _types,
+              labels: _typeLabels,
+              selected: _filterType,
+              onChanged: (t) => setState(() => _filterType = t),
+            ),
+          ),
+          StreamBuilder<List<MedicalRecord>>(
+            stream: _records(uid),
+            builder: (ctx, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final all = snap.data ?? [];
+              // Quietly retry cloud upload for any local-only records.
+              if (all.isNotEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => _resyncPending(uid, all));
+              }
+              var filtered = _filterType == 'All'
+                  ? all
+                  : all.where((r) => r.recordType == _filterType).toList();
+              if (_query.isNotEmpty) {
+                final q = _query.toLowerCase();
+                filtered = filtered.where((r) {
+                  return r.title.toLowerCase().contains(q) ||
+                      r.extractedText.toLowerCase().contains(q) ||
+                      r.aiSummary.toLowerCase().contains(q);
+                }).toList();
+              }
+
+              if (filtered.isEmpty) {
+                return SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _EmptyState(
+                    message: _query.isNotEmpty
+                        ? 'No records match "$_query".'
+                        : _filterType == 'All'
+                            ? 'No records yet.\nTap Scan to add a document.'
+                            : 'No ${_typeLabels[_filterType]} records.',
+                  ),
+                );
+              }
+
+              return SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                    DS.gutter, 4, DS.gutter, 120),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, i) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _RecordCard(
+                        record: filtered[i],
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRouter.recordDetail,
+                          arguments: filtered[i],
+                        ),
+                        onDelete: () =>
+                            _db.deleteMedicalRecord(uid, filtered[i].id),
+                      ),
+                    ),
+                    childCount: filtered.length,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ],
     );
   }
 
@@ -219,41 +306,41 @@ class _TypeFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      color: AppTheme.surfaceColor,
+    return SizedBox(
+      height: 50,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.lg, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(DS.gutter, 6, DS.gutter, 10),
         itemCount: types.length,
         itemBuilder: (_, i) {
           final t = types[i];
           final selected = this.selected == t;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
+            child: DSPressable(
               onTap: () => onChanged(t),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 4),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
                   color: selected
                       ? AppTheme.primaryColor
-                      : AppTheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(20),
+                      : AppTheme.surfaceColor,
+                  borderRadius: DS.squircle(20),
                   border: Border.all(
                     color: selected
                         ? AppTheme.primaryColor
-                        : AppTheme.dividerColor,
+                        : AppTheme.glassBorder,
+                    width: 0.7,
                   ),
+                  boxShadow: selected ? null : DS.softShadow(y: 2, blur: 8),
                 ),
                 child: Text(
                   labels[t] ?? t,
                   style: TextStyle(
                     color: selected ? Colors.white : AppTheme.textSecondary,
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -300,15 +387,15 @@ class _RecordCard extends StatelessWidget {
     final color = _typeColors[record.recordType] ?? AppTheme.textSecondary;
     final icon = _typeIcons[record.recordType] ?? Icons.description_outlined;
 
-    return GestureDetector(
+    return DSPressable(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: AppTheme.md),
         padding: const EdgeInsets.all(AppTheme.lg),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
-          borderRadius: AppTheme.mediumRadius,
-          border: Border.all(color: AppTheme.dividerColor),
+          borderRadius: DS.squircle(DS.rLg),
+          border: Border.all(color: AppTheme.glassBorder, width: 0.7),
+          boxShadow: DS.softShadow(),
         ),
         child: Row(
           children: [
@@ -316,8 +403,8 @@ class _RecordCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                color: color.withValues(alpha: 0.12),
+                borderRadius: DS.squircle(13),
               ),
               child: Icon(icon, color: color, size: 24),
             ),
@@ -354,6 +441,32 @@ class _RecordCard extends StatelessWidget {
                             .format(record.uploadedAt),
                         style: AppTheme.bodySmall.copyWith(fontSize: 11),
                       ),
+                      if (!record.isSynced &&
+                          record.localImagePaths.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color:
+                                AppTheme.warningColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.cloud_off_rounded,
+                                  size: 10, color: AppTheme.warningColor),
+                              const SizedBox(width: 3),
+                              Text('On device',
+                                  style: TextStyle(
+                                      color: AppTheme.warningColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   if (record.isProcessed && record.aiSummary.isNotEmpty)
@@ -811,14 +924,32 @@ Format your response clearly with headings. Use simple language.'''
 
 Format your response clearly with headings. Use simple language.''';
 
+      // Ask for the patient-friendly summary AND a structured, searchable
+      // facts block in one call. The JSON powers record-type auto-detect and a
+      // real `extractedText` (key values/dates/provider) instead of a copy of
+      // the summary, so records become searchable.
+      final fullPrompt = '''$prompt
+
+After the summary, on a new line output a fenced JSON block exactly like:
+```json
+{"recordType":"lab|imaging|prescription|discharge|vaccination|other","provider":"clinic/hospital/doctor name (empty string if unknown)","date":"DD MMM YYYY (empty string if unknown)","keyValues":"every notable test name, value, unit and reference range — one per line; medication names+doses for a prescription; vaccine names for vaccination; empty string if none"}
+```''';
+
       final response = await ChatbotService().getGeminiVisionResponseMulti(
-        prompt: prompt,
+        prompt: fullPrompt,
         imagePaths: widget.imagePaths,
       );
+
+      final structured = _extractJson(response);
+      final summaryText = _stripJsonBlock(response);
+      final searchable = _buildSearchable(structured, summaryText);
+
       if (mounted) {
         setState(() {
-          _aiSummary = response;
-          _extractedText = response;
+          _aiSummary = summaryText;
+          _extractedText = searchable;
+          final detectedType = (structured?['recordType'] ?? '').toString();
+          if (_types.contains(detectedType)) _recordType = detectedType;
           _analyzing = false;
         });
       }
@@ -834,6 +965,46 @@ Format your response clearly with headings. Use simple language.''';
     }
   }
 
+  /// Pulls a JSON object out of a fenced ```json block (or any `{...}`) in the
+  /// AI response. Returns null if none parses.
+  Map<String, dynamic>? _extractJson(String raw) {
+    final start = raw.indexOf('{');
+    final end = raw.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    try {
+      final obj = jsonDecode(raw.substring(start, end + 1));
+      return obj is Map<String, dynamic> ? obj : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Removes the trailing fenced JSON block so the patient only sees prose.
+  String _stripJsonBlock(String raw) {
+    final fence = raw.indexOf('```json');
+    if (fence >= 0) return raw.substring(0, fence).trim();
+    final brace = raw.lastIndexOf('{');
+    if (brace > raw.length - 400 && brace > 0) {
+      return raw.substring(0, brace).replaceAll('```', '').trim();
+    }
+    return raw.trim();
+  }
+
+  /// Builds the searchable [extractedText] from the structured facts; falls
+  /// back to the summary if extraction failed.
+  String _buildSearchable(Map<String, dynamic>? j, String summary) {
+    if (j == null) return summary;
+    final parts = <String>[];
+    final provider = (j['provider'] ?? '').toString().trim();
+    final date = (j['date'] ?? '').toString().trim();
+    final values = (j['keyValues'] ?? '').toString().trim();
+    if (provider.isNotEmpty) parts.add('Provider: $provider');
+    if (date.isNotEmpty) parts.add('Date: $date');
+    if (values.isNotEmpty) parts.add(values);
+    final out = parts.join('\n').trim();
+    return out.isEmpty ? summary : out;
+  }
+
   Future<void> _save() async {
     if (widget.uid.isEmpty) {
       AppErrorHandler.showSnackBar(
@@ -846,12 +1017,16 @@ Format your response clearly with headings. Use simple language.''';
     try {
       final recordId = const Uuid().v4();
 
-      // Upload all pages in parallel; get back only the URLs that succeeded.
-      final imageUrls = await StorageService().uploadDocumentImages(
+      // Always persist pages to durable local storage first, then attempt the
+      // cloud upload. The local copies survive restarts so a record is never
+      // silently lost when Storage is unavailable.
+      final result = await StorageService().saveDocumentImages(
         filePaths: widget.imagePaths,
         patientId: widget.uid,
         recordId: recordId,
       );
+      final localPaths = result.localPaths;
+      final imageUrls = result.remoteUrls;
 
       if (mounted) {
         final total = widget.imagePaths.length;
@@ -860,7 +1035,7 @@ Format your response clearly with headings. Use simple language.''';
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Could not upload images to cloud. Record saved with local copy only.',
+                'Saved to this device. Will sync to the cloud automatically when online.',
               ),
             ),
           );
@@ -868,12 +1043,16 @@ Format your response clearly with headings. Use simple language.''';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                '$uploaded of $total pages uploaded. ${total - uploaded} page(s) failed — record saved with partial cloud backup.',
+                '$uploaded of $total pages synced to cloud. The rest are saved on this device and will retry.',
               ),
             ),
           );
         }
       }
+
+      // Prefer durable local paths over the volatile picker paths.
+      final durableLocal =
+          localPaths.isNotEmpty ? localPaths : widget.imagePaths;
 
       final record = MedicalRecord(
         id: recordId,
@@ -882,9 +1061,11 @@ Format your response clearly with headings. Use simple language.''';
             ? 'Medical Record ${DateFormat('dd MMM yyyy').format(DateTime.now())}'
             : _titleCtrl.text.trim(),
         recordType: _recordType,
-        imagePath: widget.imagePaths.first,
+        imagePath: durableLocal.first,
         imageUrl: imageUrls.isNotEmpty ? imageUrls.first : '',
-        imageUrls: imageUrls,
+        imageUrls: imageUrls.isNotEmpty ? imageUrls : durableLocal,
+        localImagePaths: durableLocal,
+        isSynced: imageUrls.length >= durableLocal.length,
         aiSummary: _aiSummary,
         extractedText: _extractedText,
         isProcessed: _aiSummary.isNotEmpty,

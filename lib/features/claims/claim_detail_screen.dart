@@ -7,7 +7,9 @@ import '../../core/config/insurance_regions.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/chatbot_service.dart';
+import '../../services/claim_pdf_service.dart';
 import 'add_expense_screen.dart' show kExpenseCategories, kExpenseCategoryIcons;
+import '../../core/errors/app_error_handler.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -63,7 +65,7 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
               .join('\n');
 
       final prompt =
-          '''You are an expert insurance claims advisor and consumer-rights advocate for ${region.name}. Analyze this rejected health insurance claim and give a comprehensive, country-specific strategy to fight it.
+          '''You are a helpful assistant that explains insurance claim rejections in plain language for someone in ${region.name}. Explain why a claim like this may have been rejected and outline the general, commonly-available next steps a policyholder can consider. Frame everything as general information, not legal advice, and recommend consulting a qualified professional for their specific situation.
 
 Claim Details:
 - Patient: ${profile?.fullName ?? 'Patient'}
@@ -282,6 +284,52 @@ Format as a proper business letter (sender block, date, recipient billing depart
         duration: Duration(seconds: 1)));
   }
 
+  bool _generatingPdf = false;
+  bool _exportingLetter = false;
+
+  /// Builds a submittable PDF claim packet and opens the share/print sheet.
+  Future<void> _exportPdf() async {
+    if (_generatingPdf) return;
+    setState(() => _generatingPdf = true);
+    try {
+      final profile = context.read<HealthDataProvider>().profile;
+      await ClaimPdfService().shareClaimPacket(
+        claim: _claim,
+        patientName: profile?.fullName,
+        patientAge: profile?.age,
+        patientGender: profile?.gender,
+        bloodGroup: profile?.bloodGroup,
+      );
+    } catch (e) {
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
+    } finally {
+      if (mounted) setState(() => _generatingPdf = false);
+    }
+  }
+
+  /// Exports an AI-generated letter (appeal, dispute) as a formal PDF.
+  Future<void> _exportLetter(String title, String body) async {
+    if (_exportingLetter) return;
+    setState(() => _exportingLetter = true);
+    try {
+      final profile = context.read<HealthDataProvider>().profile;
+      await ClaimPdfService().shareLetter(
+        title: title,
+        body: body,
+        regionCode: _claim.country,
+        fromName: profile?.fullName,
+        subtitle:
+            'Re: Claim ${_claim.policyNumber.isEmpty ? '' : '— Policy ${_claim.policyNumber} '}'
+            'with ${_claim.insurer}',
+        filename: title,
+      );
+    } catch (e) {
+      if (mounted) AppErrorHandler.showSnackBar(context, e);
+    } finally {
+      if (mounted) setState(() => _exportingLetter = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusColor =
@@ -291,6 +339,18 @@ Format as a proper business letter (sender block, date, recipient billing depart
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: const Text('Claim Details'),
+        actions: [
+          IconButton(
+            tooltip: 'Export PDF packet',
+            icon: _generatingPdf
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.ios_share_rounded),
+            onPressed: _generatingPdf ? null : _exportPdf,
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(AppTheme.lg),
@@ -345,6 +405,76 @@ Format as a proper business letter (sender block, date, recipient billing depart
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: AppTheme.lg),
+
+          // Submittable PDF packet — the flagship "hand this to your insurer" output.
+          GestureDetector(
+            onTap: _generatingPdf ? null : _exportPdf,
+            child: Container(
+              padding: const EdgeInsets.all(AppTheme.lg),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF007AFF), Color(0xFF5AC8FA)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: AppTheme.mediumRadius,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF007AFF).withValues(alpha: 0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: _generatingPdf
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.picture_as_pdf_rounded,
+                            color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: AppTheme.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _generatingPdf
+                              ? 'Building packet…'
+                              : 'Generate PDF Claim Packet',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16),
+                        ),
+                        Text(
+                          'Insurer-ready document with itemized bills, '
+                          'justification & receipts attached',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 12,
+                              height: 1.3),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.ios_share_rounded,
+                      color: Colors.white, size: 20),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: AppTheme.lg),
@@ -431,6 +561,23 @@ Format as a proper business letter (sender block, date, recipient billing depart
                   color: AppTheme.successColor,
                   content: _claim.disputeLetter,
                   onCopy: () => _copy(_claim.disputeLetter),
+                  extra: Padding(
+                    padding: const EdgeInsets.only(top: AppTheme.md),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _exportingLetter
+                            ? null
+                            : () => _exportLetter(
+                                  'Medical Bill Dispute Letter',
+                                  _claim.disputeLetter,
+                                ),
+                        icon: const Icon(Icons.picture_as_pdf_rounded,
+                            size: 18),
+                        label: const Text('Download as PDF'),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -464,10 +611,10 @@ Format as a proper business letter (sender block, date, recipient billing depart
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.gavel_rounded,
+                      Icon(Icons.help_outline_rounded,
                           color: AppTheme.dangerColor, size: 20),
                       SizedBox(width: 8),
-                      Text('Claim Rejection — Fight Back',
+                      Text('Understand Your Rejection',
                           style: TextStyle(
                               color: AppTheme.dangerColor,
                               fontWeight: FontWeight.w700,
@@ -476,7 +623,7 @@ Format as a proper business letter (sender block, date, recipient billing depart
                   ),
                   const SizedBox(height: AppTheme.sm),
                   Text(
-                      'Don\'t give up. Our AI will analyze the rejection and give you a step-by-step legal strategy.',
+                      'Add the insurer\'s rejection reason and the AI will explain it in plain language and outline general next steps. This is general information, not legal advice.',
                       style: AppTheme.bodySmall),
                   const SizedBox(height: AppTheme.md),
                   TextField(
@@ -514,7 +661,7 @@ Format as a proper business letter (sender block, date, recipient billing depart
                       label: Text(
                         _generatingFight
                             ? 'Analyzing...'
-                            : 'Analyze & Get Fight Strategy',
+                            : 'Explain & Suggest Next Steps',
                         style: const TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 15,
@@ -531,8 +678,8 @@ Format as a proper business letter (sender block, date, recipient billing depart
           // Fight analysis
           if (_claim.fightAnalysis.isNotEmpty) ...[
             _ContentCard(
-              title: 'AI Fight Strategy',
-              icon: Icons.gavel_rounded,
+              title: 'Rejection Explained & Next Steps',
+              icon: Icons.help_outline_rounded,
               color: AppTheme.dangerColor,
               content: _claim.fightAnalysis,
               onCopy: () => _copy(_claim.fightAnalysis),
@@ -577,6 +724,27 @@ Format as a proper business letter (sender block, date, recipient billing depart
               color: AppTheme.primaryColor,
               content: _claim.appealLetter,
               onCopy: () => _copy(_claim.appealLetter),
+              extra: Padding(
+                padding: const EdgeInsets.only(top: AppTheme.md),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _exportingLetter
+                        ? null
+                        : () => _exportLetter(
+                              'Insurance Appeal Letter',
+                              _claim.appealLetter,
+                            ),
+                    icon: _exportingLetter
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                    label: const Text('Download as PDF'),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: AppTheme.lg),
           ],

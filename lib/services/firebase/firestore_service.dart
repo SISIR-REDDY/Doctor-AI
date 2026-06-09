@@ -75,6 +75,47 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> _sub(String uid, String col) =>
       _userDoc(uid).collection(col);
 
+  /// Every per-user subcollection. Keep in sync when adding new data types so
+  /// account deletion stays complete (App Store Guideline 5.1.1(v)).
+  static const List<String> userSubcollections = [
+    'symptoms',
+    'medications',
+    'medication_logs',
+    'records',
+    'insurance',
+    'claims',
+    'ai_chats',
+    'chat_sessions',
+    'reminders',
+  ];
+
+  /// Permanently deletes ALL of a user's data: every subcollection document and
+  /// the user root document. Throws on failure so the caller can keep the auth
+  /// account (and let the user retry) rather than orphaning data.
+  Future<void> deleteAllUserData(String uid) async {
+    if (!_isFirebaseAvailable) return;
+    final db = _requireFirestore();
+    for (final col in userSubcollections) {
+      // Page through in batches so large collections don't exhaust a single
+      // batch's 500-write limit.
+      while (true) {
+        final snap = await _sub(uid, col).limit(400).get();
+        if (snap.docs.isEmpty) break;
+        final batch = db.batch();
+        for (final d in snap.docs) {
+          batch.delete(d.reference);
+        }
+        await batch.commit();
+        if (snap.docs.length < 400) break;
+      }
+    }
+    await _userDoc(uid).delete();
+    // Drop any cached copies held in memory.
+    _recordsCache.remove(uid);
+    _policiesCache.remove(uid);
+    _claimsCache.remove(uid);
+  }
+
   // ── Runtime API config ─────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> loadRuntimeApiConfig() async {

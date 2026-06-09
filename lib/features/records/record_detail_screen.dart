@@ -3,13 +3,35 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/errors/app_error_handler.dart';
 import '../../core/widgets/ai_summary_view.dart';
 import '../../models/patient_models.dart';
+import '../../services/claim_pdf_service.dart';
 import '../../theme/app_theme.dart';
 
 class RecordDetailScreen extends StatelessWidget {
   final MedicalRecord record;
   const RecordDetailScreen({super.key, required this.record});
+
+  Future<void> _exportPdf(BuildContext context) async {
+    final body = record.aiSummary.isNotEmpty
+        ? record.aiSummary
+        : (record.extractedText.isNotEmpty
+            ? record.extractedText
+            : 'No AI summary is available for this record yet.');
+    try {
+      await ClaimPdfService().shareLetter(
+        title: record.title.isEmpty ? 'Medical Record Summary' : record.title,
+        subtitle:
+            '${record.recordType[0].toUpperCase()}${record.recordType.substring(1)} record · '
+            '${DateFormat('dd MMM yyyy').format(record.uploadedAt)}',
+        body: body,
+        filename: record.title.isEmpty ? 'Record_Summary' : record.title,
+      );
+    } catch (e) {
+      if (context.mounted) AppErrorHandler.showSnackBar(context, e);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,6 +39,14 @@ class RecordDetailScreen extends StatelessWidget {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: Text(record.title.isEmpty ? 'Record Detail' : record.title),
+        actions: [
+          if (record.aiSummary.isNotEmpty || record.extractedText.isNotEmpty)
+            IconButton(
+              tooltip: 'Export summary PDF',
+              icon: const Icon(Icons.ios_share_rounded),
+              onPressed: () => _exportPdf(context),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppTheme.lg),

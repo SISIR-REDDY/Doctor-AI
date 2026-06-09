@@ -124,7 +124,9 @@ class ChatbotService {
                 ],
                 'generationConfig': {
                   'temperature': 0.4,    // lower temp = more focused clinical output
-                  'maxOutputTokens': 1024, // enough for our concise prompts
+                  // 1024 truncated real claim reports & multi-page summaries
+                  // mid-sentence. 4096 fits a full formal report comfortably.
+                  'maxOutputTokens': 4096,
                 },
               }),
             )

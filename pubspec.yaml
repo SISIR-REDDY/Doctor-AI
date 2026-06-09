@@ -1,5 +1,5 @@
 name: docpilot
-description: Clinix AI - Your personal AI health companion for symptom tracking, records, and insurance.
+description: Clinix AI - Personal health organizer for records, reminders, and insurance documents, with an AI helper.
 publish_to: 'none'
 version: 2.1.0+7
 
@@ -15,6 +15,10 @@ dependencies:
   flutter_screenutil: ^5.9.3
   auto_size_text: ^3.0.0
   flutter_markdown: ^0.7.7+1
+
+  # PDF generation — insurer-ready claim packets & exportable record summaries
+  pdf: ^3.11.1
+  printing: ^5.13.3
 
   # Firebase
   firebase_core: ^4.6.0

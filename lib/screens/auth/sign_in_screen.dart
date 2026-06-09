@@ -8,6 +8,7 @@ import '../../core/errors/app_exception.dart';
 import '../../services/firebase/api_credentials_service.dart';
 import '../../services/firebase/auth_service.dart';
 import '../../services/firebase/firebase_bootstrap_service.dart';
+import '../../features/legal/legal_screens.dart';
 import '../../theme/app_theme.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -187,7 +188,7 @@ class _BrandHeader extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
           child: Text(
-            'Your personal health companion, powered by AI',
+            'Your personal health organizer, powered by AI',
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -211,8 +212,8 @@ class _FeatureGrid extends StatelessWidget {
   static const _items = <_Feature>[
     _Feature(
       icon: Icons.smart_toy_rounded,
-      title: 'AI Symptom Check',
-      subtitle: 'Describe & get guidance',
+      title: 'AI Health Helper',
+      subtitle: 'Ask general questions',
       accent: AppTheme.primaryColor,
     ),
     _Feature(
@@ -230,7 +231,7 @@ class _FeatureGrid extends StatelessWidget {
     _Feature(
       icon: Icons.verified_user_rounded,
       title: 'Insurance Hub',
-      subtitle: 'Claims & fight support',
+      subtitle: 'Organize policies & claims',
       accent: AppTheme.warningColor,
     ),
   ];
@@ -504,17 +505,62 @@ class _SignInBlock extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        Text(
-          'By continuing you agree to secure handling of your health data.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 10.5,
-            color: AppTheme.textTertiary,
-            fontWeight: FontWeight.w500,
-            height: 1.35,
+        Builder(
+          builder: (context) => Column(
+            children: [
+              Text(
+                'By continuing you agree to our',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: AppTheme.textTertiary,
+                  fontWeight: FontWeight.w500,
+                  height: 1.35,
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _LegalLink('Terms', LegalDoc.terms),
+                  Text('  ·  ',
+                      style: TextStyle(
+                          fontSize: 10.5, color: AppTheme.textTertiary)),
+                  _LegalLink('Privacy Policy', LegalDoc.privacy),
+                  Text('  ·  ',
+                      style: TextStyle(
+                          fontSize: 10.5, color: AppTheme.textTertiary)),
+                  _LegalLink('Medical Disclaimer', LegalDoc.medical),
+                ],
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LegalLink extends StatelessWidget {
+  final String label;
+  final LegalDoc doc;
+  const _LegalLink(this.label, this.doc);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => LegalDocumentScreen(doc: doc)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10.5,
+          color: AppTheme.primaryColor,
+          fontWeight: FontWeight.w600,
+          height: 1.35,
+        ),
+      ),
     );
   }
 }

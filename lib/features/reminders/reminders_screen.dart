@@ -7,6 +7,7 @@ import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios18_components.dart';
 import 'add_reminder_screen.dart';
 
 /// Unified schedule: today's medication doses (tap to mark taken) plus upcoming
@@ -23,7 +24,17 @@ class RemindersScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(title: const Text('Reminders & Schedule')),
+      appBar: AppBar(
+        titleSpacing: DS.gutter,
+        toolbarHeight: 64,
+        title: Text('Schedule',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.6,
+              color: AppTheme.textPrimary,
+            )),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: uid == null
             ? null
@@ -33,7 +44,9 @@ class RemindersScreen extends StatelessWidget {
                       builder: (_) => const AddReminderScreen()),
                 ),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add reminder'),
+        label: const Text('Add'),
+        backgroundColor: AppTheme.primaryColor,
+        foregroundColor: Colors.white,
       ),
       body: uid == null
           ? Center(child: Text('Sign in to manage reminders.',
@@ -163,11 +176,13 @@ class _DoseTile extends StatelessWidget {
       padding: const EdgeInsets.all(AppTheme.md),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.mediumRadius,
+        borderRadius: DS.squircle(DS.rLg),
         border: Border.all(
+            width: 0.7,
             color: taken
                 ? AppTheme.successColor.withValues(alpha: 0.4)
-                : AppTheme.dividerColor),
+                : AppTheme.glassBorder),
+        boxShadow: DS.softShadow(),
       ),
       child: Row(
         children: [
@@ -326,11 +341,13 @@ class _ReminderTile extends StatelessWidget {
         padding: const EdgeInsets.all(AppTheme.md),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
-          borderRadius: AppTheme.mediumRadius,
+          borderRadius: DS.squircle(DS.rLg),
           border: Border.all(
+              width: 0.7,
               color: overdue
                   ? AppTheme.dangerColor.withValues(alpha: 0.4)
-                  : AppTheme.dividerColor),
+                  : AppTheme.glassBorder),
+          boxShadow: DS.softShadow(),
         ),
         child: Row(
           children: [
@@ -514,8 +531,9 @@ class _EmptyCard extends StatelessWidget {
       padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        borderRadius: AppTheme.mediumRadius,
-        border: Border.all(color: AppTheme.dividerColor),
+        borderRadius: DS.squircle(DS.rLg),
+        border: Border.all(color: AppTheme.glassBorder, width: 0.7),
+        boxShadow: DS.softShadow(),
       ),
       child: Row(
         children: [
