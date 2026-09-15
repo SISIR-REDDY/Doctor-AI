@@ -8,8 +8,10 @@ import 'package:provider/provider.dart';
 
 import '../../core/config/firebase_config.dart';
 import '../../core/providers/health_data_provider.dart';
-import '../../features/auth/patient_onboarding_screen.dart';
 import '../../features/home/home_dashboard_screen.dart';
+import '../../features/onboarding/onboarding_screen.dart';
+import '../../features/onboarding/welcome_screen.dart';
+import '../../models/patient_models.dart';
 import '../../services/analytics_service.dart';
 import '../../services/entitlement_service.dart';
 import '../../services/firebase/api_credentials_service.dart';
@@ -17,9 +19,6 @@ import '../../services/firebase/auth_service.dart';
 import '../../services/firebase/firebase_bootstrap_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/push_notification_service.dart';
-import '../../services/consent_service.dart';
-import '../../features/legal/consent_gate_screen.dart';
-import 'sign_in_screen.dart';
 
 class AuthGateScreen extends StatefulWidget {
   const AuthGateScreen({super.key});
@@ -35,8 +34,9 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
   bool _isLoading = true;
   bool _isSignedIn = false;
   bool _needsOnboarding = false;
-  bool _consentChecked = false;
-  bool _hasConsent = false;
+  bool _profileResolved = false;
+  bool _scanFirst = false;
+  PatientProfile? _existingProfile;
   String? _preloadedKeysForUid;
 
   StreamSubscription<User?>? _authSub;
@@ -44,14 +44,6 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
   @override
   void initState() {
     super.initState();
-    ConsentService.instance.hasAccepted().then((v) {
-      if (mounted) {
-        setState(() {
-          _hasConsent = v;
-          _consentChecked = true;
-        });
-      }
-    });
     if (FirebaseConfig.isEnabled && FirebaseBootstrapService.isInitialized) {
       _authSub = _authService.authStateChanges().listen(_onAuthChanged);
       Future.delayed(const Duration(seconds: 4), () {
@@ -103,17 +95,34 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     _firestoreService.loadPatientProfile(user.uid).then((profile) async {
       if (!mounted) return;
       await context.read<HealthDataProvider>().loadProfile();
-      if (mounted) setState(() => _needsOnboarding = profile == null);
+      if (mounted) {
+        setState(() {
+          _existingProfile = profile;
+          // New users AND legacy profiles (no country / old flow) go through
+          // the short onboarding so region-dependent features work.
+          _needsOnboarding =
+              profile == null || profile.onboardingVersion < kOnboardingVersion;
+          _profileResolved = true;
+        });
+      }
     }).catchError((_) async {
       if (!mounted) return;
       await context.read<HealthDataProvider>().loadProfile();
-      if (mounted) setState(() => _needsOnboarding = false);
+      if (mounted) {
+        setState(() {
+          _needsOnboarding = false;
+          _profileResolved = true;
+        });
+      }
     });
   }
 
   void _handleSignedOut() {
     _preloadedKeysForUid = null;
     _needsOnboarding = false;
+    _profileResolved = false;
+    _existingProfile = null;
+    _scanFirst = false;
     ApiCredentialsService.instance.clearCache();
     EntitlementService.instance.detachUser();
     Analytics.setUser(null);
@@ -121,9 +130,9 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!FirebaseConfig.isEnabled) return const SignInScreen();
+    if (!FirebaseConfig.isEnabled) return const WelcomeScreen();
 
-    if (_isLoading) {
+    if (_isLoading || (_isSignedIn && !_profileResolved)) {
       return Scaffold(
         body: Center(
           child: Column(
@@ -158,25 +167,23 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
 
     if (_isSignedIn) {
       if (_needsOnboarding) {
-        return PatientOnboardingScreen(
-          onComplete: () {
-            if (mounted) setState(() => _needsOnboarding = false);
+        return OnboardingScreen(
+          existing: _existingProfile,
+          onComplete: ({required bool scanFirst}) {
+            if (mounted) {
+              setState(() {
+                _needsOnboarding = false;
+                _scanFirst = scanFirst;
+              });
+            }
           },
         );
       }
-      return const HomeDashboardScreen();
+      return HomeDashboardScreen(scanFirst: _scanFirst);
     }
 
-    // Block first-run sign-in behind the consent gate (App Review 1.4.1).
-    if (_consentChecked && !_hasConsent) {
-      return ConsentGateScreen(
-        onAccepted: () async {
-          await ConsentService.instance.accept();
-          if (mounted) setState(() => _hasConsent = true);
-        },
-      );
-    }
-
-    return const SignInScreen();
+    // Consent (terms, privacy, disclaimers) is captured on the sign-in step
+    // of the welcome flow — the buttons stay disabled until it is given.
+    return const WelcomeScreen();
   }
 }

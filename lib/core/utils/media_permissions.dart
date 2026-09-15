@@ -39,4 +39,19 @@ class MediaPermissions {
     }
     return false;
   }
+
+  /// Photo-library access is handled by the OS picker on Android 13+ and by
+  /// the system photo picker on iOS, so this only prompts where the platform
+  /// still requires an explicit runtime grant.
+  static Future<bool> ensurePhotos(BuildContext context) async {
+    var status = await Permission.photos.status;
+    if (status.isGranted || status.isLimited) return true;
+    if (status.isDenied || status.isRestricted) {
+      status = await Permission.photos.request();
+    }
+    if (status.isGranted || status.isLimited) return true;
+    // On Android < 13 the plugin may report "denied" for READ_MEDIA_IMAGES yet
+    // the picker still works via the storage permission — do not block.
+    return !status.isPermanentlyDenied;
+  }
 }

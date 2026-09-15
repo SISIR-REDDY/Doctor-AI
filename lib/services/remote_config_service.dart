@@ -55,4 +55,10 @@ class RemoteConfigService {
 
   /// True when this install's build is older than the required minimum.
   bool get updateRequired => _currentBuild > 0 && _currentBuild < _minBuild;
+
+  /// Generic string accessor with a fallback when the value is unset/empty.
+  String string(String key, String fallback) {
+    final v = _rc?.getString(key) ?? '';
+    return v.isEmpty ? fallback : v;
+  }
 }

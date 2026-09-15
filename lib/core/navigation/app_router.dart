@@ -4,9 +4,11 @@ import '../../features/ai_chat/ai_health_assistant_screen.dart';
 import '../../features/claims/claim_detail_screen.dart';
 import '../../features/claims/claims_screen.dart';
 import '../../features/claims/new_claim_screen.dart';
+import '../../features/deadlines/deadlines_screen.dart';
 import '../../features/insurance/add_policy_screen.dart';
 import '../../features/insurance/insurance_screen.dart';
 import '../../features/medications/medications_screen.dart';
+import '../../features/paywall/paywall_screen.dart';
 import '../../features/profile/health_profile_screen.dart';
 import '../../features/reminders/reminders_screen.dart';
 import '../../features/records/record_detail_screen.dart';
@@ -27,6 +29,8 @@ class AppRouter {
   static const String newClaim = '/newClaim';
   static const String claimDetail = '/claimDetail';
   static const String reminders = '/reminders';
+  static const String deadlines = '/deadlines';
+  static const String paywall = '/paywall';
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -34,7 +38,23 @@ class AppRouter {
         return _slide(const HealthProfileScreen(), settings);
 
       case aiChat:
-        return _slide(const AiHealthAssistantScreen(), settings);
+        final mode = settings.arguments is String ? settings.arguments as String : 'coverage';
+        return _slide(AiHealthAssistantScreen(mode: mode), settings);
+
+      case deadlines:
+        return _slide(const DeadlinesScreen(), settings);
+
+      case paywall:
+        return PageRouteBuilder<void>(
+          settings: settings,
+          fullscreenDialog: true,
+          pageBuilder: (_, __, ___) => const PaywallScreen(),
+          transitionsBuilder: (_, animation, __, child) => SlideTransition(
+            position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: child,
+          ),
+        );
 
       case symptomJournal:
         return _slide(const SymptomJournalScreen(), settings);

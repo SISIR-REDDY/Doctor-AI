@@ -12,6 +12,7 @@ import { logger, setGlobalOptions } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { HttpsError, onCall, onRequest, type CallableRequest } from 'firebase-functions/v2/https';
 import { ZodError, z } from 'zod';
+import * as functionsV1 from 'firebase-functions/v1';
 
 import { authorize, consumeQuota } from './quota';
 import type { QuotaOp } from './config';
@@ -130,4 +131,27 @@ export const revenuecatWebhook = onRequest({ secrets: [REVENUECAT_WEBHOOK_SECRET
     );
   logger.info('revenuecat.synced', { uid, type: event.type, active });
   res.status(200).send('ok');
+});
+
+/**
+ * Account deletion clean-up: the client deletes what the rules let it touch;
+ * this trigger removes the whole `users/{uid}` tree (including server-only
+ * `private/*` docs) and the user's Storage files once the auth user is gone.
+ */
+export const onUserDeleted = functionsV1.auth.user().onDelete(async (user) => {
+  const uid = user.uid;
+  try {
+    await getFirestore().recursiveDelete(getFirestore().doc(`users/${uid}`));
+  } catch (err) {
+    logger.error('user_delete.firestore_failed', { uid, err: String(err) });
+  }
+  try {
+    const { getStorage } = await import('firebase-admin/storage');
+    const bucket = getStorage().bucket();
+    await bucket.deleteFiles({ prefix: `document_scans/${uid}/` });
+    await bucket.deleteFiles({ prefix: `uploads/${uid}/` });
+  } catch (err) {
+    logger.error('user_delete.storage_failed', { uid, err: String(err) });
+  }
+  logger.info('user_delete.done', { uid });
 });

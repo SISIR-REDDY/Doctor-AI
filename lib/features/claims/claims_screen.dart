@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -5,69 +6,136 @@ import 'package:provider/provider.dart';
 import '../../core/config/insurance_regions.dart';
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
+import '../../models/advocate_models.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
+import '../scan/document_scan_screen.dart';
 
-class ClaimsScreen extends StatelessWidget {
-  const ClaimsScreen({super.key});
+/// "Cases" — every bill, claim and appeal the user is working on.
+class ClaimsScreen extends StatefulWidget {
+  /// True when shown as a tab (no back button, extra bottom inset).
+  final bool embedded;
+  const ClaimsScreen({super.key, this.embedded = false});
+
+  @override
+  State<ClaimsScreen> createState() => _ClaimsScreenState();
+}
+
+class _ClaimsScreenState extends State<ClaimsScreen> {
+  final _db = FirestoreService();
+  String? _uid;
+  Stream<List<InsuranceClaim>>? _stream;
+  String _filter = 'open';
+
+  Stream<List<InsuranceClaim>>? _claims(String? uid) {
+    if (uid == null) return null;
+    if (uid != _uid) {
+      _uid = uid;
+      _stream = _db.watchClaims(uid);
+    }
+    return _stream;
+  }
+
+  Future<void> _delete(String uid, InsuranceClaim c) async {
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Delete this case?'),
+        content: const Text('Bills, audits and letters in this case will be removed.'),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          CupertinoDialogAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _db.deleteDeadlinesForCase(uid, c.id);
+      await _db.deleteClaim(uid, c.id);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final uid = context.read<HealthDataProvider>().uid;
-    final db = FirestoreService();
+    final uid = context.watch<HealthDataProvider>().uid;
+    final stream = _claims(uid);
 
     return LargeTitleScaffold(
-      title: 'Claims',
-      subtitle: 'Track claims and generate insurer-ready packets',
+      title: 'Cases',
+      subtitle: 'Bills, claims and appeals — and the money in each',
+      automaticallyImplyLeading: !widget.embedded,
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.pushNamed(context, AppRouter.newClaim),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('File Claim'),
+        onPressed: () => DocumentScanScreen.open(context, trigger: 'cases'),
+        icon: const Icon(CupertinoIcons.camera_viewfinder),
+        label: const Text('Scan'),
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
       ),
       slivers: [
-        if (uid == null)
+        if (uid == null || stream == null)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(child: Text('Please sign in')),
           )
         else
           StreamBuilder<List<InsuranceClaim>>(
-            stream: db.watchClaims(uid),
+            stream: stream,
             builder: (ctx, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
                 return const SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(child: CupertinoActivityIndicator()),
                 );
               }
-              final claims = snap.data ?? [];
-              if (claims.isEmpty) {
-                return SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _EmptyState(),
-                );
+              final all = snap.data ?? const <InsuranceClaim>[];
+              if (all.isEmpty) {
+                return SliverFillRemaining(hasScrollBody: false, child: _EmptyState());
               }
+              final claims = all.where((c) => _filter == 'open' ? !c.isClosed : c.isClosed).toList();
               return SliverPadding(
-                padding:
-                    const EdgeInsets.fromLTRB(DS.gutter, 8, DS.gutter, 120),
+                padding: const EdgeInsets.fromLTRB(DS.gutter, 4, DS.gutter, 120),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (_, i) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _ClaimCard(
-                        claim: claims[i],
-                        onTap: () => Navigator.pushNamed(
-                            context, AppRouter.claimDetail,
-                            arguments: claims[i]),
-                        onDelete: () => db.deleteClaim(uid, claims[i].id),
+                  delegate: SliverChildListDelegate([
+                    _Filter(
+                      value: _filter,
+                      openCount: all.where((c) => !c.isClosed).length,
+                      closedCount: all.where((c) => c.isClosed).length,
+                      onChanged: (v) => setState(() => _filter = v),
+                    ),
+                    const SizedBox(height: 12),
+                    if (claims.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 40),
+                        child: Center(
+                          child: Text(
+                            _filter == 'open' ? 'No open cases' : 'No closed cases yet',
+                            style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+                          ),
+                        ),
+                      ),
+                    for (final c in claims)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _CaseCard(
+                          claim: c,
+                          onTap: () => Navigator.pushNamed(context, AppRouter.claimDetail, arguments: c),
+                          onDelete: () => _delete(uid, c),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.pushNamed(context, AppRouter.newClaim),
+                        icon: const Icon(CupertinoIcons.plus, size: 16),
+                        label: const Text('Create a case manually'),
                       ),
                     ),
-                    childCount: claims.length,
-                  ),
+                  ]),
                 ),
               );
             },
@@ -77,139 +145,155 @@ class ClaimsScreen extends StatelessWidget {
   }
 }
 
-// ── Claim Card ────────────────────────────────────────────────────────────────
-
-class _ClaimCard extends StatelessWidget {
-  final InsuranceClaim claim;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
-  const _ClaimCard(
-      {required this.claim, required this.onTap, required this.onDelete});
-
-  static const _statusColors = <String, Color>{
-    'pending': AppTheme.warningColor,
-    'approved': AppTheme.successColor,
-    'rejected': AppTheme.dangerColor,
-    'under_review': AppTheme.infoColor,
-  };
-
-  static const _statusIcons = <String, IconData>{
-    'pending': Icons.schedule_rounded,
-    'approved': Icons.check_circle_rounded,
-    'rejected': Icons.cancel_rounded,
-    'under_review': Icons.pending_rounded,
-  };
+class _Filter extends StatelessWidget {
+  final String value;
+  final int openCount;
+  final int closedCount;
+  final ValueChanged<String> onChanged;
+  const _Filter({required this.value, required this.openCount, required this.closedCount, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        _statusColors[claim.claimStatus] ?? AppTheme.textSecondary;
-    final icon = _statusIcons[claim.claimStatus] ?? Icons.help_outline;
+    return CupertinoSlidingSegmentedControl<String>(
+      groupValue: value,
+      backgroundColor: AppTheme.surfaceVariant,
+      thumbColor: AppTheme.surfaceColor,
+      onValueChanged: (v) => onChanged(v ?? 'open'),
+      children: {
+        'open': Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Text('Open ($openCount)', style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+        ),
+        'closed': Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Text('Closed ($closedCount)', style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+        ),
+      },
+    );
+  }
+}
+
+// ── Case card ─────────────────────────────────────────────────────────────────
+
+class _CaseCard extends StatelessWidget {
+  final InsuranceClaim claim;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+  const _CaseCard({required this.claim, required this.onTap, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = claim.currencyCode;
+    final title = claim.title.isNotEmpty
+        ? claim.title
+        : claim.hospitalName.isNotEmpty
+            ? claim.hospitalName
+            : claim.insurer.isNotEmpty
+                ? claim.insurer
+                : 'Untitled case';
+    final accent = claim.isClosed
+        ? (claim.outcomeStatus == OutcomeStatus.won || claim.outcomeStatus == OutcomeStatus.partial
+            ? AppTheme.successColor
+            : AppTheme.textTertiary)
+        : claim.hasDenial
+            ? AppTheme.warningColor
+            : AppTheme.primaryColor;
+    final icon = claim.hasDenial ? CupertinoIcons.xmark_shield_fill : CupertinoIcons.doc_text_fill;
+    final subtitleParts = <String>[
+      if (claim.insurer.isNotEmpty) claim.insurer,
+      if (claim.hospitalName.isNotEmpty && claim.hospitalName != title) claim.hospitalName,
+      if (claim.expenses.isNotEmpty) '${claim.expenses.length} ${claim.expenses.length == 1 ? 'bill' : 'bills'}',
+    ];
 
     return DSPressable(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppTheme.lg),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: DS.squircle(DS.rLg),
-          border: Border.all(
-            color: claim.isRejected
-                ? AppTheme.dangerColor.withValues(alpha: 0.35)
-                : AppTheme.glassBorder,
-            width: claim.isRejected ? 1 : 0.7,
-          ),
+          border: Border.all(color: AppTheme.glassBorder, width: 0.7),
           boxShadow: DS.softShadow(),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  _statusLabel(claim.claimStatus),
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+                IconBadge(icon, color: accent, size: 42),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                      if (subtitleParts.isNotEmpty)
+                        Text(subtitleParts.join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary)),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  formatMoney(claim.effectiveAmount, claim.currencyCode),
-                  style: AppTheme.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary),
-                ),
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert_rounded,
-                      color: AppTheme.textTertiary, size: 18),
-                  onSelected: (v) {
-                    if (v == 'delete') onDelete();
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Delete',
-                            style: TextStyle(
-                                color: AppTheme.dangerColor))),
-                  ],
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    icon: Icon(CupertinoIcons.ellipsis, color: AppTheme.textTertiary, size: 18),
+                    onSelected: (v) {
+                      if (v == 'delete') onDelete();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'delete', child: Text('Delete case', style: TextStyle(color: AppTheme.dangerColor))),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: AppTheme.sm),
-            if (claim.title.isNotEmpty)
-              Text(claim.title,
-                  style: AppTheme.bodyMedium
-                      .copyWith(fontWeight: FontWeight.w700)),
-            Text(claim.insurer,
-                style: AppTheme.bodyMedium
-                    .copyWith(fontWeight: FontWeight.w600)),
-            if (claim.hospitalName.isNotEmpty)
-              Text(claim.hospitalName, style: AppTheme.bodySmall),
-            if (claim.diagnosis.isNotEmpty)
-              Text('Diagnosis: ${claim.diagnosis}',
-                  style: AppTheme.bodySmall),
-            if (claim.expenses.isNotEmpty)
-              Text(
-                  '${claim.expenses.length} bill${claim.expenses.length == 1 ? '' : 's'}',
-                  style: AppTheme.labelSmall),
-            const SizedBox(height: AppTheme.sm),
+            const SizedBox(height: 14),
             Row(
               children: [
-                Icon(Icons.calendar_today_rounded,
-                    size: 12, color: AppTheme.textTertiary),
-                const SizedBox(width: 4),
-                Text(
-                    DateFormat('dd MMM yyyy')
-                        .format(claim.createdAt),
-                    style: AppTheme.bodySmall.copyWith(fontSize: 11)),
-                if (claim.isRejected) ...[
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.dangerColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.help_outline_rounded,
-                            color: AppTheme.dangerColor, size: 12),
-                        SizedBox(width: 4),
-                        Text('Review →',
-                            style: TextStyle(
-                                color: AppTheme.dangerColor,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700)),
-                      ],
-                    ),
+                Expanded(
+                  child: StatTile(
+                    compact: true,
+                    label: claim.isClosed ? 'Recovered' : 'Potential savings',
+                    value: claim.isClosed
+                        ? formatMoney(claim.totalRecovered, cur)
+                        : claim.potentialSaving > 0
+                            ? formatMoney(claim.potentialSaving, cur)
+                            : '—',
+                    foreground: claim.isClosed || claim.potentialSaving > 0 ? AppTheme.successColor : null,
                   ),
-                ],
+                ),
+                Expanded(
+                  child: StatTile(
+                    compact: true,
+                    label: claim.hasDenial ? 'Denied amount' : 'Billed',
+                    value: claim.hasDenial && claim.denial!.amountDenied > 0
+                        ? formatMoney(claim.denial!.amountDenied, cur)
+                        : claim.effectiveAmount > 0
+                            ? formatMoney(claim.effectiveAmount, cur)
+                            : '—',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Pill(
+                  claim.isClosed ? OutcomeStatus.label(claim.outcomeStatus) : claim.nextAction,
+                  color: accent,
+                  icon: claim.isClosed ? CupertinoIcons.checkmark_seal_fill : CupertinoIcons.arrow_right_circle_fill,
+                ),
+                const Spacer(),
+                Text(DateFormat('d MMM yyyy').format(claim.updatedAt),
+                    style: AppTheme.bodySmall.copyWith(fontSize: 11, color: AppTheme.textTertiary)),
               ],
             ),
           ],
@@ -217,36 +301,33 @@ class _ClaimCard extends StatelessWidget {
       ),
     );
   }
-
-  String _statusLabel(String s) {
-    const labels = {
-      'pending': 'Pending',
-      'approved': 'Approved',
-      'rejected': 'Rejected',
-      'under_review': 'Under Review',
-    };
-    return labels[s] ?? s;
-  }
 }
 
-// ── Empty State ───────────────────────────────────────────────────────────────
+// ── Empty state ───────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.receipt_long_outlined,
-              size: 64, color: AppTheme.textTertiary),
-          const SizedBox(height: AppTheme.lg),
-          Text('No claims filed yet', style: AppTheme.headingSmall),
-          const SizedBox(height: AppTheme.sm),
+          IconBadge(CupertinoIcons.briefcase_fill, color: AppTheme.primaryColor, size: 72),
+          const SizedBox(height: 18),
+          Text('No cases yet', style: AppTheme.headingMedium),
+          const SizedBox(height: 8),
           Text(
-              'Organize your insurance claims and track\ntheir status. Prepare documents and understand\nyour options if a claim is rejected.',
-              style: AppTheme.bodySmall,
-              textAlign: TextAlign.center),
+            'Scan a bill, an insurer statement or a denial letter. Clinix creates the case, audits it and drafts what to send.',
+            style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary, height: 1.4),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 22),
+          HeroButton(
+            label: 'Scan a document',
+            icon: CupertinoIcons.camera_viewfinder,
+            onTap: () => DocumentScanScreen.open(context, trigger: 'cases_empty'),
+          ),
         ],
       ),
     );

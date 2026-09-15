@@ -1,6 +1,8 @@
 // ─── Patient Health Models ───────────────────────────────────────────────────
 // All domain models for the patient-facing Clinix AI app.
 
+import 'advocate_models.dart';
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 DateTime _toDateTime(Object? raw) {
@@ -36,6 +38,15 @@ class PatientProfile {
   final String emergencyContactName;
   final String emergencyContactPhone;
   final String emergencyContactRelation;
+
+  /// Region code (US/GB/CA/AU/EU/IN) — drives currency, rights and letters.
+  final String country;
+  /// Why the user came (bill_error, denial, coverage, records, care).
+  final List<String> goals;
+  /// True when the user manages documents for family members too.
+  final bool familyMode;
+  /// Version of the onboarding flow completed (0 = legacy profile).
+  final int onboardingVersion;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -58,12 +69,18 @@ class PatientProfile {
     this.emergencyContactName = '',
     this.emergencyContactPhone = '',
     this.emergencyContactRelation = '',
+    this.country = '',
+    this.goals = const <String>[],
+    this.familyMode = false,
+    this.onboardingVersion = 0,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
   String get fullName => '$firstName $lastName'.trim();
+
+  bool get hasCountry => country.isNotEmpty;
 
   int get age {
     final dob = DateTime.tryParse(dateOfBirth);
@@ -112,6 +129,10 @@ class PatientProfile {
     String? emergencyContactName,
     String? emergencyContactPhone,
     String? emergencyContactRelation,
+    String? country,
+    List<String>? goals,
+    bool? familyMode,
+    int? onboardingVersion,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -136,6 +157,10 @@ class PatientProfile {
           emergencyContactPhone ?? this.emergencyContactPhone,
       emergencyContactRelation:
           emergencyContactRelation ?? this.emergencyContactRelation,
+      country: country ?? this.country,
+      goals: goals ?? this.goals,
+      familyMode: familyMode ?? this.familyMode,
+      onboardingVersion: onboardingVersion ?? this.onboardingVersion,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -160,6 +185,10 @@ class PatientProfile {
         'emergencyContactName': emergencyContactName,
         'emergencyContactPhone': emergencyContactPhone,
         'emergencyContactRelation': emergencyContactRelation,
+        'country': country,
+        'goals': goals,
+        'familyMode': familyMode,
+        'onboardingVersion': onboardingVersion,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -188,6 +217,12 @@ class PatientProfile {
         emergencyContactPhone: (map['emergencyContactPhone'] ?? '').toString(),
         emergencyContactRelation:
             (map['emergencyContactRelation'] ?? '').toString(),
+        country: (map['country'] ?? '').toString(),
+        goals: _toStringList(map['goals']),
+        familyMode: map['familyMode'] == true,
+        onboardingVersion: (map['onboardingVersion'] is num)
+            ? (map['onboardingVersion'] as num).toInt()
+            : 0,
         createdAt: _toDateTime(map['createdAt']),
         updatedAt: _toDateTime(map['updatedAt']),
       );
@@ -917,6 +952,13 @@ class CaseExpense {
   /// True when fields were pre-filled by the AI bill scanner.
   final bool aiExtracted;
 
+  /// Structured line items (codes, quantities, unit prices) from the
+  /// document scanner — what the audit engine actually works on.
+  final List<BillLineItem> items;
+
+  /// Id of the [ScannedDocument] this expense came from, if any.
+  final String documentId;
+
   const CaseExpense({
     this.id = '',
     this.category = 'other',
@@ -928,7 +970,11 @@ class CaseExpense {
     this.note = '',
     this.lineItems = '',
     this.aiExtracted = false,
+    this.items = const <BillLineItem>[],
+    this.documentId = '',
   });
+
+  bool get isItemized => items.isNotEmpty || lineItems.trim().isNotEmpty;
 
   CaseExpense copyWith({
     String? id,
@@ -941,6 +987,8 @@ class CaseExpense {
     String? note,
     String? lineItems,
     bool? aiExtracted,
+    List<BillLineItem>? items,
+    String? documentId,
   }) =>
       CaseExpense(
         id: id ?? this.id,
@@ -953,6 +1001,8 @@ class CaseExpense {
         note: note ?? this.note,
         lineItems: lineItems ?? this.lineItems,
         aiExtracted: aiExtracted ?? this.aiExtracted,
+        items: items ?? this.items,
+        documentId: documentId ?? this.documentId,
       );
 
   Map<String, dynamic> toMap() => {
@@ -966,6 +1016,8 @@ class CaseExpense {
         'note': note,
         'lineItems': lineItems,
         'aiExtracted': aiExtracted,
+        'items': items.map((i) => i.toMap()).toList(),
+        'documentId': documentId,
       };
 
   factory CaseExpense.fromMap(Map<String, dynamic> map) => CaseExpense(
@@ -981,6 +1033,8 @@ class CaseExpense {
         note: (map['note'] ?? '').toString(),
         lineItems: (map['lineItems'] ?? '').toString(),
         aiExtracted: map['aiExtracted'] == true,
+        items: BillLineItem.listFrom(map['items']),
+        documentId: (map['documentId'] ?? '').toString(),
       );
 }
 
@@ -1031,6 +1085,25 @@ class InsuranceClaim {
   /// Itemized bills that roll up into this case.
   final List<CaseExpense> expenses;
 
+  // ── Advocate engine ──
+  /// Structured audit (findings with savings, statuses, recovered amounts).
+  final AuditReport? audit;
+  /// Structured denial extracted from a denial letter, if any.
+  final DenialInfo? denial;
+  /// AI analysis of the denial (arguments, steps, odds).
+  final DenialExplanation? denialExplanation;
+  /// Letters drafted for this case (appeal, dispute, …).
+  final List<GeneratedLetter> letters;
+  /// Ids of [ScannedDocument]s attached to this case.
+  final List<String> documentIds;
+  /// Structured EOB data (from the scanner) for balance-billing checks.
+  final Map<String, dynamic> eob;
+  /// open | won | partial | lost | withdrawn — see [OutcomeStatus].
+  final String outcomeStatus;
+  /// Money actually recovered / written off, entered by the user.
+  final double recoveredAmount;
+  final String outcomeNote;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -1058,10 +1131,44 @@ class InsuranceClaim {
     this.currencyCode = '',
     this.caseType = 'inpatient',
     this.expenses = const <CaseExpense>[],
+    this.audit,
+    this.denial,
+    this.denialExplanation,
+    this.letters = const <GeneratedLetter>[],
+    this.documentIds = const <String>[],
+    this.eob = const <String, dynamic>{},
+    this.outcomeStatus = OutcomeStatus.open,
+    this.recoveredAmount = 0,
+    this.outcomeNote = '',
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
+
+  /// Upper-bound savings still open on this case (0 when not audited).
+  double get potentialSaving => audit?.openSavingHigh ?? 0;
+
+  /// Money recovered: explicit outcome amount, else sum of resolved findings.
+  double get totalRecovered =>
+      recoveredAmount > 0 ? recoveredAmount : (audit?.recovered ?? 0);
+
+  bool get hasDenial => denial != null;
+  bool get hasAudit => audit != null && audit!.findings.isNotEmpty;
+  bool get isClosed => outcomeStatus != OutcomeStatus.open;
+
+  /// Label of the most useful next step, used on cards and Home.
+  String get nextAction {
+    if (isClosed) return OutcomeStatus.label(outcomeStatus);
+    if (denial != null && denialExplanation == null) return 'Review the denial';
+    if (denial != null && !letters.any((l) => l.kind == LetterKind.appeal)) {
+      return 'Draft the appeal';
+    }
+    if (letters.any((l) => l.status == 'draft')) return 'Send your letter';
+    if (expenses.isNotEmpty && audit == null) return 'Run the bill audit';
+    if (audit != null && audit!.openFindings.isNotEmpty) return 'Dispute flagged charges';
+    if (expenses.isEmpty && denial == null) return 'Add a bill or letter';
+    return 'Track the outcome';
+  }
 
   bool get isRejected => claimStatus == 'rejected';
   bool get isApproved => claimStatus == 'approved';
@@ -1100,6 +1207,15 @@ class InsuranceClaim {
     String? currencyCode,
     String? caseType,
     List<CaseExpense>? expenses,
+    AuditReport? audit,
+    DenialInfo? denial,
+    DenialExplanation? denialExplanation,
+    List<GeneratedLetter>? letters,
+    List<String>? documentIds,
+    Map<String, dynamic>? eob,
+    String? outcomeStatus,
+    double? recoveredAmount,
+    String? outcomeNote,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -1127,6 +1243,15 @@ class InsuranceClaim {
         currencyCode: currencyCode ?? this.currencyCode,
         caseType: caseType ?? this.caseType,
         expenses: expenses ?? this.expenses,
+        audit: audit ?? this.audit,
+        denial: denial ?? this.denial,
+        denialExplanation: denialExplanation ?? this.denialExplanation,
+        letters: letters ?? this.letters,
+        documentIds: documentIds ?? this.documentIds,
+        eob: eob ?? this.eob,
+        outcomeStatus: outcomeStatus ?? this.outcomeStatus,
+        recoveredAmount: recoveredAmount ?? this.recoveredAmount,
+        outcomeNote: outcomeNote ?? this.outcomeNote,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -1155,6 +1280,15 @@ class InsuranceClaim {
         'currencyCode': currencyCode,
         'caseType': caseType,
         'expenses': expenses.map((e) => e.toMap()).toList(),
+        'audit': audit?.toMap(),
+        'denial': denial?.toMap(),
+        'denialExplanation': denialExplanation?.toMap(),
+        'letters': letters.map((l) => l.toMap()).toList(),
+        'documentIds': documentIds,
+        'eob': eob,
+        'outcomeStatus': outcomeStatus,
+        'recoveredAmount': recoveredAmount,
+        'outcomeNote': outcomeNote,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -1185,6 +1319,26 @@ class InsuranceClaim {
         currencyCode: (map['currencyCode'] ?? '').toString(),
         caseType: (map['caseType'] ?? 'inpatient').toString(),
         expenses: _toExpenseList(map['expenses']),
+        audit: map['audit'] is Map
+            ? AuditReport.fromMap(Map<String, dynamic>.from(map['audit'] as Map))
+            : null,
+        denial: map['denial'] is Map
+            ? DenialInfo.fromMap(Map<String, dynamic>.from(map['denial'] as Map))
+            : null,
+        denialExplanation: map['denialExplanation'] is Map
+            ? DenialExplanation.fromMap(
+                Map<String, dynamic>.from(map['denialExplanation'] as Map))
+            : null,
+        letters: GeneratedLetter.listFrom(map['letters']),
+        documentIds: _toStringList(map['documentIds']),
+        eob: map['eob'] is Map
+            ? Map<String, dynamic>.from(map['eob'] as Map)
+            : const <String, dynamic>{},
+        outcomeStatus: (map['outcomeStatus'] ?? OutcomeStatus.open).toString(),
+        recoveredAmount: (map['recoveredAmount'] is num)
+            ? (map['recoveredAmount'] as num).toDouble()
+            : 0,
+        outcomeNote: (map['outcomeNote'] ?? '').toString(),
         createdAt: _toDateTime(map['createdAt']),
         updatedAt: _toDateTime(map['updatedAt']),
       );

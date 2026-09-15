@@ -5,10 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/config/insurance_regions.dart';
 import '../../core/errors/app_error_handler.dart';
+import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
-import '../../services/chatbot_service.dart';
+import '../../services/ai/ai_service.dart';
+import '../../services/ai/chat_context_builder.dart';
+import '../../services/analytics_service.dart';
 import '../../services/deepgram_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/voice_recorder_service.dart';
@@ -18,7 +22,10 @@ import '../../widgets/clinical_md.dart';
 import 'chat_history_sheet.dart';
 
 class AiHealthAssistantScreen extends StatefulWidget {
-  const AiHealthAssistantScreen({super.key});
+  /// `coverage` — grounded on the user's bills, statements, policies and
+  /// cases (the default). `health` — general health information helper.
+  final String mode;
+  const AiHealthAssistantScreen({super.key, this.mode = 'coverage'});
 
   @override
   State<AiHealthAssistantScreen> createState() =>
@@ -28,8 +35,9 @@ class AiHealthAssistantScreen extends StatefulWidget {
 class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  final _chatbot = ChatbotService();
   final _db = FirestoreService();
+  String _context = '';
+  bool get _coverage => widget.mode != 'health';
   final _deepgram = DeepgramService();
   final _voice = VoiceRecorderService();
   final _uuid = const Uuid();
@@ -46,13 +54,20 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
   bool _isTranscribingVoice = false;
   double _voiceLevel = 0;
 
-  static const _quickPrompts = [
-    'I have a headache and fever',
-    'I feel chest pain',
-    'I have a cough for 3 days',
-    'I feel dizzy and tired',
-    'I have stomach pain',
+  static const _coveragePrompts = [
+    'What do I still owe, and why?',
+    'Explain my latest insurance statement',
+    'Which charges look wrong?',
+    'What are my appeal deadlines?',
+    'What does my policy cover for this?',
   ];
+  static const _healthPrompts = [
+    'What could cause a persistent headache?',
+    'What do my lab results generally mean?',
+    'When should a fever be seen by a doctor?',
+    'How do I prepare for a specialist visit?',
+  ];
+  List<String> get _quickPrompts => _coverage ? _coveragePrompts : _healthPrompts;
 
   @override
   void initState() {
@@ -61,6 +76,7 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
     _levelSub = _voice.levelStream.listen((l) {
       if (mounted) setState(() => _voiceLevel = l);
     });
+    Analytics.screen(_coverage ? 'chat_coverage' : 'chat_health');
     WidgetsBinding.instance.addPostFrameCallback((_) => _initSession());
   }
 
@@ -209,8 +225,9 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
       userId: uid,
       threadId: _currentSession!.id,
       role: 'assistant',
-      content:
-          'Hello$name! I\'m your Clinix AI health assistant.\n\nType your question or tap the microphone to speak — your voice is transcribed with Deepgram, then Gemini provides health guidance.\n\n_Remember: I\'m an AI assistant, not a doctor. Always consult a healthcare professional for medical advice._',
+      content: _coverage
+          ? 'Hi$name. Ask me anything about your bills, insurance statements, policies or cases — I answer from the documents you have added to Clinix.\n\n_General information, not legal or financial advice. Always check your documents before acting._'
+          : 'Hi$name. I can help you understand symptoms, test results and medical terms in plain language.\n\n_I am not a doctor and cannot diagnose. In an emergency, call your local emergency number._',
     );
     try {
       await _db.saveChatMessage(uid, welcome);
@@ -323,8 +340,27 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
     }
 
     try {
-      final prompt = _buildPrompt(provider.profile, text);
-      final response = await _chatbot.getGeminiResponse(prompt);
+      if (_coverage && _context.isEmpty) {
+        _context = await ChatContextBuilder(_db).build(uid);
+      }
+      final region = regionByCode(provider.profile?.country).code;
+      // Conversation window: drop the seeded welcome, keep the last 12 turns,
+      // and make sure the latest user text is the final entry.
+      final history = _messages
+          .where((m) => (m.role == 'user' || m.role == 'assistant') && m.id != userMsg.id)
+          .skipWhile((m) => m.role == 'assistant')
+          .toList();
+      final recent = history.length > 11 ? history.sublist(history.length - 11) : history;
+      final response = await AiService.instance.chat(
+        mode: _coverage ? 'coverage' : 'health',
+        region: region,
+        messages: [
+          for (final m in recent) {'role': m.role, 'content': m.content},
+          {'role': 'user', 'content': text},
+        ],
+        context: _coverage ? _context : '',
+        profileSummary: _coverage ? '' : ChatContextBuilder.profileSummary(provider.profile),
+      );
 
       final botMsg = AiChatMessage(
         id: _uuid.v4(),
@@ -346,69 +382,32 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
           if (mounted) AppErrorHandler.showSnackBar(context, e);
         }
       }
+    } on AiQuotaException catch (e) {
+      Analytics.quotaHit(e.op);
+      if (mounted) {
+        setState(() => _typing = false);
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Free limit reached'),
+            content: Text(e.message),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('See Pro')),
+            ],
+          ),
+        );
+        if (go == true && mounted) {
+          Analytics.paywallShown('quota_chat');
+          Navigator.pushNamed(context, AppRouter.paywall);
+        }
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _typing = false);
         AppErrorHandler.showSnackBar(context, e);
       }
     }
-  }
-
-  String _buildPrompt(PatientProfile? profile, String userMessage) {
-    final profileContext = profile != null
-        ? '''Patient Profile:
-- Name: ${profile.fullName}
-- Age: ${profile.age > 0 ? '${profile.age} years' : 'Unknown'}
-- Gender: ${profile.gender}
-- Blood Group: ${profile.bloodGroup}
-- Medical Allergies: ${profile.medicalAllergies.isEmpty ? 'None known' : profile.medicalAllergies.join(', ')}
-- Food Allergies: ${profile.foodAllergies.isEmpty ? 'None known' : profile.foodAllergies.join(', ')}
-- Past Diseases: ${profile.pastDiseases.isEmpty ? 'None' : profile.pastDiseases.join(', ')}
-- Chronic Conditions: ${profile.chronicConditions.isEmpty ? 'None' : profile.chronicConditions.join(', ')}
-'''
-        : 'Patient profile not available.';
-
-    return '''You are a compassionate AI health assistant for Clinix AI. Help the patient understand symptoms, suggest safe home care when appropriate, and say clearly when to see a doctor.
-
-$profileContext
-
-Patient's message: $userMessage
-
-Respond in clean Markdown for a mobile chat app. Use this exact structure:
-
-**Understanding your symptoms**
-One short empathetic paragraph (2-3 sentences).
-
-**Possible causes**
-- Cause one (brief)
-- Cause two (brief)
-- Cause three if relevant
-
-**What you can do at home**
-- Practical tip one
-- Practical tip two
-
-**When to see a doctor**
-- Red-flag or urgent signs (if any)
-- When routine care is enough
-
-**For your profile**
-One sentence on allergies, conditions, or medications from their profile (or say none on file).
-
-End with one short reassuring sentence.
-
-Safety rules (required, override formatting):
-- You are NOT a doctor and must NOT diagnose. Use "possible" or "may indicate".
-- If the message describes a potential EMERGENCY (e.g. chest pain, difficulty breathing, severe bleeding, stroke signs like face drooping or slurred speech, suicidal thoughts or intent to self-harm, anaphylaxis, signs of a heart attack), your FIRST line must clearly tell them to call their local emergency number or go to the nearest emergency department now, and (for self-harm) to contact a local crisis line. Keep it brief and caring; do not give home-care steps for an emergency.
-- Never provide specific medication doses, prescriptions, or instructions to start/stop a prescribed medicine — tell them to consult their doctor or pharmacist.
-- Do not claim certainty; always recommend confirming with a qualified professional.
-
-Formatting rules (for non-emergencies):
-- Use "- " for every bullet (never "* " at line start)
-- Use **bold** only for the five section titles above
-- No # headings, tables, or code blocks
-- Plain language; max 220 words
-- Always mention seeing a doctor for serious, persistent, or worsening symptoms''';
   }
 
   // ── Build ────────────────────────────────────────────────────────────────
@@ -456,7 +455,7 @@ Formatting rules (for non-emergencies):
                     ),
                   ],
                 ),
-                child: const Icon(Icons.smart_toy_rounded,
+                child: Icon(_coverage ? Icons.auto_awesome_rounded : Icons.favorite_rounded,
                     color: Colors.white, size: 22),
               ),
               const SizedBox(width: 12),
@@ -465,11 +464,11 @@ Formatting rules (for non-emergencies):
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('AI Health Assistant',
-                        style: TextStyle(
+                    Text(_coverage ? 'Ask Clinix' : 'Health helper',
+                        style: const TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w700)),
                     Text(
-                      sessionTitle ?? 'Voice · Deepgram  ·  Gemini',
+                      sessionTitle ?? (_coverage ? 'About your bills & coverage' : 'General information only'),
                       style: TextStyle(
                           fontSize: 11, color: AppTheme.textSecondary),
                       maxLines: 1,
@@ -530,7 +529,9 @@ Formatting rules (for non-emergencies):
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   color: Colors.transparent,
                   child: Text(
-                    'AI guidance, not medical advice. In an emergency, call your local emergency number.',
+                    _coverage
+                        ? 'General information from your documents — not legal or financial advice.'
+                        : 'General information, not medical advice. In an emergency, call your local emergency number.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: 10,

@@ -69,6 +69,8 @@ class LargeTitleScaffold extends StatelessWidget {
   final Widget? bottomBar;
   final EdgeInsets contentPadding;
   final Future<void> Function()? onRefresh;
+  /// False for tab roots so no back chevron is implied.
+  final bool automaticallyImplyLeading;
 
   const LargeTitleScaffold({
     super.key,
@@ -83,6 +85,7 @@ class LargeTitleScaffold extends StatelessWidget {
     this.contentPadding =
         const EdgeInsets.fromLTRB(DS.gutter, 8, DS.gutter, 120),
     this.onRefresh,
+    this.automaticallyImplyLeading = true,
   }) : assert(children != null || slivers != null,
             'Provide children or slivers');
 
@@ -100,6 +103,7 @@ class LargeTitleScaffold extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
           scrolledUnderElevation: 0,
           leading: leading,
+          automaticallyImplyLeading: automaticallyImplyLeading,
           actions: actions,
           systemOverlayStyle: AppTheme.isDark
               ? SystemUiOverlayStyle.light

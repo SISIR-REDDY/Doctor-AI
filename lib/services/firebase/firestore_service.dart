@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/firebase_config.dart';
 import '../../core/errors/app_exception.dart';
+import '../../models/advocate_models.dart';
 import '../../models/patient_models.dart';
 import 'firebase_bootstrap_service.dart';
 
@@ -87,6 +88,10 @@ class FirestoreService {
     'ai_chats',
     'chat_sessions',
     'reminders',
+    'documents',
+    'deadlines',
+    // `private/*` (entitlement, usage) is server-only; the `onUserDeleted`
+    // Cloud Function wipes it when the auth account is removed.
   ];
 
   /// Permanently deletes ALL of a user's data: every subcollection document and
@@ -602,5 +607,93 @@ class FirestoreService {
     } catch (e) {
       throw AppException(code: 'delete-claim-failed', message: 'Unable to delete claim.', cause: e);
     }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // SCANNED DOCUMENTS (bills · EOBs · denial letters · policies)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Stream<List<ScannedDocument>> watchDocuments(String uid, {String? caseId}) {
+    if (!_isFirebaseAvailable) return Stream.value(const []);
+    Query<Map<String, dynamic>> q =
+        _sub(uid, 'documents').orderBy('createdAt', descending: true);
+    if (caseId != null && caseId.isNotEmpty) {
+      q = _sub(uid, 'documents').where('caseId', isEqualTo: caseId);
+    }
+    return q.snapshots().map((s) {
+      final list = s.docs.map((d) => ScannedDocument.fromMap(d.data())).toList();
+      if (caseId != null) {
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      }
+      return list;
+    });
+  }
+
+  Future<ScannedDocument?> loadDocument(String uid, String id) async {
+    if (!_isFirebaseAvailable) return null;
+    final snap = await _sub(uid, 'documents').doc(id).get();
+    final data = snap.data();
+    return data == null ? null : ScannedDocument.fromMap(data);
+  }
+
+  Future<void> saveDocument(String uid, ScannedDocument doc) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'documents').doc(doc.id).set(doc.toMap());
+    } catch (e) {
+      throw AppException(code: 'save-document-failed', message: 'Unable to save document.', cause: e);
+    }
+  }
+
+  Future<void> deleteDocument(String uid, String id) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'documents').doc(id).delete();
+    } catch (e) {
+      throw AppException(code: 'delete-document-failed', message: 'Unable to delete document.', cause: e);
+    }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // CASE DEADLINES
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Stream<List<CaseDeadline>> watchDeadlines(String uid) {
+    if (!_isFirebaseAvailable) return Stream.value(const []);
+    return _sub(uid, 'deadlines').snapshots().map((s) {
+      final list = s.docs.map((d) => CaseDeadline.fromMap(d.data())).toList()
+        ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      return list;
+    });
+  }
+
+  Future<void> saveDeadline(String uid, CaseDeadline deadline) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'deadlines').doc(deadline.id).set(deadline.toMap());
+    } catch (e) {
+      throw AppException(code: 'save-deadline-failed', message: 'Unable to save deadline.', cause: e);
+    }
+  }
+
+  Future<void> deleteDeadline(String uid, String id) async {
+    _ensureFirebaseForWrite();
+    try {
+      await _sub(uid, 'deadlines').doc(id).delete();
+    } catch (e) {
+      throw AppException(code: 'delete-deadline-failed', message: 'Unable to delete deadline.', cause: e);
+    }
+  }
+
+  /// Removes every deadline that belongs to [caseId] (case deleted / closed).
+  Future<void> deleteDeadlinesForCase(String uid, String caseId) async {
+    if (!_isFirebaseAvailable) return;
+    final snap = await _sub(uid, 'deadlines').where('caseId', isEqualTo: caseId).get();
+    if (snap.docs.isEmpty) return;
+    final batch = _requireFirestore().batch();
+    for (final d in snap.docs) {
+      batch.delete(d.reference);
+    }
+    await batch.commit();
   }
 }

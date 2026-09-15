@@ -2,13 +2,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/insurance_regions.dart';
+import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../core/providers/theme_controller.dart';
 import '../../core/errors/app_error_handler.dart';
 import '../../features/legal/legal_screens.dart';
 import '../../models/patient_models.dart';
+import '../../services/analytics_service.dart';
+import '../../services/entitlement_service.dart';
 import '../../services/firebase/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
 
 class HealthProfileScreen extends StatefulWidget {
@@ -238,10 +243,31 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(AppTheme.lg),
+        padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.lg, AppTheme.lg, 120),
         children: [
           // Avatar & summary
           _ProfileHeader(profile: profile),
+          const SizedBox(height: AppTheme.lg),
+
+          // Plan
+          _PlanCard(),
+          const SizedBox(height: AppTheme.lg),
+
+          // Region — drives currency, rights, deadlines and letters.
+          InsetSection(
+            header: 'Insurance region',
+            children: [
+              InsetRow(
+                icon: Icons.public_rounded,
+                iconColor: AppTheme.infoColor,
+                title: profile != null && profile.hasCountry
+                    ? '${regionByCode(profile.country).flag}  ${regionByCode(profile.country).name}'
+                    : 'Not set',
+                subtitle: 'Currency, appeal rules and fair-price references',
+                onTap: () => _pickRegion(context, profile),
+              ),
+            ],
+          ),
           const SizedBox(height: AppTheme.lg),
 
           // Basic Info
@@ -866,6 +892,105 @@ class _AppearanceSelector extends StatelessWidget {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+extension _RegionPicker on _HealthProfileScreenState {
+  Future<void> _pickRegion(BuildContext context, PatientProfile? profile) async {
+    final code = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => SafeArea(
+        top: false,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          decoration: BoxDecoration(
+              color: AppTheme.surfaceColor, borderRadius: DS.squircle(DS.rXl)),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 6, bottom: 10),
+                child: Text('Where are you insured?', style: AppTheme.headingMedium),
+              ),
+              for (final r in kInsuranceRegions)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ChoiceCard(
+                    leading: Text(r.flag, style: const TextStyle(fontSize: 24)),
+                    title: r.name,
+                    subtitle: r.currencyCode,
+                    selected: profile?.country == r.code,
+                    onTap: () => Navigator.pop(context, r.code),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (code == null || profile == null || !context.mounted) return;
+    try {
+      await context
+          .read<HealthDataProvider>()
+          .saveProfile(profile.copyWith(country: code, updatedAt: DateTime.now()));
+      Analytics.setUser(profile.id, region: code);
+    } catch (e) {
+      if (context.mounted) AppErrorHandler.showSnackBar(context, e);
+    }
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final ent = context.watch<EntitlementService>();
+    final pro = ent.isPro;
+    return DSPressable(
+      onTap: () {
+        Analytics.paywallShown('profile');
+        Navigator.pushNamed(context, AppRouter.paywall);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: pro
+              ? const LinearGradient(colors: [Color(0xFF34C759), Color(0xFF1E9E4A)])
+              : const LinearGradient(colors: [Color(0xFF1C1C2E), Color(0xFF2B2140)]),
+          borderRadius: DS.squircle(DS.rLg),
+          boxShadow: DS.softShadow(),
+        ),
+        child: Row(
+          children: [
+            IconBadge(pro ? Icons.verified_rounded : Icons.auto_awesome_rounded,
+                color: Colors.white, size: 42),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(pro ? 'Clinix Pro' : 'Free plan',
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(
+                    pro
+                        ? (ent.expiresAt != null
+                            ? 'Renews ${ent.expiresAt!.day}/${ent.expiresAt!.month}/${ent.expiresAt!.year}'
+                            : 'All features unlocked')
+                        : 'Unlimited audits, letters and deadline tracking',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+          ],
+        ),
       ),
     );
   }
