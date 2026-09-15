@@ -1,9 +1,11 @@
 # Clinix — launch & compliance checklist
 
-Clinix is positioned as an **AI medical bill & insurance advocate**: it reads bills,
-insurer statements (EOBs), denial letters and policies; audits bills against
-public fair-price references; explains denials; drafts letters the **user reviews
-and sends themselves**; tracks deadlines and money recovered. It does **not**
+Clinix is positioned as a **personal health copilot** with the bill-and-insurance
+advocate as its hero: it reads bills, insurer statements (EOBs), denial letters,
+policies and medical reports; audits bills against public fair-price references;
+explains denials and lab results in plain language; drafts letters the **user
+reviews and sends themselves**; keeps records, medications and reminders in one
+vault; and offers an AI health assistant grounded on the user's own documents. It does **not**
 diagnose, treat, represent, negotiate, appeal or submit anything on the user's
 behalf. Keep that framing everywhere (app copy, store listing, review notes) —
 it is what keeps the app out of medical-device, legal-services and
@@ -78,7 +80,20 @@ account under **Health & Fitness** (or **Finance**).
 - Push/notification permission requested contextually (deadlines, medications). ✅
 - Accessibility: dynamic type works; audit VoiceOver labels on icon-only buttons before submission.
 
-## 5. Positioning guardrails (do not regress)
+## 5. Statistics used in marketing copy (keep sourced)
+
+Every number in the onboarding and store listing must trace to one of these.
+Re-verify annually; drop a claim rather than keep a stale one.
+
+| Claim | Source |
+|---|---|
+| ~8 in 10 medical bills contain an error | Widely cited industry estimate (Medical Billing Advocates of America); phrase as "up to" in store copy |
+| Under 1% of in-network denials are appealed; ~44% of appeals succeed | KFF analysis of ACA marketplace insurer transparency data |
+| Lab results reach patients instantly, often before the clinician | 21st Century Cures Act information-blocking rule (2021); JAMIA Open 2025 on portal comprehension |
+| Doctor-messaging apps charge ~\$49/month | K Health published pricing (2026) — cite as "some apps charge", not a named competitor, in store copy |
+| 125,000 deaths and \$300B avoidable cost per year from medication non-adherence | Long-standing US estimates (Annals of Internal Medicine 2012; restated in 2025 industry reviews) |
+
+## 6. Positioning guardrails (do not regress)
 
 - No "diagnose", "treatment", "medical device", "we fight insurers", "we negotiate",
   "guaranteed savings", "legal advice" anywhere in copy or screenshots.
@@ -87,7 +102,7 @@ account under **Health & Fitness** (or **Finance**).
 - Emergency redirection and "not medical advice" remain in the health chat prompt
   (server-side, `functions/src/ai/prompts.ts`).
 
-## 6. Before scaling
+## 7. Before scaling
 
 - Rate limits are per user; add a per-IP layer (Cloud Armor / App Check enforcement)
   before marketing pushes.

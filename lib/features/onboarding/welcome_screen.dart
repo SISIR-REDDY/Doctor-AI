@@ -19,6 +19,7 @@ import '../../theme/motion.dart';
 import '../legal/legal_screens.dart';
 import 'welcome_backdrop.dart';
 import 'welcome_scenes.dart';
+import 'welcome_scenes_care.dart';
 
 /// First-run experience: three value slides, then consent + sign-in.
 ///
@@ -44,21 +45,28 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   bool _loadingGoogle = false;
   bool _loadingApple = false;
 
-  static const _slideCount = 3;
+  static const _slideCount = 6;
   bool get _onSignIn => _index == _slideCount;
 
   /// Backdrop accent per page. The sign-in step keeps the last slide's hue so
   /// the transition into it feels continuous rather than like a new screen.
   static const _accents = <Color>[
-    Color(0xFF007AFF),
-    Color(0xFF5856D6),
-    Color(0xFF30B0C7),
-    Color(0xFF30B0C7),
+    Color(0xFF007AFF), // bills
+    Color(0xFF5856D6), // denials
+    Color(0xFF32ADE6), // reports
+    Color(0xFF34C759), // assistant
+    Color(0xFFAF52DE), // vault
+    Color(0xFF30B0C7), // money
+    Color(0xFF30B0C7), // sign-in keeps the last hue
   ];
 
+  /// One chapter per problem the app solves. Order: the money hook first
+  /// (largest, most immediate payoff), then understanding, then the daily
+  /// tools, then the payoff. Every statistic is sourced in the launch
+  /// checklist; keep them defensible.
   static const _slides = <_SlideCopy>[
     _SlideCopy(
-      eyebrow: '8 in 10 bills contain an error',
+      eyebrow: '8 in 10 medical bills contain an error',
       title: 'Photograph it.\nWe find the errors.',
       body:
           'Clinix reads every line, matches each code against published Medicare rates, and shows you which charges don’t hold up — and what they should have cost.',
@@ -68,6 +76,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       title: 'Denied?\nThat’s not the end.',
       body:
           'Roughly half of appeals succeed — most people just never file one. Snap the letter and Clinix explains the real reason, finds your rights, and drafts the appeal.',
+    ),
+    _SlideCopy(
+      eyebrow: 'Results now arrive before your doctor calls',
+      title: 'Your results,\nin plain English.',
+      body:
+          'By law, labs and reports land in your portal instantly — as raw numbers. Scan any report and Clinix tells you what each marker means, what’s off, and what to ask about.',
+    ),
+    _SlideCopy(
+      eyebrow: 'Doctor-messaging apps charge \$49 a month',
+      title: 'Ask anything.\nAny hour.',
+      body:
+          'An AI health assistant that has actually read your records — talk or type, and it answers with your own history in view. Clear about what it is: information, never a diagnosis.',
+    ),
+    _SlideCopy(
+      eyebrow: '125,000 lives a year lost to missed medication',
+      title: 'One vault.\nThe whole family.',
+      body:
+          'Records, prescriptions, lab history and reminders in one private place — yours, your parents’, your kids’. The reminder fires; the streak counts; nothing gets lost between doctors.',
     ),
     _SlideCopy(
       eyebrow: 'Every letter, deadline and outcome in one place',
@@ -179,6 +205,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         scene: switch (i) {
                           0 => (o, a) => BillScene(offset: o, active: a),
                           1 => (o, a) => DenialScene(offset: o, active: a),
+                          2 => (o, a) => ReportScene(offset: o, active: a),
+                          3 => (o, a) => AssistantScene(offset: o, active: a),
+                          4 => (o, a) => VaultScene(offset: o, active: a),
                           _ => (o, a) => MoneyScene(offset: o, active: a),
                         },
                       );

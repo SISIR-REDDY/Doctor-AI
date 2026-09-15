@@ -68,6 +68,9 @@ void main() {
 
     for (final expected in const [
       'That’s not the end.',
+      'in plain English.',
+      'Any hour.',
+      'The whole family.',
       'You keep it.',
     ]) {
       await tester.fling(find.byType(PageView), const Offset(-400, 0), 1200);

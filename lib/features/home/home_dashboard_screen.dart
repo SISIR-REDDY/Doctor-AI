@@ -459,8 +459,10 @@ class _ScanActions extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
       child: Column(
         children: [
+          // The scanner is universal — bills, denials, lab reports, letters —
+          // so the label says so; the onboarding promises all four.
           HeroButton(
-            label: 'Scan a bill or letter',
+            label: 'Scan a bill, report or letter',
             icon: CupertinoIcons.camera_viewfinder,
             onTap: () => DocumentScanScreen.open(context, trigger: 'home'),
           ),
@@ -470,9 +472,31 @@ class _ScanActions extends StatelessWidget {
               Expanded(
                 child: _QuickAction(
                   icon: CupertinoIcons.chat_bubble_2_fill,
-                  color: AppTheme.secondaryColor,
-                  label: 'Ask about a bill',
+                  color: AppTheme.successColor,
+                  label: 'Ask the assistant',
                   onTap: () => Navigator.pushNamed(context, AppRouter.aiChat),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _QuickAction(
+                  icon: CupertinoIcons.capsule_fill,
+                  color: AppTheme.oncologyColor,
+                  label: 'Medications',
+                  onTap: () => Navigator.pushNamed(context, AppRouter.medications),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _QuickAction(
+                  icon: CupertinoIcons.folder_fill,
+                  color: AppTheme.primaryColor,
+                  label: 'Records vault',
+                  onTap: () => Navigator.pushNamed(context, AppRouter.recordsVault),
                 ),
               ),
               const SizedBox(width: 10),

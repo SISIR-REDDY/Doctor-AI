@@ -1,8 +1,10 @@
-# Clinix — AI medical bill & insurance advocate
+# Clinix — your health, understood and defended
 
-Scan any medical bill, insurer statement (EOB) or denial letter. Clinix reads it,
-checks the bill against fair-price references, explains denials, drafts the dispute or
-appeal for you to send, tracks the deadlines, and records the money you get back.
+Scan any medical bill, insurer statement (EOB), denial letter or lab report. Clinix
+reads it, checks bills against fair-price references, explains denials and results in
+plain English, drafts the dispute or appeal for you to send, tracks deadlines, and
+records the money you get back. Records, medications, reminders and an AI health
+assistant grounded on your own documents live alongside — for you and your family.
 
 **Markets:** US, UK, Canada, Australia, EU first; India next (region engine in
 `lib/core/config/insurance_regions.dart` + `functions/src/regions.ts`).

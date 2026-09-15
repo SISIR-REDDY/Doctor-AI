@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:docpilot/features/onboarding/welcome_scenes.dart';
+import 'package:docpilot/features/onboarding/welcome_scenes_care.dart';
 
 /// The welcome scenes are the first thing a user sees, so a layout overflow
 /// there is a visible yellow-and-black bar on the store screenshots. These
@@ -44,6 +45,9 @@ void main() {
         for (final w in const [
           BillScene(offset: 0, active: true),
           DenialScene(offset: 0, active: true),
+          ReportScene(offset: 0, active: true),
+          AssistantScene(offset: 0, active: true),
+          VaultScene(offset: 0, active: true),
           MoneyScene(offset: 0, active: true),
         ]) {
           await tester.pumpWidget(scene(w, scale));
