@@ -207,7 +207,19 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
       dischargeDate: _str('dateOfServiceEnd'),
       diagnosis: _list('diagnoses').join(', '),
       claimStatus: _docType == DocType.denial ? 'rejected' : 'pending',
+      patientName: _familyPatientName(profile),
     );
+  }
+
+  /// Family mode: keep the patient named on the document when it is not the
+  /// account holder, so letters and packets name the right person.
+  String _familyPatientName(PatientProfile? profile) {
+    if (profile == null || !profile.familyMode) return '';
+    final name = _str('patientName').trim();
+    if (name.isEmpty) return '';
+    final first = profile.firstName.trim().toLowerCase();
+    if (first.isNotEmpty && name.toLowerCase().contains(first)) return '';
+    return name;
   }
 
   Future<void> _saveBill(String uid, PatientProfile? profile) async {
@@ -293,21 +305,7 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
     final doc = await _persistDocument(uid);
     final region = regionByCode(profile?.country);
     final extras = <String>[
-      if (_str('planName').isNotEmpty) 'Plan: ${_str('planName')}',
-      if (_str('memberId').isNotEmpty) 'Member ID: ${_str('memberId')}',
-      if (_str('groupNumber').isNotEmpty) 'Group: ${_str('groupNumber')}',
-      if (_num('deductibleIndividual') > 0) 'Deductible (individual): ${_fmtNum(_num('deductibleIndividual'))}',
-      if (_num('deductibleFamily') > 0) 'Deductible (family): ${_fmtNum(_num('deductibleFamily'))}',
-      if (_num('outOfPocketMaxIndividual') > 0) 'Out-of-pocket max (individual): ${_fmtNum(_num('outOfPocketMaxIndividual'))}',
-      if (_num('outOfPocketMaxFamily') > 0) 'Out-of-pocket max (family): ${_fmtNum(_num('outOfPocketMaxFamily'))}',
-      if (_num('copayPrimaryCare') > 0) 'Copay primary care: ${_fmtNum(_num('copayPrimaryCare'))}',
-      if (_num('copaySpecialist') > 0) 'Copay specialist: ${_fmtNum(_num('copaySpecialist'))}',
-      if (_num('copayEmergency') > 0) 'Copay emergency: ${_fmtNum(_num('copayEmergency'))}',
-      if (_num('coinsurancePercent') > 0) 'Coinsurance: ${_fmtNum(_num('coinsurancePercent'))}%',
-      if (_str('networkType').isNotEmpty) 'Network: ${_str('networkType')}',
-      if (_list('exclusions').isNotEmpty) 'Exclusions: ${_list('exclusions').join('; ')}',
-      if (_list('waitingPeriods').isNotEmpty) 'Waiting periods: ${_list('waitingPeriods').join('; ')}',
-      if (_str('summary').isNotEmpty) '\n${_str('summary')}',
+      if (_str('summary').isNotEmpty) _str('summary'),
     ];
     final type = _str('policyType');
     final policy = InsurancePolicy(
@@ -326,6 +324,21 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
       nomineeName: _str('beneficiaryName'),
       documentUrl: doc.remoteUrls.isNotEmpty ? doc.remoteUrls.first : '',
       notes: extras.join('\n'),
+      planName: _str('planName'),
+      memberId: _str('memberId'),
+      groupNumber: _str('groupNumber'),
+      deductibleIndividual: _num('deductibleIndividual'),
+      deductibleFamily: _num('deductibleFamily'),
+      outOfPocketMaxIndividual: _num('outOfPocketMaxIndividual'),
+      outOfPocketMaxFamily: _num('outOfPocketMaxFamily'),
+      copayPrimaryCare: _num('copayPrimaryCare'),
+      copaySpecialist: _num('copaySpecialist'),
+      copayEmergency: _num('copayEmergency'),
+      coinsurancePercent: _num('coinsurancePercent'),
+      networkType: _str('networkType'),
+      exclusions: _list('exclusions'),
+      waitingPeriods: _list('waitingPeriods'),
+      documentId: doc.id,
     );
     if (!mounted) return;
     final nav = Navigator.of(context);

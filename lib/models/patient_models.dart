@@ -811,6 +811,24 @@ class InsurancePolicy {
   final String documentUrl;
   final bool isActive;
   final String notes;
+
+  // ── Coverage / cost sharing (from the policy document or SBC) ──
+  final String planName;
+  final String memberId;
+  final String groupNumber;
+  final double deductibleIndividual;
+  final double deductibleFamily;
+  final double outOfPocketMaxIndividual;
+  final double outOfPocketMaxFamily;
+  final double copayPrimaryCare;
+  final double copaySpecialist;
+  final double copayEmergency;
+  final double coinsurancePercent;
+  final String networkType;
+  final List<String> exclusions;
+  final List<String> waitingPeriods;
+  /// Id of the [ScannedDocument] this policy was extracted from, if any.
+  final String documentId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -832,10 +850,31 @@ class InsurancePolicy {
     this.documentUrl = '',
     this.isActive = true,
     this.notes = '',
+    this.planName = '',
+    this.memberId = '',
+    this.groupNumber = '',
+    this.deductibleIndividual = 0,
+    this.deductibleFamily = 0,
+    this.outOfPocketMaxIndividual = 0,
+    this.outOfPocketMaxFamily = 0,
+    this.copayPrimaryCare = 0,
+    this.copaySpecialist = 0,
+    this.copayEmergency = 0,
+    this.coinsurancePercent = 0,
+    this.networkType = '',
+    this.exclusions = const <String>[],
+    this.waitingPeriods = const <String>[],
+    this.documentId = '',
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
+
+  bool get hasCostSharing =>
+      deductibleIndividual > 0 ||
+      outOfPocketMaxIndividual > 0 ||
+      copayPrimaryCare > 0 ||
+      coinsurancePercent > 0;
 
   InsurancePolicy copyWith({
     String? id,
@@ -855,6 +894,21 @@ class InsurancePolicy {
     String? documentUrl,
     bool? isActive,
     String? notes,
+    String? planName,
+    String? memberId,
+    String? groupNumber,
+    double? deductibleIndividual,
+    double? deductibleFamily,
+    double? outOfPocketMaxIndividual,
+    double? outOfPocketMaxFamily,
+    double? copayPrimaryCare,
+    double? copaySpecialist,
+    double? copayEmergency,
+    double? coinsurancePercent,
+    String? networkType,
+    List<String>? exclusions,
+    List<String>? waitingPeriods,
+    String? documentId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -876,6 +930,21 @@ class InsurancePolicy {
         documentUrl: documentUrl ?? this.documentUrl,
         isActive: isActive ?? this.isActive,
         notes: notes ?? this.notes,
+        planName: planName ?? this.planName,
+        memberId: memberId ?? this.memberId,
+        groupNumber: groupNumber ?? this.groupNumber,
+        deductibleIndividual: deductibleIndividual ?? this.deductibleIndividual,
+        deductibleFamily: deductibleFamily ?? this.deductibleFamily,
+        outOfPocketMaxIndividual: outOfPocketMaxIndividual ?? this.outOfPocketMaxIndividual,
+        outOfPocketMaxFamily: outOfPocketMaxFamily ?? this.outOfPocketMaxFamily,
+        copayPrimaryCare: copayPrimaryCare ?? this.copayPrimaryCare,
+        copaySpecialist: copaySpecialist ?? this.copaySpecialist,
+        copayEmergency: copayEmergency ?? this.copayEmergency,
+        coinsurancePercent: coinsurancePercent ?? this.coinsurancePercent,
+        networkType: networkType ?? this.networkType,
+        exclusions: exclusions ?? this.exclusions,
+        waitingPeriods: waitingPeriods ?? this.waitingPeriods,
+        documentId: documentId ?? this.documentId,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -898,9 +967,27 @@ class InsurancePolicy {
         'documentUrl': documentUrl,
         'isActive': isActive,
         'notes': notes,
+        'planName': planName,
+        'memberId': memberId,
+        'groupNumber': groupNumber,
+        'deductibleIndividual': deductibleIndividual,
+        'deductibleFamily': deductibleFamily,
+        'outOfPocketMaxIndividual': outOfPocketMaxIndividual,
+        'outOfPocketMaxFamily': outOfPocketMaxFamily,
+        'copayPrimaryCare': copayPrimaryCare,
+        'copaySpecialist': copaySpecialist,
+        'copayEmergency': copayEmergency,
+        'coinsurancePercent': coinsurancePercent,
+        'networkType': networkType,
+        'exclusions': exclusions,
+        'waitingPeriods': waitingPeriods,
+        'documentId': documentId,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
+
+  static double _d(Object? v) =>
+      v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0;
 
   factory InsurancePolicy.fromMap(Map<String, dynamic> map) => InsurancePolicy(
         id: (map['id'] ?? '').toString(),
@@ -924,6 +1011,21 @@ class InsurancePolicy {
         documentUrl: (map['documentUrl'] ?? '').toString(),
         isActive: map['isActive'] != false,
         notes: (map['notes'] ?? '').toString(),
+        planName: (map['planName'] ?? '').toString(),
+        memberId: (map['memberId'] ?? '').toString(),
+        groupNumber: (map['groupNumber'] ?? '').toString(),
+        deductibleIndividual: _d(map['deductibleIndividual']),
+        deductibleFamily: _d(map['deductibleFamily']),
+        outOfPocketMaxIndividual: _d(map['outOfPocketMaxIndividual']),
+        outOfPocketMaxFamily: _d(map['outOfPocketMaxFamily']),
+        copayPrimaryCare: _d(map['copayPrimaryCare']),
+        copaySpecialist: _d(map['copaySpecialist']),
+        copayEmergency: _d(map['copayEmergency']),
+        coinsurancePercent: _d(map['coinsurancePercent']),
+        networkType: (map['networkType'] ?? '').toString(),
+        exclusions: _toStringList(map['exclusions']),
+        waitingPeriods: _toStringList(map['waitingPeriods']),
+        documentId: (map['documentId'] ?? '').toString(),
         createdAt: _toDateTime(map['createdAt']),
         updatedAt: _toDateTime(map['updatedAt']),
       );
@@ -1098,6 +1200,8 @@ class InsuranceClaim {
   final List<String> documentIds;
   /// Structured EOB data (from the scanner) for balance-billing checks.
   final Map<String, dynamic> eob;
+  /// Who the care was for (family mode); empty = the account holder.
+  final String patientName;
   /// open | won | partial | lost | withdrawn — see [OutcomeStatus].
   final String outcomeStatus;
   /// Money actually recovered / written off, entered by the user.
@@ -1137,6 +1241,7 @@ class InsuranceClaim {
     this.letters = const <GeneratedLetter>[],
     this.documentIds = const <String>[],
     this.eob = const <String, dynamic>{},
+    this.patientName = '',
     this.outcomeStatus = OutcomeStatus.open,
     this.recoveredAmount = 0,
     this.outcomeNote = '',
@@ -1213,6 +1318,7 @@ class InsuranceClaim {
     List<GeneratedLetter>? letters,
     List<String>? documentIds,
     Map<String, dynamic>? eob,
+    String? patientName,
     String? outcomeStatus,
     double? recoveredAmount,
     String? outcomeNote,
@@ -1249,6 +1355,7 @@ class InsuranceClaim {
         letters: letters ?? this.letters,
         documentIds: documentIds ?? this.documentIds,
         eob: eob ?? this.eob,
+        patientName: patientName ?? this.patientName,
         outcomeStatus: outcomeStatus ?? this.outcomeStatus,
         recoveredAmount: recoveredAmount ?? this.recoveredAmount,
         outcomeNote: outcomeNote ?? this.outcomeNote,
@@ -1286,6 +1393,7 @@ class InsuranceClaim {
         'letters': letters.map((l) => l.toMap()).toList(),
         'documentIds': documentIds,
         'eob': eob,
+        'patientName': patientName,
         'outcomeStatus': outcomeStatus,
         'recoveredAmount': recoveredAmount,
         'outcomeNote': outcomeNote,
@@ -1334,6 +1442,7 @@ class InsuranceClaim {
         eob: map['eob'] is Map
             ? Map<String, dynamic>.from(map['eob'] as Map)
             : const <String, dynamic>{},
+        patientName: (map['patientName'] ?? '').toString(),
         outcomeStatus: (map['outcomeStatus'] ?? OutcomeStatus.open).toString(),
         recoveredAmount: (map['recoveredAmount'] is num)
             ? (map['recoveredAmount'] as num).toDouble()

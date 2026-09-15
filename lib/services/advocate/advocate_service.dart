@@ -212,7 +212,7 @@ class AdvocateService {
       'region': region.code,
       'kind': kind,
       'context': {
-        'patientName': profile?.fullName ?? '',
+        'patientName': claim.patientName.isNotEmpty ? claim.patientName : (profile?.fullName ?? ''),
         'policyholderName': profile?.fullName ?? '',
         'insurerName': claim.insurer.isNotEmpty ? claim.insurer : (denial?.insurerName ?? ''),
         'providerName': claim.hospitalName.isNotEmpty ? claim.hospitalName : (denial?.providerName ?? ''),
@@ -344,11 +344,24 @@ class AdvocateService {
 
   Map<String, dynamic> _policySummary(InsurancePolicy p) => {
         'insurer': p.insurer,
+        'planName': p.planName,
         'policyNumber': p.policyNumber,
+        'memberId': p.memberId,
         'policyType': p.policyType,
         'country': p.country,
         'currency': p.currencyCode,
         'coverageAmount': p.coverageAmount,
+        'deductibleIndividual': p.deductibleIndividual,
+        'deductibleFamily': p.deductibleFamily,
+        'outOfPocketMaxIndividual': p.outOfPocketMaxIndividual,
+        'outOfPocketMaxFamily': p.outOfPocketMaxFamily,
+        'copayPrimaryCare': p.copayPrimaryCare,
+        'copaySpecialist': p.copaySpecialist,
+        'copayEmergency': p.copayEmergency,
+        'coinsurancePercent': p.coinsurancePercent,
+        'networkType': p.networkType,
+        'exclusions': p.exclusions,
+        'waitingPeriods': p.waitingPeriods,
         'notes': p.notes,
       };
 

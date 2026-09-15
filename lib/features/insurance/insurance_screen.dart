@@ -4,9 +4,13 @@ import 'package:provider/provider.dart';
 import '../../core/config/insurance_regions.dart';
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
+import '../../models/advocate_models.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/glass.dart';
+import '../../theme/ios18_components.dart';
+import '../scan/document_scan_screen.dart';
 
 class InsuranceScreen extends StatefulWidget {
   const InsuranceScreen({super.key});
@@ -19,11 +23,13 @@ class _InsuranceScreenState extends State<InsuranceScreen> {
   final db = FirestoreService();
 
   Stream<List<InsurancePolicy>>? _stream;
+  Stream<List<InsuranceClaim>>? _claims;
   String? _streamUid;
   Stream<List<InsurancePolicy>> _policies(String uid) {
     if (_streamUid != uid) {
       _streamUid = uid;
       _stream = db.watchPolicies(uid);
+      _claims = db.watchClaims(uid);
     }
     return _stream!;
   }
@@ -58,8 +64,18 @@ class _InsuranceScreenState extends State<InsuranceScreen> {
                     ),
 
                     if (policies.isEmpty)
-                      const SliverFillRemaining(child: _EmptyState())
+                      SliverFillRemaining(
+                        child: _EmptyState(
+                          onScan: () => DocumentScanScreen.open(context, trigger: 'insurance', docType: DocType.policy),
+                        ),
+                      )
                     else ...[
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        sliver: SliverToBoxAdapter(
+                          child: _CoverageTracker(policies: policies, claims: _claims),
+                        ),
+                      ),
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
                         sliver: SliverToBoxAdapter(
@@ -105,7 +121,8 @@ class _InsuranceScreenState extends State<InsuranceScreen> {
 
       // ── Add Policy FAB ───────────────────────────────────────────────────
       floatingActionButton: _AddPolicyFab(
-        onTap: () => Navigator.pushNamed(context, AppRouter.addPolicy),
+        onTap: () => DocumentScanScreen.open(context, trigger: 'insurance_fab', docType: DocType.policy),
+        onManual: () => Navigator.pushNamed(context, AppRouter.addPolicy),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
@@ -665,12 +682,14 @@ class _StripePainter extends CustomPainter {
 
 class _AddPolicyFab extends StatelessWidget {
   final VoidCallback onTap;
-  const _AddPolicyFab({required this.onTap});
+  final VoidCallback onManual;
+  const _AddPolicyFab({required this.onTap, required this.onManual});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onManual,
       child: Container(
         height: 52,
         margin: const EdgeInsets.symmetric(horizontal: 40),
@@ -692,9 +711,9 @@ class _AddPolicyFab extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: const [
-            Icon(Icons.add_rounded, color: Colors.white, size: 20),
+            Icon(Icons.document_scanner_rounded, color: Colors.white, size: 20),
             SizedBox(width: 8),
-            Text('Add Policy',
+            Text('Scan policy',
                 style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -709,7 +728,8 @@ class _AddPolicyFab extends StatelessWidget {
 // ── Empty State ───────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final VoidCallback onScan;
+  const _EmptyState({required this.onScan});
 
   @override
   Widget build(BuildContext context) {
@@ -732,11 +752,164 @@ class _EmptyState extends StatelessWidget {
         Text('No Policies Yet', style: AppTheme.headingSmall),
         const SizedBox(height: 8),
         Text(
-          'Add your health, term or other insurance\npolicies to keep them all in one place.',
+          'Scan your policy schedule or benefits summary —\nClinix reads the deductible, limits and exclusions.',
           style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
           textAlign: TextAlign.center,
         ),
+        const SizedBox(height: 18),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: HeroButton(label: 'Scan a policy', icon: Icons.document_scanner_rounded, onTap: onScan),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pushNamed(context, AppRouter.addPolicy),
+          child: const Text('Or enter it manually'),
+        ),
         const SizedBox(height: 100),
+      ],
+    );
+  }
+}
+
+// ── Coverage tracker ──────────────────────────────────────────────────────────
+
+/// Deductible / out-of-pocket progress for health policies, computed from
+/// the insurer statements (EOBs) scanned into cases this plan year.
+class _CoverageTracker extends StatelessWidget {
+  final List<InsurancePolicy> policies;
+  final Stream<List<InsuranceClaim>>? claims;
+  const _CoverageTracker({required this.policies, required this.claims});
+
+  @override
+  Widget build(BuildContext context) {
+    final tracked = policies.where((p) => p.isActive && p.hasCostSharing && (p.deductibleIndividual > 0 || p.outOfPocketMaxIndividual > 0)).toList();
+    if (tracked.isEmpty) return const SizedBox.shrink();
+    return StreamBuilder<List<InsuranceClaim>>(
+      stream: claims,
+      builder: (context, snap) {
+        final all = snap.data ?? const <InsuranceClaim>[];
+        final year = DateTime.now().year;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const DSSectionLabel('THIS YEAR'),
+            for (final p in tracked) ...[
+              _CoverageCard(policy: p, claims: all.where((c) => _matches(c, p) && _inYear(c, year)).toList()),
+              const SizedBox(height: 10),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  static bool _matches(InsuranceClaim c, InsurancePolicy p) {
+    if (c.policyId.isNotEmpty && c.policyId == p.id) return true;
+    final a = c.insurer.toLowerCase().trim();
+    final b = p.insurer.toLowerCase().trim();
+    if (a.isEmpty || b.isEmpty) return false;
+    return a.contains(b) || b.contains(a);
+  }
+
+  static bool _inYear(InsuranceClaim c, int year) {
+    final d = DateTime.tryParse(c.admissionDate) ?? c.createdAt;
+    return d.year == year;
+  }
+}
+
+class _CoverageCard extends StatelessWidget {
+  final InsurancePolicy policy;
+  final List<InsuranceClaim> claims;
+  const _CoverageCard({required this.policy, required this.claims});
+
+  double _sum(String key) => claims.fold<double>(0, (s, c) {
+        final v = c.eob[key];
+        return s + (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = policy.currencyCode.isNotEmpty ? policy.currencyCode : regionByCode(policy.country).currencyCode;
+    // Prefer the insurer's own "remaining" figure from the latest statement.
+    final latest = claims.where((c) => c.eob.isNotEmpty).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final remainingFromEob = latest.isNotEmpty ? (latest.first.eob['deductibleRemaining'] as num?)?.toDouble() ?? 0 : 0.0;
+    final oopRemainingFromEob = latest.isNotEmpty ? (latest.first.eob['outOfPocketRemaining'] as num?)?.toDouble() ?? 0 : 0.0;
+
+    final double deductibleUsed = policy.deductibleIndividual > 0
+        ? (remainingFromEob > 0 ? (policy.deductibleIndividual - remainingFromEob) : _sum('deductibleAppliedThisClaim'))
+            .clamp(0.0, policy.deductibleIndividual)
+            .toDouble()
+        : 0.0;
+    final double oopUsed = policy.outOfPocketMaxIndividual > 0
+        ? (oopRemainingFromEob > 0 ? (policy.outOfPocketMaxIndividual - oopRemainingFromEob) : _sum('totalPatientResponsibility'))
+            .clamp(0.0, policy.outOfPocketMaxIndividual)
+            .toDouble()
+        : 0.0;
+    final hasData = claims.any((c) => c.eob.isNotEmpty);
+
+    return InsetCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            IconBadge(Icons.pie_chart_rounded, color: AppTheme.warningColor, size: 34),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('${policy.insurer}${policy.planName.isNotEmpty ? ' · ${policy.planName}' : ''}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          if (policy.deductibleIndividual > 0)
+            _Progress(label: 'Deductible', used: deductibleUsed, max: policy.deductibleIndividual, currency: cur, color: AppTheme.warningColor),
+          if (policy.outOfPocketMaxIndividual > 0) ...[
+            const SizedBox(height: 10),
+            _Progress(label: 'Out-of-pocket max', used: oopUsed, max: policy.outOfPocketMaxIndividual, currency: cur, color: AppTheme.primaryColor),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            hasData
+                ? 'From ${claims.where((c) => c.eob.isNotEmpty).length} scanned insurer ${claims.where((c) => c.eob.isNotEmpty).length == 1 ? 'statement' : 'statements'} this year. Scan each EOB to keep this accurate.'
+                : 'Scan your insurer statements (EOBs) into cases and Clinix tracks how much of your deductible is used.',
+            style: AppTheme.bodySmall.copyWith(color: AppTheme.textTertiary, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Progress extends StatelessWidget {
+  final String label;
+  final double used;
+  final double max;
+  final String currency;
+  final Color color;
+  const _Progress({required this.label, required this.used, required this.max, required this.currency, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = max > 0 ? (used / max).clamp(0.0, 1.0) : 0.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+          const Spacer(),
+          Text('${formatMoney(used, currency)} of ${formatMoney(max, currency)}',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+        ]),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: pct),
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeOutCubic,
+            builder: (_, v, __) => LinearProgressIndicator(value: v, minHeight: 8, backgroundColor: color.withValues(alpha: 0.14), color: color),
+          ),
+        ),
       ],
     );
   }

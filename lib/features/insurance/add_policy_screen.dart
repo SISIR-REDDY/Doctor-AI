@@ -28,6 +28,17 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
   late TextEditingController _nomineeNameCtrl;
   late TextEditingController _nomineeRelCtrl;
   late TextEditingController _notesCtrl;
+  late TextEditingController _planNameCtrl;
+  late TextEditingController _memberIdCtrl;
+  late TextEditingController _deductibleCtrl;
+  late TextEditingController _deductibleFamilyCtrl;
+  late TextEditingController _oopCtrl;
+  late TextEditingController _oopFamilyCtrl;
+  late TextEditingController _copayPcpCtrl;
+  late TextEditingController _copaySpecialistCtrl;
+  late TextEditingController _copayErCtrl;
+  late TextEditingController _coinsuranceCtrl;
+  late TextEditingController _networkCtrl;
 
   String _policyType = 'health';
   String _frequency = 'annual';
@@ -61,6 +72,18 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
     _nomineeNameCtrl = TextEditingController(text: p?.nomineeName ?? '');
     _nomineeRelCtrl = TextEditingController(text: p?.nomineeRelation ?? '');
     _notesCtrl = TextEditingController(text: p?.notes ?? '');
+    String money(double v) => v > 0 ? (v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2)) : '';
+    _planNameCtrl = TextEditingController(text: p?.planName ?? '');
+    _memberIdCtrl = TextEditingController(text: p?.memberId ?? '');
+    _deductibleCtrl = TextEditingController(text: money(p?.deductibleIndividual ?? 0));
+    _deductibleFamilyCtrl = TextEditingController(text: money(p?.deductibleFamily ?? 0));
+    _oopCtrl = TextEditingController(text: money(p?.outOfPocketMaxIndividual ?? 0));
+    _oopFamilyCtrl = TextEditingController(text: money(p?.outOfPocketMaxFamily ?? 0));
+    _copayPcpCtrl = TextEditingController(text: money(p?.copayPrimaryCare ?? 0));
+    _copaySpecialistCtrl = TextEditingController(text: money(p?.copaySpecialist ?? 0));
+    _copayErCtrl = TextEditingController(text: money(p?.copayEmergency ?? 0));
+    _coinsuranceCtrl = TextEditingController(text: money(p?.coinsurancePercent ?? 0));
+    _networkCtrl = TextEditingController(text: p?.networkType ?? '');
     _policyType = p?.policyType ?? 'health';
     _frequency = p?.premiumFrequency ?? 'annual';
     _country = (p != null && p.country.isNotEmpty)
@@ -78,7 +101,10 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
   void dispose() {
     for (final c in [
       _insurerCtrl, _policyNumCtrl, _coverageCtrl, _premiumCtrl,
-      _nomineeNameCtrl, _nomineeRelCtrl, _notesCtrl,
+      _nomineeNameCtrl, _nomineeRelCtrl, _notesCtrl, _planNameCtrl,
+      _memberIdCtrl, _deductibleCtrl, _deductibleFamilyCtrl, _oopCtrl,
+      _oopFamilyCtrl, _copayPcpCtrl, _copaySpecialistCtrl, _copayErCtrl,
+      _coinsuranceCtrl, _networkCtrl,
     ]) {
       c.dispose();
     }
@@ -124,6 +150,21 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
         nomineeRelation: _nomineeRelCtrl.text.trim(),
         isActive: _isActive,
         notes: _notesCtrl.text.trim(),
+        planName: _planNameCtrl.text.trim(),
+        memberId: _memberIdCtrl.text.trim(),
+        groupNumber: widget.existingPolicy?.groupNumber ?? '',
+        deductibleIndividual: _n(_deductibleCtrl),
+        deductibleFamily: _n(_deductibleFamilyCtrl),
+        outOfPocketMaxIndividual: _n(_oopCtrl),
+        outOfPocketMaxFamily: _n(_oopFamilyCtrl),
+        copayPrimaryCare: _n(_copayPcpCtrl),
+        copaySpecialist: _n(_copaySpecialistCtrl),
+        copayEmergency: _n(_copayErCtrl),
+        coinsurancePercent: _n(_coinsuranceCtrl),
+        networkType: _networkCtrl.text.trim(),
+        exclusions: widget.existingPolicy?.exclusions ?? const [],
+        waitingPeriods: widget.existingPolicy?.waitingPeriods ?? const [],
+        documentId: widget.existingPolicy?.documentId ?? '',
         createdAt: widget.existingPolicy?.createdAt,
       );
       await _db.savePolicy(uid, policy);
@@ -425,6 +466,133 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                 ),
                 const SizedBox(height: 14),
 
+                // ─ Cost sharing (what you pay) ─
+                _Section(
+                  icon: Icons.pie_chart_rounded,
+                  title: 'What you pay',
+                  color: AppTheme.warningColor,
+                  children: [
+                    _field(
+                      controller: _planNameCtrl,
+                      label: 'Plan name',
+                      hint: 'e.g. Silver PPO 3000',
+                      icon: Icons.badge_rounded,
+                      color: AppTheme.warningColor,
+                      capitalize: TextCapitalization.words,
+                    ),
+                    _field(
+                      controller: _memberIdCtrl,
+                      label: 'Member ID',
+                      hint: 'As printed on your card',
+                      icon: Icons.credit_card_rounded,
+                      color: AppTheme.warningColor,
+                    ),
+                    Row(children: [
+                      Expanded(
+                        child: _field(
+                          controller: _deductibleCtrl,
+                          label: 'Deductible (${_region.currencySymbol})',
+                          hint: 'individual',
+                          icon: Icons.remove_circle_outline_rounded,
+                          color: AppTheme.warningColor,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _field(
+                          controller: _deductibleFamilyCtrl,
+                          label: 'Family',
+                          hint: 'optional',
+                          icon: Icons.group_rounded,
+                          color: AppTheme.warningColor,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ]),
+                    Row(children: [
+                      Expanded(
+                        child: _field(
+                          controller: _oopCtrl,
+                          label: 'Out-of-pocket max',
+                          hint: 'individual',
+                          icon: Icons.vertical_align_top_rounded,
+                          color: AppTheme.warningColor,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _field(
+                          controller: _oopFamilyCtrl,
+                          label: 'Family',
+                          hint: 'optional',
+                          icon: Icons.group_rounded,
+                          color: AppTheme.warningColor,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ]),
+                    Row(children: [
+                      Expanded(
+                        child: _field(
+                          controller: _copayPcpCtrl,
+                          label: 'Copay: GP',
+                          hint: '0',
+                          icon: Icons.medical_services_rounded,
+                          color: AppTheme.warningColor,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _field(
+                          controller: _copaySpecialistCtrl,
+                          label: 'Specialist',
+                          hint: '0',
+                          icon: Icons.person_search_rounded,
+                          color: AppTheme.warningColor,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _field(
+                          controller: _copayErCtrl,
+                          label: 'ER',
+                          hint: '0',
+                          icon: Icons.emergency_rounded,
+                          color: AppTheme.warningColor,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ]),
+                    Row(children: [
+                      Expanded(
+                        child: _field(
+                          controller: _coinsuranceCtrl,
+                          label: 'Coinsurance %',
+                          hint: 'e.g. 20',
+                          icon: Icons.percent_rounded,
+                          color: AppTheme.warningColor,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _field(
+                          controller: _networkCtrl,
+                          label: 'Network',
+                          hint: 'PPO / HMO / …',
+                          icon: Icons.hub_rounded,
+                          color: AppTheme.warningColor,
+                        ),
+                      ),
+                    ]),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
                 // ─ Nominee / Beneficiary ─
                 _Section(
                   icon: Icons.person_pin_rounded,
@@ -542,6 +710,9 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
   }
 
   // Builds a consistent TextField with icon prefix
+  static double _n(TextEditingController c) =>
+      double.tryParse(c.text.replaceAll(',', '').trim()) ?? 0;
+
   Widget _field({
     required TextEditingController controller,
     required String label,

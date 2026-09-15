@@ -65,9 +65,15 @@ class ChatContextBuilder {
       if (policies.isNotEmpty) {
         buf.writeln('POLICIES:');
         for (final p in policies.take(5)) {
-          buf.writeln('- ${p.insurer} · ${p.policyType} · policy ${p.policyNumber} · country ${p.country} · '
-              'coverage ${formatMoney(p.coverageAmount, p.currencyCode)} · premium ${formatMoney(p.premiumAmount, p.currencyCode)}/${p.premiumFrequency} · '
-              'renewal ${p.renewalDate}${p.notes.isNotEmpty ? '\n   details: ${p.notes.replaceAll('\n', ' | ')}' : ''}');
+          buf.writeln('- ${p.insurer}${p.planName.isNotEmpty ? ' ${p.planName}' : ''} · ${p.policyType} · policy ${p.policyNumber} · country ${p.country} · '
+              'coverage ${formatMoney(p.coverageAmount, p.currencyCode)} · premium ${formatMoney(p.premiumAmount, p.currencyCode)}/${p.premiumFrequency} · renewal ${p.renewalDate}');
+          if (p.hasCostSharing) {
+            buf.writeln('   cost sharing: deductible ${p.deductibleIndividual}/${p.deductibleFamily} · OOP max ${p.outOfPocketMaxIndividual}/${p.outOfPocketMaxFamily} · '
+                'copays PCP ${p.copayPrimaryCare} specialist ${p.copaySpecialist} ER ${p.copayEmergency} · coinsurance ${p.coinsurancePercent}% · network ${p.networkType}');
+          }
+          if (p.exclusions.isNotEmpty) buf.writeln('   exclusions: ${p.exclusions.join('; ')}');
+          if (p.waitingPeriods.isNotEmpty) buf.writeln('   waiting periods: ${p.waitingPeriods.join('; ')}');
+          if (p.notes.isNotEmpty) buf.writeln('   notes: ${p.notes.replaceAll('\n', ' | ')}');
         }
       }
     } catch (_) {}

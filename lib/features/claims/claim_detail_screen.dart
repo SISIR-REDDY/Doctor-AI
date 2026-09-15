@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/config/insurance_regions.dart';
@@ -222,10 +223,30 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
       setState(() => _claim = updated);
       if (status == OutcomeStatus.won || status == OutcomeStatus.partial) {
         HapticFeedback.heavyImpact();
-        _snack('Recorded ${formatMoney(amount, _currency)} recovered. Nice work.');
+        _offerShare(amount);
       }
     } catch (e) {
       if (mounted) AppErrorHandler.showSnackBar(context, e);
+    }
+  }
+
+  Future<void> _offerShare(double amount) async {
+    final share = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text('${formatMoney(amount, _currency)} recovered'),
+        content: const Text('\nNice work. Most people never dispute a bill — want to tell someone it works?'),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(ctx, true), child: const Text('Share')),
+        ],
+      ),
+    );
+    if (share == true) {
+      Analytics.log('share_win');
+      await SharePlus.instance.share(ShareParams(
+        text: 'I just got ${formatMoney(amount, _currency)} back on a medical bill using Clinix — it reads the bill, finds the errors and writes the dispute for you. clinixai.app',
+      ));
     }
   }
 
@@ -297,7 +318,7 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
       final p = _profile;
       await ClaimPdfService().shareClaimPacket(
         claim: _claim,
-        patientName: p?.fullName,
+        patientName: _claim.patientName.isNotEmpty ? _claim.patientName : p?.fullName,
         patientAge: p?.age,
         patientGender: p?.gender,
         bloodGroup: p?.bloodGroup,
@@ -1712,6 +1733,7 @@ class _DetailsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <(String, String)>[
       ('Region', '${region.flag} ${region.name} · $currency'),
+      ('Patient', claim.patientName),
       ('Insurer', claim.insurer),
       ('Policy / member', claim.policyNumber),
       ('Provider', claim.hospitalName),
