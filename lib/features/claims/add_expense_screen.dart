@@ -1,15 +1,18 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/config/insurance_regions.dart';
 import '../../core/errors/app_error_handler.dart';
 import '../../core/utils/media_permissions.dart';
+import '../../core/providers/health_data_provider.dart';
+import '../../models/advocate_models.dart';
 import '../../models/patient_models.dart';
-import '../../services/chatbot_service.dart';
+import '../../services/ai/ai_error_ui.dart';
+import '../../services/ai/ai_service.dart';
 import '../../services/firebase/storage_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -65,6 +68,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String _documentUrl = '';
   String _lineItems = '';
   bool _aiExtracted = false;
+  List<BillLineItem> _items = const [];
 
   bool _scanning = false;
   bool _saving = false;
@@ -83,6 +87,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       _documentUrl = e.documentUrl;
       _lineItems = e.lineItems;
       _aiExtracted = e.aiExtracted;
+      _items = e.items;
     }
   }
 
@@ -131,69 +136,66 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         await picker.pickImage(source: source, imageQuality: 85);
     if (file == null || !mounted) return;
 
+    final region = context.read<HealthDataProvider>().profile?.country ?? '';
+
     setState(() {
       _imagePath = file.path;
       _scanning = true;
     });
 
     try {
-      const prompt = '''You are extracting structured data from a medical bill or receipt image.
-Return ONLY a JSON object (no markdown fences, no commentary) with these keys:
-- "vendor": string — the hospital / pharmacy / clinic / lab name on the bill, else ""
-- "amount": number — the TOTAL payable amount as a plain number (no currency symbol, no commas); 0 if unreadable
-- "date": string — the bill date formatted as "DD MMM YYYY" (e.g. "12 Apr 2026"), else ""
-- "category": one of "hospital","pharmacy","lab","consultation","imaging","procedure","other"
-- "lineItems": string — every individual charge line copied verbatim, one per line as "description — amount" (keep quantities/codes if shown). Empty string if the bill has no itemized lines.
-If a field is unreadable, use "" or 0. Output the JSON object only.''';
-
-      final response = await ChatbotService().getGeminiVisionResponse(
-        prompt: prompt,
-        imagePath: file.path,
+      final file0 = await AiFile.fromPath(file.path);
+      if (file0 == null) throw Exception('Could not read that image.');
+      final result = await AiService.instance.analyzeDocument(
+        files: [file0],
+        docType: DocType.bill,
+        region: region.isNotEmpty ? region : 'US',
       );
-      final data = _parseJson(response);
       if (!mounted) return;
-      if (data != null) {
-        setState(() {
-          final vendor = (data['vendor'] ?? '').toString();
-          if (vendor.isNotEmpty) _vendorCtrl.text = vendor;
-          final amount = data['amount'];
-          final amt = amount is num
-              ? amount.toDouble()
-              : double.tryParse(amount?.toString() ?? '');
-          if (amt != null && amt > 0) _amountCtrl.text = _trimAmount(amt);
-          final dateStr = (data['date'] ?? '').toString();
-          final parsed = dateStr.isNotEmpty ? _tryParseDate(dateStr) : null;
-          if (parsed != null) _date = parsed;
-          final cat = (data['category'] ?? '').toString();
-          if (kExpenseCategories.containsKey(cat)) _category = cat;
-          final items = (data['lineItems'] ?? '').toString().trim();
-          if (items.isNotEmpty) _lineItems = items;
-          _aiExtracted = true;
-        });
-        _snack('Bill scanned — review the details below.');
-      } else {
-        _snack('Could not read the bill. Please enter the details manually.');
-      }
+      final d = result.data;
+      String str(String k) => (d[k] ?? '').toString();
+      double num_(String k) =>
+          (d[k] is num) ? (d[k] as num).toDouble() : double.tryParse('${d[k] ?? ''}') ?? 0;
+
+      setState(() {
+        final vendor = str('providerName');
+        if (vendor.isNotEmpty) _vendorCtrl.text = vendor;
+        final amt = num_('totalBilled');
+        if (amt > 0) _amountCtrl.text = _trimAmount(amt);
+        final parsed = _tryParseDate(str('dateOfService'));
+        if (parsed != null) _date = parsed;
+
+        _items = BillLineItem.listFrom(d['lineItems']);
+        if (_items.isNotEmpty) _lineItems = _items.map((i) => i.asText).join('\n');
+
+        // Map the document's case type / line mix onto our expense category.
+        final caseType = str('caseType');
+        final cat = switch (caseType) {
+          'pharmacy' => 'pharmacy',
+          'inpatient' || 'emergency' => 'hospital',
+          _ => _items.isNotEmpty && _items.every((i) => i.category == 'lab')
+              ? 'lab'
+              : _items.any((i) => i.category == 'imaging')
+                  ? 'imaging'
+                  : _items.any((i) => i.category == 'consultation')
+                      ? 'consultation'
+                      : _category,
+        };
+        if (kExpenseCategories.containsKey(cat)) _category = cat;
+
+        final account = str('accountNumber');
+        if (account.isNotEmpty && _noteCtrl.text.trim().isEmpty) {
+          _noteCtrl.text = 'Account $account';
+        }
+        _aiExtracted = true;
+      });
+      _snack(_items.isEmpty
+          ? 'Bill scanned — review the details below.'
+          : 'Bill scanned — ${_items.length} line items captured.');
     } catch (e) {
-      if (mounted) AppErrorHandler.showSnackBar(context, e);
+      if (mounted) showAiError(context, e, trigger: 'bill_scan');
     } finally {
       if (mounted) setState(() => _scanning = false);
-    }
-  }
-
-  /// Tolerantly parses a JSON object out of an LLM response that may wrap it in
-  /// markdown fences or surrounding prose.
-  Map<String, dynamic>? _parseJson(String raw) {
-    var text = raw.trim();
-    final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start == -1 || end == -1 || end <= start) return null;
-    text = text.substring(start, end + 1);
-    try {
-      final decoded = jsonDecode(text);
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } catch (_) {
-      return null;
     }
   }
 
@@ -255,6 +257,7 @@ If a field is unreadable, use "" or 0. Output the JSON object only.''';
         note: _noteCtrl.text.trim(),
         lineItems: _lineItems,
         aiExtracted: _aiExtracted,
+        items: _items,
       );
       if (mounted) Navigator.pop(context, expense);
     } catch (e) {

@@ -5,9 +5,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/config/insurance_regions.dart';
 import '../../core/errors/app_error_handler.dart';
+import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
-import '../../services/chatbot_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
 import 'add_expense_screen.dart';
@@ -24,8 +24,6 @@ class NewClaimScreen extends StatefulWidget {
 class _NewClaimScreenState extends State<NewClaimScreen> {
   final _db = FirestoreService();
   bool _saving = false;
-  bool _generatingReport = false;
-  String _claimReport = '';
 
   final _titleCtrl = TextEditingController();
   final _policyNumCtrl = TextEditingController();
@@ -94,56 +92,6 @@ class _NewClaimScreenState extends State<NewClaimScreen> {
   void _removeExpense(CaseExpense e) =>
       setState(() => _expenses.removeWhere((x) => x.id == e.id));
 
-  Future<void> _generateReport() async {
-    if (_insurerCtrl.text.isEmpty || _diagnosisCtrl.text.isEmpty) {
-      _snack('Fill in insurer and diagnosis/reason first.');
-      return;
-    }
-    setState(() => _generatingReport = true);
-    try {
-      final profile = context.read<HealthDataProvider>().profile;
-      final region = regionByCode(_country);
-
-      final itemized = _expenses.isEmpty
-          ? 'Not itemized.'
-          : _expenses
-              .map((e) =>
-                  '- ${kExpenseCategories[e.category] ?? e.category}: ${e.vendor.isEmpty ? 'N/A' : e.vendor} — ${formatMoney(e.amount, _currencyCode)}${e.date.isEmpty ? '' : ' (${e.date})'}')
-              .join('\n');
-
-      final prompt = '''Generate a formal insurance claim report for the following case in ${region.name}.
-
-Patient: ${profile?.fullName ?? 'Patient'}
-Age: ${profile?.age ?? 'Unknown'} years
-Insurance Company: ${_insurerCtrl.text.trim()}
-Policy Number: ${_policyNumCtrl.text.trim()}
-Case type: ${_isInpatient ? 'Inpatient / Hospitalization' : 'Outpatient'}
-Facility/Provider: ${_hospitalCtrl.text.trim()}
-${_isInpatient ? 'Admission: ${_admissionDate != null ? DateFormat('dd MMM yyyy').format(_admissionDate!) : 'Not specified'}\nDischarge: ${_dischargeDate != null ? DateFormat('dd MMM yyyy').format(_dischargeDate!) : 'Not specified'}' : 'Visit date: ${_admissionDate != null ? DateFormat('dd MMM yyyy').format(_admissionDate!) : 'Not specified'}'}
-Diagnosis/Reason: ${_diagnosisCtrl.text.trim()}
-Total Claim Amount: ${formatMoney(_total, _currencyCode)}
-Itemized bills:
-$itemized
-Additional Notes: ${_notesCtrl.text.trim()}
-
-Please generate a formal, professional claim report that includes:
-1. Patient details and case summary
-2. Medical necessity statement
-3. Itemized treatment/expense summary
-4. Claim justification
-5. Request for reimbursement
-
-Use professional language and currency (${region.currencyCode}) appropriate for submission to an insurer in ${region.name}.''';
-
-      final response = await ChatbotService().getGeminiResponse(prompt);
-      if (mounted) setState(() => _claimReport = response);
-    } catch (e) {
-      if (mounted) AppErrorHandler.showSnackBar(context, e);
-    } finally {
-      if (mounted) setState(() => _generatingReport = false);
-    }
-  }
-
   Future<void> _save() async {
     if (_insurerCtrl.text.trim().isEmpty) {
       _snack('Insurer name is required.');
@@ -175,10 +123,14 @@ Use professional language and currency (${region.currencyCode}) appropriate for 
         claimAmount: _total,
         expenses: List<CaseExpense>.from(_expenses),
         claimStatus: 'pending',
-        claimReport: _claimReport,
       );
       await _db.saveClaim(uid, claim);
-      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+      // Land in the case itself — that is where the audit, letters and
+      // deadlines live.
+      final nav = Navigator.of(context);
+      nav.pop();
+      nav.pushNamed(AppRouter.claimDetail, arguments: claim);
     } catch (e) {
       if (mounted) AppErrorHandler.showSnackBar(context, e);
     } finally {
@@ -377,63 +329,28 @@ Use professional language and currency (${region.currencyCode}) appropriate for 
           ]),
           const SizedBox(height: AppTheme.lg),
 
-          // AI report
-          OutlinedButton.icon(
-            onPressed: _generatingReport ? null : _generateReport,
-            icon: _generatingReport
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppTheme.primaryColor))
-                : const Icon(Icons.auto_awesome_rounded,
-                    color: AppTheme.primaryColor),
-            label: Text(
-              _generatingReport
-                  ? 'Generating Report...'
-                  : 'Generate AI Claim Report',
-              style: const TextStyle(color: AppTheme.primaryColor),
+          Container(
+            padding: const EdgeInsets.all(AppTheme.lg),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withValues(alpha: 0.06),
+              borderRadius: AppTheme.mediumRadius,
+              border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
             ),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppTheme.primaryColor),
-              padding: const EdgeInsets.symmetric(
-                  vertical: AppTheme.md, horizontal: AppTheme.lg),
-              shape:
-                  RoundedRectangleBorder(borderRadius: AppTheme.mediumRadius),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.auto_awesome_rounded, color: AppTheme.primaryColor, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Once saved, scan the itemized bill or denial letter into this case — '
+                    'Clinix audits the charges, drafts the letters and tracks the deadlines.',
+                    style: AppTheme.bodySmall.copyWith(height: 1.4),
+                  ),
+                ),
+              ],
             ),
           ),
-          if (_claimReport.isNotEmpty) ...[
-            const SizedBox(height: AppTheme.lg),
-            Container(
-              padding: const EdgeInsets.all(AppTheme.lg),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withValues(alpha: 0.05),
-                borderRadius: AppTheme.mediumRadius,
-                border: Border.all(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.2)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.description_rounded,
-                          color: AppTheme.primaryColor, size: 18),
-                      const SizedBox(width: 8),
-                      Text('AI-Generated Claim Report',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.primaryColor,
-                              fontSize: 14)),
-                    ],
-                  ),
-                  const SizedBox(height: AppTheme.md),
-                  Text(_claimReport,
-                      style: AppTheme.bodySmall.copyWith(height: 1.6)),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: AppTheme.xl),
           ElevatedButton(
             onPressed: _saving ? null : _save,
