@@ -487,9 +487,15 @@ class Pill extends StatelessWidget {
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 4),
           ],
-          Text(
-            label,
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: color),
+          // Truncate rather than overflow when the caller is tight on width
+          // (narrow phones, large accessibility text).
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: color),
+            ),
           ),
         ],
       ),

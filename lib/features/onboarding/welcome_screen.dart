@@ -13,7 +13,9 @@ import '../../services/firebase/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
+import '../../theme/motion.dart';
 import '../legal/legal_screens.dart';
+import 'welcome_scenes.dart';
 
 /// First-run experience: three value slides, then consent + sign-in.
 ///
@@ -32,6 +34,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   final _page = PageController();
   final _auth = AuthService();
   int _index = 0;
+  /// Continuous scroll position, for per-scene parallax.
+  double _scroll = 0;
   bool _agreed = false;
   bool _loadingGoogle = false;
   bool _loadingApple = false;
@@ -43,10 +47,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   void initState() {
     super.initState();
     Analytics.screen('welcome');
+    _page.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_page.hasClients) return;
+    final p = _page.page ?? 0;
+    if ((p - _scroll).abs() > 0.004) setState(() => _scroll = p);
   }
 
   @override
   void dispose() {
+    _page.removeListener(_onScroll);
     _page.dispose();
     super.dispose();
   }
@@ -129,22 +141,34 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   },
                   children: [
                     _Slide(
-                      art: const _BillArt(),
-                      title: 'Scan any medical bill.',
+                      index: 0,
+                      scroll: _scroll,
+                      active: _index == 0,
+                      art: (o, a) => BillScene(offset: o, active: a),
+                      eyebrow: '8 in 10 bills contain an error',
+                      title: 'Photograph it.\nWe find the errors.',
                       body:
-                          'Clinix reads every line, checks it against fair-price references, and flags what you shouldn’t be paying.',
+                          'Clinix reads every line, matches each code against published Medicare rates, and shows you exactly which charges don’t hold up — and what they should have cost.',
                     ),
                     _Slide(
-                      art: const _DenialArt(),
-                      title: 'Denied? Appeal in minutes.',
+                      index: 1,
+                      scroll: _scroll,
+                      active: _index == 1,
+                      art: (o, a) => DenialScene(offset: o, active: a),
+                      eyebrow: 'Fewer than 1% of denials are ever appealed',
+                      title: 'Denied?\nThat’s not the end.',
                       body:
-                          'Photograph the letter. Get a plain-English explanation, your rights, the deadlines, and a ready-to-send appeal.',
+                          'Roughly half of appeals succeed — most people just never file one. Snap the letter and Clinix explains the real reason, finds your rights, drafts the appeal and tracks the deadline.',
                     ),
                     _Slide(
-                      art: const _MoneyArt(),
-                      title: 'Your money, tracked.',
+                      index: 2,
+                      scroll: _scroll,
+                      active: _index == 2,
+                      art: (o, a) => MoneyScene(offset: o, active: a),
+                      eyebrow: 'Every letter, deadline and outcome in one place',
+                      title: 'You send it.\nYou keep it.',
                       body:
-                          'Letters, deadlines and outcomes in one place — with documents stored privately on your device first.',
+                          'Clinix never contacts your insurer or takes a cut — it prepares the case and you stay in control. Every dollar you win back is counted here.',
                     ),
                     _SignInStep(
                       agreed: _agreed,
@@ -258,317 +282,114 @@ class _Dots extends StatelessWidget {
   }
 }
 
-class _Slide extends StatelessWidget {
-  final Widget art;
+class _Slide extends StatefulWidget {
+  final int index;
+  final double scroll;
+  final bool active;
+  final Widget Function(double offset, bool active) art;
+  final String eyebrow;
   final String title;
   final String body;
-  const _Slide({required this.art, required this.title, required this.body});
+
+  const _Slide({
+    required this.index,
+    required this.scroll,
+    required this.active,
+    required this.art,
+    required this.eyebrow,
+    required this.title,
+    required this.body,
+  });
+
+  @override
+  State<_Slide> createState() => _SlideState();
+}
+
+class _SlideState extends State<_Slide>
+    with SingleTickerProviderStateMixin, SceneTimeline {
+  @override
+  Duration get sceneDuration => const Duration(milliseconds: 1100);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) playScene();
+  }
+
+  @override
+  void didUpdateWidget(_Slide old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) playScene();
+  }
 
   @override
   Widget build(BuildContext context) {
+    // How far this page is from centre: 0 when settled, ±1 when a page away.
+    final offset = widget.scroll - widget.index;
     return LayoutBuilder(builder: (context, c) {
-      final compact = c.maxHeight < 560;
+      final compact = c.maxHeight < 620;
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           children: [
             Expanded(
               flex: compact ? 5 : 6,
-              child: Center(child: art),
+              child: Center(child: widget.art(offset, widget.active)),
             ),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: compact ? 28 : 32,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1.0,
-                height: 1.08,
-                color: AppTheme.textPrimary,
+            // Copy trails the art slightly so the eye lands on the card first.
+            FadeSlide(
+              animation: scene,
+              interval: const Interval(0.05, 0.55, curve: Motion.enter),
+              dy: 16,
+              child: Text(
+                widget.eyebrow.toUpperCase(),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.9,
+                  color: AppTheme.primaryColor,
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              body,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                height: 1.45,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
+            SizedBox(height: compact ? 8 : 11),
+            FadeSlide(
+              animation: scene,
+              interval: const Interval(0.15, 0.7, curve: Motion.enter),
+              dy: 18,
+              child: Text(
+                widget.title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: compact ? 29 : 34,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1.2,
+                  height: 1.06,
+                  color: AppTheme.textPrimary,
+                ),
               ),
             ),
-            SizedBox(height: compact ? 12 : 24),
+            SizedBox(height: compact ? 9 : 13),
+            FadeSlide(
+              animation: scene,
+              interval: const Interval(0.28, 0.85, curve: Motion.enter),
+              dy: 20,
+              child: Text(
+                widget.body,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: compact ? 14.5 : 15.5,
+                  height: 1.5,
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            SizedBox(height: compact ? 10 : 20),
           ],
         ),
       );
     });
-  }
-}
-
-/// Mock "bill" card with flagged lines — product-in-context illustration.
-class _BillArt extends StatelessWidget {
-  const _BillArt();
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = AppTheme.isDark;
-    Widget line(String label, String amount, {bool flagged = false, String? tag}) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: flagged ? AppTheme.dangerColor : AppTheme.successColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary)),
-            ),
-            if (tag != null) ...[
-              Pill(tag, color: AppTheme.dangerColor),
-              const SizedBox(width: 8),
-            ],
-            Text(amount,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: flagged ? AppTheme.dangerColor : AppTheme.textPrimary,
-                    fontFeatures: const [FontFeature.tabularFigures()])),
-          ],
-        ),
-      );
-    }
-
-    return _ArtFrame(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              IconBadge(CupertinoIcons.doc_text_fill, color: AppTheme.primaryColor, size: 34),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Riverside Medical Center',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppTheme.textPrimary)),
-                    Text('Itemized statement · 4 lines',
-                        style: TextStyle(fontSize: 11.5, color: AppTheme.textSecondary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Divider(height: 22, color: AppTheme.dividerColor),
-          line('Office visit, level 4', r'$389'),
-          line('CBC with differential', r'$92', flagged: true, tag: '×2 billed'),
-          line('CT head w/o contrast', r'$1,850', flagged: true, tag: '5.9× ref'),
-          line('Venipuncture', r'$18'),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppTheme.successColor.withValues(alpha: dark ? 0.2 : 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(CupertinoIcons.sparkles, size: 16, color: AppTheme.successColor),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Potential saving  \$1,420 – \$1,610',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.successColor)),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DenialArt extends StatelessWidget {
-  const _DenialArt();
-
-  @override
-  Widget build(BuildContext context) {
-    return _ArtFrame(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              IconBadge(CupertinoIcons.envelope_fill, color: AppTheme.dangerColor, size: 34),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Claim denied — MRI lumbar spine',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppTheme.textPrimary)),
-                    Text('“Not medically necessary”',
-                        style: TextStyle(fontSize: 11.5, color: AppTheme.textSecondary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _StepRow(done: true, text: 'Denial explained in plain English'),
-          _StepRow(done: true, text: 'Your rights & the insurer’s obligations'),
-          _StepRow(done: true, text: 'Appeal letter drafted, citing your policy'),
-          _StepRow(done: false, text: 'Internal appeal due in 172 days', accent: AppTheme.warningColor),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Pill('Strong case', color: AppTheme.successColor, icon: CupertinoIcons.checkmark_seal_fill),
-              const SizedBox(width: 8),
-              Pill('Deadline tracked', color: AppTheme.primaryColor, icon: CupertinoIcons.bell_fill),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StepRow extends StatelessWidget {
-  final bool done;
-  final String text;
-  final Color? accent;
-  const _StepRow({required this.done, required this.text, this.accent});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = accent ?? (done ? AppTheme.successColor : AppTheme.textTertiary);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Icon(done ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.clock_fill, size: 18, color: c),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(text,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MoneyArt extends StatelessWidget {
-  const _MoneyArt();
-
-  @override
-  Widget build(BuildContext context) {
-    return _ArtFrame(
-      gradient: AppTheme.primaryGradient,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: StatTile(
-                  label: 'Recovered so far',
-                  value: r'$2,340',
-                  foreground: Colors.white,
-                  icon: CupertinoIcons.arrow_down_circle_fill,
-                ),
-              ),
-              Expanded(
-                child: StatTile(
-                  label: 'Still in dispute',
-                  value: r'$1,610',
-                  foreground: Colors.white,
-                  icon: CupertinoIcons.hourglass,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(CupertinoIcons.lock_shield_fill, color: Colors.white, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Documents stay on your device first. Nothing is sold, ever.',
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.95),
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ArtFrame extends StatelessWidget {
-  final Widget child;
-  final Gradient? gradient;
-  const _ArtFrame({required this.child, this.gradient});
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 360),
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.96, end: 1),
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-        builder: (_, v, c) => Transform.scale(scale: v, child: c),
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            gradient: gradient,
-            color: gradient == null ? AppTheme.surfaceColor : null,
-            borderRadius: DS.squircle(DS.rXl),
-            border: Border.all(color: AppTheme.glassBorder, width: 0.8),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1B2A4A).withValues(alpha: AppTheme.isDark ? 0.5 : 0.14),
-                blurRadius: 40,
-                offset: const Offset(0, 18),
-              ),
-            ],
-          ),
-          child: child,
-        ),
-      ),
-    );
   }
 }
 
