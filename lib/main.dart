@@ -8,11 +8,11 @@ import 'package:provider/provider.dart';
 
 import 'core/config/app_branding.dart';
 import 'core/navigation/app_router.dart';
-import 'core/providers/enhanced_connection_provider.dart';
 import 'core/providers/health_data_provider.dart';
 import 'core/providers/theme_controller.dart';
 import 'screens/auth/auth_gate_screen.dart';
 import 'screens/force_update_screen.dart';
+import 'services/entitlement_service.dart';
 import 'services/firebase/firebase_bootstrap_service.dart';
 import 'services/notification_service.dart';
 import 'services/push_notification_service.dart';
@@ -46,6 +46,9 @@ Future<void> main() async {
       // Remote Config version gate (force-update for unsupported builds).
       await RemoteConfigService.instance.init();
 
+      // Subscriptions / Pro entitlement (RevenueCat + Firestore + RC flag).
+      await EntitlementService.instance.initialize();
+
       runApp(const ClinixAIApp());
     },
     (error, stackTrace) {
@@ -65,11 +68,11 @@ class ClinixAIApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider<EnhancedConnectionProvider>(
-          create: (_) => EnhancedConnectionProvider()..initialize(),
-        ),
         ChangeNotifierProvider<HealthDataProvider>(
           create: (_) => HealthDataProvider(),
+        ),
+        ChangeNotifierProvider<EntitlementService>.value(
+          value: EntitlementService.instance,
         ),
         ChangeNotifierProvider<ThemeController>(
           create: (_) => ThemeController()..load(),

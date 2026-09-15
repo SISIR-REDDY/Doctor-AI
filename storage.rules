@@ -2,18 +2,34 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Scanned bills / medical documents — owner-scoped (path segment is the uid).
-    match /document_scans/{userId}/{file=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function owner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    function isDocument() {
+      return request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf';
+    }
+    function under25MB() {
+      return request.resource.size < 25 * 1024 * 1024;
     }
 
-    // Patient photos and consultation audio. Authenticated access only.
-    // (Path naming is not strictly uid-segmented, so we gate on auth.)
-    match /patient_photos/{file=**} {
-      allow read, write: if request.auth != null;
+    // Scanned bills, EOBs, denial letters, policies, medical records.
+    match /document_scans/{userId}/{file=**} {
+      allow read: if owner(userId);
+      allow write: if owner(userId) && isDocument() && under25MB();
+      allow delete: if owner(userId);
     }
-    match /consultations/{file=**} {
-      allow read, write: if request.auth != null;
+
+    // Generic per-user uploads (PDF packets, letters, exports).
+    match /uploads/{userId}/{file=**} {
+      allow read: if owner(userId);
+      allow write: if owner(userId) && under25MB();
+      allow delete: if owner(userId);
+    }
+
+    // Everything else is closed.
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

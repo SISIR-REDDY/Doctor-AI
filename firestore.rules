@@ -3,26 +3,50 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ⚠️ SECURITY: API keys document.
-    // Any authenticated client that can READ this document can extract the
-    // Gemini & Deepgram keys and abuse your billing. Rules cannot hide a value
-    // the client is allowed to read. Before scaling / public launch, move these
-    // calls BEHIND a backend you control (e.g. a Cloud Function or Cloud Run
-    // proxy that holds the keys server-side and is called with the user's
-    // Firebase ID token), then set `allow read: if false;` here.
-    match /app_runtime/{document=**} {
-      allow read: if request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function owner(userId) { return signedIn() && request.auth.uid == userId; }
+
+    // ── App runtime config ────────────────────────────────────────────────
+    // AI keys now live in Cloud Functions secrets, never in Firestore.
+    // `app_runtime/api_keys` stays readable ONLY while the legacy client path
+    // is still needed (functions not yet deployed). Once
+    // `firebase deploy --only functions` succeeds and the app is on the new
+    // build, flip `legacyKeysReadable()` to `false` and delete the document.
+    function legacyKeysReadable() { return true; }
+
+    match /app_runtime/api_keys {
+      allow read: if signedIn() && legacyKeysReadable();
       allow write: if false;
     }
+    match /app_runtime/{document=**} {
+      allow read, write: if false; // config is server-side only
+    }
 
-    // Patient user root + all subcollections:
-    //   profile · symptoms · medications · records · insurance · claims
-    //   ai_chats (messages) · chat_sessions (session metadata)
+    // ── Benchmarks (fair-price data) — server-side only ───────────────────
+    match /benchmarks/{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Per-user data ─────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if owner(userId);
+      // The user document must never carry entitlement/plan fields the
+      // client could set itself; those live in private/entitlement.
+      allow create, update: if owner(userId)
+        && !request.resource.data.keys().hasAny(['plan', 'entitlement', 'isPro']);
+      allow delete: if owner(userId);
 
+      // Written only by Cloud Functions (entitlement, usage counters).
+      match /private/{doc} {
+        allow read: if owner(userId);
+        allow write: if false;
+      }
+
+      // profile · symptoms · medications · medication_logs · reminders ·
+      // records · documents · cases · claims · insurance · ai_chats ·
+      // chat_sessions · deadlines · savings
       match /{subcollection}/{document=**} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if owner(userId) && subcollection != 'private';
       }
     }
   }

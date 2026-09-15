@@ -1,0 +1,27 @@
+{
+  "name": "clinix-functions",
+  "description": "Clinix AI backend — server-side AI proxy, quotas, entitlements, benchmarks.",
+  "private": true,
+  "engines": { "node": "22" },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "lint": "eslint src --ext .ts",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "seed:benchmarks": "node lib/scripts/seed_benchmarks.js",
+    "import:cms": "node lib/scripts/import_cms_pfs.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.20.0",
+    "firebase-admin": "^13.4.0",
+    "firebase-functions": "^6.4.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

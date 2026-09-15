@@ -10,6 +10,8 @@ import '../../core/config/firebase_config.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../features/auth/patient_onboarding_screen.dart';
 import '../../features/home/home_dashboard_screen.dart';
+import '../../services/analytics_service.dart';
+import '../../services/entitlement_service.dart';
 import '../../services/firebase/api_credentials_service.dart';
 import '../../services/firebase/auth_service.dart';
 import '../../services/firebase/firebase_bootstrap_service.dart';
@@ -94,6 +96,10 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     // Associate this device's FCM token with the signed-in user for push.
     PushNotificationService.instance.registerForUser(user.uid);
 
+    // Bind purchases / Pro entitlement and analytics identity to this user.
+    EntitlementService.instance.attachUser(user.uid);
+    Analytics.setUser(user.uid);
+
     _firestoreService.loadPatientProfile(user.uid).then((profile) async {
       if (!mounted) return;
       await context.read<HealthDataProvider>().loadProfile();
@@ -109,6 +115,8 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     _preloadedKeysForUid = null;
     _needsOnboarding = false;
     ApiCredentialsService.instance.clearCache();
+    EntitlementService.instance.detachUser();
+    Analytics.setUser(null);
   }
 
   @override

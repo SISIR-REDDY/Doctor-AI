@@ -1,119 +1,118 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import '../core/errors/app_exception.dart';
+import 'ai/ai_service.dart';
 import 'firebase/api_credentials_service.dart';
 
+/// Text/vision generation for screens that still build their own prompt.
+///
+/// All calls go through the Clinix backend ([AiService.generate]) so the
+/// Gemini key stays server-side. A direct-to-Gemini path is kept ONLY as a
+/// transitional fallback for builds running against a project where the
+/// Cloud Functions have not been deployed yet; it is disabled automatically
+/// once the backend has answered successfully in this session and should be
+/// removed (together with `app_runtime/api_keys`) after deployment.
 class ChatbotService {
   final ApiCredentialsService _credentialsService = ApiCredentialsService.instance;
 
-  // Ordered model fallback chain — fastest first.
-  // gemini-2.5-flash-lite is the quickest model in the 2.5 family.
-  // Docs: https://ai.google.dev/gemini-api/docs/models
-  static const List<String> _models = [
-    'gemini-2.5-flash-lite', // fastest — try first
-    'gemini-2.5-flash',      // more capable fallback
-    'gemini-2.0-flash',      // legacy safety net
+  static const List<String> _legacyModels = [
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash',
   ];
 
-  // v1beta exposes 2.5 models first.
-  static const List<String> _apiVersions = ['v1beta', 'v1'];
+  /// Compile-time key, supplied via `--dart-define=GEMINI_API_KEY=...` (dev only).
+  static const String _envGeminiKey = String.fromEnvironment('GEMINI_API_KEY');
 
-  // Once a working model+version combo is found it's cached here so
-  // subsequent calls skip straight to it instead of re-scanning the list.
-  String? _cachedModel;
-  String? _cachedVersion;
+  /// Set to false to hard-disable the legacy direct path (do this once the
+  /// backend is live everywhere).
+  static const bool allowLegacyFallback = true;
 
-  /// Compile-time key, supplied via `--dart-define=GEMINI_API_KEY=...`.
-  /// Used as a fallback when no key is configured in Firestore (e.g. local
-  /// dev, or before the `app_runtime/api_keys` document is populated).
-  static const String _envGeminiKey =
-      String.fromEnvironment('GEMINI_API_KEY');
+  static bool _backendMissing = false;
 
-  /// Resolves the Gemini key: Firestore first, then the `--dart-define` value.
-  Future<String> _getGeminiApiKey() async {
-    try {
-      final firebaseKey =
-          await _credentialsService.getGeminiApiKey(forceRefresh: false);
-      if (firebaseKey.isNotEmpty) {
-        debugPrint('[ChatbotService] ✅ Using Gemini API key from Firebase');
-        return firebaseKey;
-      }
-    } catch (e) {
-      debugPrint('[ChatbotService] ⚠️ Firebase API key failed: $e');
-    }
+  // ── Public API ─────────────────────────────────────────────────────────────
 
-    if (_envGeminiKey.isNotEmpty) {
-      debugPrint('[ChatbotService] ✅ Using Gemini API key from --dart-define');
-      return _envGeminiKey;
-    }
-
-    debugPrint('[ChatbotService] ❌ No valid Gemini API key found '
-        '(Firestore app_runtime/api_keys or --dart-define=GEMINI_API_KEY)');
-    return '';
+  /// Generates text for [prompt]. Throws [AppException] on failure so callers
+  /// can render a clean UI state instead of pasting an error into a document.
+  Future<String> getGeminiResponse(String prompt) async {
+    return _run(prompt, const []);
   }
 
-  String _extractTextFromResponse(Map<String, dynamic> data) {
-    final candidates = data['candidates'];
-    if (candidates is! List || candidates.isEmpty) {
-      return '';
-    }
-
-    for (final candidate in candidates) {
-      if (candidate is! Map<String, dynamic>) {
-        continue;
-      }
-
-      final content = candidate['content'];
-      if (content is! Map<String, dynamic>) {
-        continue;
-      }
-
-      final parts = content['parts'];
-      if (parts is! List) {
-        continue;
-      }
-
-      for (final part in parts) {
-        if (part is Map<String, dynamic>) {
-          final text = part['text'];
-          if (text is String && text.trim().isNotEmpty) {
-            return text;
-          }
-        }
-      }
-    }
-
-    return '';
+  Future<String> getGeminiVisionResponse({
+    required String prompt,
+    String? imagePath,
+  }) {
+    return getGeminiVisionResponseMulti(
+      prompt: prompt,
+      imagePaths: imagePath != null && imagePath.isNotEmpty ? [imagePath] : [],
+    );
   }
 
-  Future<String> _callGemini(
-    String apiKey,
-    List<Map<String, dynamic>> parts,
-  ) async {
-    // Build the ordered list to try — cached combo goes first to skip
-    // the fallback scan on every subsequent call.
-    final orderedCombos = <(String model, String version)>[];
-    if (_cachedModel != null && _cachedVersion != null) {
-      orderedCombos.add((_cachedModel!, _cachedVersion!));
+  /// Analyzes one or more images / PDFs together with [prompt].
+  Future<String> getGeminiVisionResponseMulti({
+    required String prompt,
+    required List<String> imagePaths,
+  }) async {
+    final files = <AiFile>[];
+    for (final p in imagePaths) {
+      final f = await AiFile.fromPath(p);
+      if (f != null) files.add(f);
     }
-    for (final model in _models) {
-      for (final version in _apiVersions) {
-        if (model == _cachedModel && version == _cachedVersion) continue;
-        orderedCombos.add((model, version));
-      }
-    }
+    return _run(prompt, files);
+  }
 
-    Exception? lastError;
+  // ── Routing ────────────────────────────────────────────────────────────────
 
-    for (final (model, apiVersion) in orderedCombos) {
+  Future<String> _run(String prompt, List<AiFile> files) async {
+    if (!_backendMissing || !allowLegacyFallback) {
       try {
-        debugPrint('[ChatbotService] Trying $model @ $apiVersion');
+        final text = await AiService.instance.generate(prompt: prompt, files: files);
+        if (text.trim().isNotEmpty) return text;
+        throw const AppException(code: 'ai-empty', message: 'The AI returned an empty response. Please try again.');
+      } on AppException catch (e) {
+        if (e.code != 'ai-backend-missing' || !allowLegacyFallback) rethrow;
+        _backendMissing = true;
+        debugPrint('[ChatbotService] ⚠️ Backend not deployed — using legacy direct path.');
+      }
+    }
+    return _legacyDirect(prompt, files);
+  }
 
+  // ── Legacy direct-to-Gemini path (transitional) ───────────────────────────
+
+  Future<String> _legacyKey() async {
+    try {
+      final k = await _credentialsService.getGeminiApiKey();
+      if (k.isNotEmpty) return k;
+    } catch (_) {}
+    return _envGeminiKey;
+  }
+
+  Future<String> _legacyDirect(String prompt, List<AiFile> files) async {
+    final apiKey = await _legacyKey();
+    if (apiKey.isEmpty) {
+      throw const AppException(
+        code: 'ai-not-configured',
+        message: 'AI is not available yet. Deploy the Clinix backend (see functions/README.md).',
+      );
+    }
+    final parts = <Map<String, dynamic>>[
+      {'text': prompt},
+      for (final f in files)
+        {
+          'inline_data': {'mime_type': f.mimeType, 'data': f.base64Data}
+        },
+    ];
+    Object? lastError;
+    for (final model in _legacyModels) {
+      try {
         final url = Uri.parse(
-          'https://generativelanguage.googleapis.com/$apiVersion/models/$model:generateContent?key=$apiKey',
+          'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
         );
-
         final response = await http
             .post(
               url,
@@ -122,145 +121,57 @@ class ChatbotService {
                 'contents': [
                   {'parts': parts}
                 ],
-                'generationConfig': {
-                  'temperature': 0.4,    // lower temp = more focused clinical output
-                  // 1024 truncated real claim reports & multi-page summaries
-                  // mid-sentence. 4096 fits a full formal report comfortably.
-                  'maxOutputTokens': 4096,
-                },
+                'generationConfig': {'temperature': 0.4, 'maxOutputTokens': 4096},
               }),
             )
-            .timeout(const Duration(seconds: 25));
-
+            .timeout(const Duration(seconds: 60));
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body) as Map<String, dynamic>;
-          final text = _extractTextFromResponse(data);
-          if (text.trim().isNotEmpty) {
-            debugPrint('[ChatbotService] ✅ $model @ $apiVersion succeeded');
-            // Cache for next call.
-            _cachedModel = model;
-            _cachedVersion = apiVersion;
-            return text;
-          }
-          lastError = Exception('$model returned empty response');
+          final text = _extractText(data);
+          if (text.trim().isNotEmpty) return text;
+          lastError = 'empty response';
           continue;
         }
-
-        if (response.statusCode == 404) {
-          debugPrint('[ChatbotService] ⚠️ $model not on $apiVersion');
-          // Invalidate cache if the cached combo is now 404.
-          if (model == _cachedModel && apiVersion == _cachedVersion) {
-            _cachedModel = null;
-            _cachedVersion = null;
-          }
-          lastError = Exception('Model $model not found on $apiVersion');
-          continue;
-        }
-
         if (response.statusCode == 401 || response.statusCode == 403) {
-          throw Exception(
-            'Gemini API key is invalid or has insufficient permissions.',
-          );
+          throw const AppException(code: 'ai-key', message: 'AI key is invalid or unauthorised.');
         }
-
         if (response.statusCode == 429) {
-          throw Exception('Gemini rate limit reached. Please wait a moment.');
+          throw const AppException(code: 'ai-rate', message: 'AI rate limit reached. Please wait a moment.');
         }
-
-        debugPrint('[ChatbotService] HTTP ${response.statusCode} from $model');
-        lastError = Exception('HTTP ${response.statusCode}');
-      } on Exception catch (e) {
-        debugPrint('[ChatbotService] $model @ $apiVersion threw: $e');
+        lastError = 'HTTP ${response.statusCode}';
+      } on AppException {
+        rethrow;
+      } catch (e) {
         lastError = e;
       }
     }
-
-    throw lastError ??
-        Exception(
-          'All Gemini models failed. Check your API key and ensure the '
-          'Generative Language API is enabled.',
-        );
+    throw AppException(code: 'ai-failed', message: 'AI request failed ($lastError). Please try again.');
   }
 
-  /// Get a response from Gemini based on a prompt.
-  ///
-  /// Throws on any failure (auth, rate limit, network, all-models-404) so
-  /// callers can render a clean UI state instead of pasting an error
-  /// sentence into a clinical document. Use try/catch at the call site.
-  Future<String> getGeminiResponse(String prompt) async {
-    debugPrint('\n=== GEMINI PROMPT ===');
-    debugPrint(prompt);
-
-    final apiKey = await _getGeminiApiKey();
-    if (apiKey.isEmpty) {
-      throw Exception(
-        'Gemini API key not configured. Add geminiApiKey to Firebase '
-        '(app_runtime/api_keys).',
-      );
-    }
-
-    debugPrint('[ChatbotService] Calling Gemini API...');
-    return await _callGemini(apiKey, [{'text': prompt}]);
-  }
-
-  /// Get a response from Gemini based on image (vision). Throws on failure.
-  Future<String> getGeminiVisionResponse({
-    required String prompt,
-    String? imagePath,
-  }) async {
-    return getGeminiVisionResponseMulti(
-      prompt: prompt,
-      imagePaths: imagePath != null && imagePath.isNotEmpty ? [imagePath] : [],
-    );
-  }
-
-  /// Analyze one or more images in a single Gemini call.
-  /// All images are sent as separate [inline_data] parts in one request.
-  Future<String> getGeminiVisionResponseMulti({
-    required String prompt,
-    required List<String> imagePaths,
-  }) async {
-    debugPrint('\n=== GEMINI VISION PROMPT (${imagePaths.length} images) ===');
-    debugPrint(prompt);
-
-    final apiKey = await _getGeminiApiKey();
-    if (apiKey.isEmpty) {
-      throw Exception(
-        'Gemini API key not configured. Add geminiApiKey to Firebase '
-        '(app_runtime/api_keys).',
-      );
-    }
-
-    final List<Map<String, dynamic>> parts = [{'text': prompt}];
-
-    for (final imagePath in imagePaths) {
-      if (imagePath.isEmpty) continue;
-      try {
-        final file = File(imagePath);
-        if (await file.exists()) {
-          final imageBytes = await file.readAsBytes();
-          final imageBase64 = base64Encode(imageBytes);
-
-          String mimeType = 'image/jpeg';
-          final lower = imagePath.toLowerCase();
-          if (lower.endsWith('.png')) {
-            mimeType = 'image/png';
-          } else if (lower.endsWith('.gif')) {
-            mimeType = 'image/gif';
-          } else if (lower.endsWith('.webp')) {
-            mimeType = 'image/webp';
-          }
-
-          parts.add({
-            'inline_data': {'mime_type': mimeType, 'data': imageBase64},
-          });
+  String _extractText(Map<String, dynamic> data) {
+    final candidates = data['candidates'];
+    if (candidates is! List) return '';
+    for (final c in candidates) {
+      final parts = (c is Map ? c['content'] : null) is Map ? (c['content']['parts']) : null;
+      if (parts is! List) continue;
+      for (final p in parts) {
+        if (p is Map && p['text'] is String && (p['text'] as String).trim().isNotEmpty) {
+          return p['text'] as String;
         }
-      } catch (e) {
-        debugPrint('[ChatbotService] Error reading image file: $e');
       }
     }
+    return '';
+  }
 
-    debugPrint('[ChatbotService] Calling Gemini Vision API...');
-    return await _callGemini(apiKey, parts);
+  /// True if a file at [path] can be attached (exists and is a supported type).
+  static Future<bool> canAttach(String path) async {
+    if (!await File(path).exists()) return false;
+    final lower = path.toLowerCase();
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.heic') ||
+        lower.endsWith('.pdf');
   }
 }

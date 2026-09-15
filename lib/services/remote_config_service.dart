@@ -30,6 +30,15 @@ class RemoteConfigService {
         'update_url': '',
         'update_message':
             'A newer version of Clinix AI is required to continue.',
+        // Beta switch: every signed-in user gets Pro (mirror it in Firestore
+        // `app_runtime/config.everyonePro` so the backend agrees).
+        'everyone_pro': false,
+        // RevenueCat public SDK keys (alternative to --dart-define).
+        'rc_android_key': '',
+        'rc_ios_key': '',
+        // Pricing copy shown on the paywall before offerings load.
+        'pro_monthly_price': r'$9.99',
+        'pro_yearly_price': r'$79.99',
       });
       await rc.fetchAndActivate();
       _rc = rc;
