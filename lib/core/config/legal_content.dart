@@ -13,7 +13,7 @@ class AppLegal {
 
   /// Bump when the legal terms materially change. Stored against the user's
   /// acceptance so you can re-prompt for consent after an update.
-  static const int consentVersion = 1;
+  static const int consentVersion = 2;
 
   static const String companyName = 'Clinix AI';
   static const String contactEmail = 'calorievita.dev@gmail.com';
@@ -41,10 +41,11 @@ class AppLegal {
       'qualified professional before relying on or submitting it.';
 
   static const String aiDataNotice =
-      'To answer your questions and analyze documents, Clinix AI sends your input '
-      '(including text, voice, and document images you choose to share) to '
-      'third-party AI providers (Google Gemini and Deepgram). Do not share '
-      'information you are not comfortable processing this way.';
+      'To analyze documents and answer questions, Clinix sends the content you '
+      'choose to share (document images or PDFs, text, and voice) through our '
+      'own servers to third-party AI providers (Google Gemini on a paid tier '
+      'whose terms exclude training on your data, and Deepgram for voice). Do '
+      'not share information you are not comfortable processing this way.';
 
   // ── Medical Disclaimer (full) ───────────────────────────────────────────────
 
@@ -108,14 +109,20 @@ These Terms of Use ("Terms") govern your use of the Clinix AI application ("the 
 ## 1. Eligibility
 You must be at least 18 years old (or the age of majority in your jurisdiction) to use the App. The App is intended for your own personal, non-commercial use.
 
-## 2. Health information, not advice
-The App provides general health and insurance information and organization tools. It does not provide medical, legal, or financial advice. See the in-app Medical Disclaimer and Insurance Disclaimer, which are incorporated into these Terms.
+## 2. Information and drafts, not advice or representation
+The App helps you organise bills, insurance documents and health records, and uses AI to explain them, check bills for common errors against public reference prices, and draft letters (for example disputes, appeals and requests). Everything it produces is **general information and a draft for your review**. It is not medical, legal, financial, tax or insurance advice, and $companyName is not a law firm, licensed insurance adviser, medical-billing advocate, debt-settlement service or healthcare provider. **You decide what to send, you send it yourself, and you remain responsible for its accuracy.** We do not negotiate, appeal or act on your behalf and we do not guarantee that any bill will be reduced or any claim approved. See the Medical Disclaimer and Insurance Disclaimer, which are incorporated into these Terms.
 
 ## 3. Your responsibilities
 You are responsible for the accuracy of information you enter, for safeguarding your account, and for reviewing any AI-generated content before relying on or sharing it. You agree not to misuse the App, attempt to extract credentials, or use it for any unlawful purpose.
 
 ## 4. Third-party services
-The App uses third-party services including Google Firebase (authentication, database, storage, notifications), Google Gemini, and Deepgram. Your use is also subject to their terms. Content you submit for AI processing is transmitted to these providers.
+The App uses third-party services including Google Firebase (authentication, database, storage, notifications, analytics, crash reporting), Google Gemini (AI processing, via our servers), Deepgram (voice transcription) and RevenueCat (subscription management). Your use is also subject to their terms. Content you submit for AI processing is transmitted to these providers.
+
+## 4a. Subscriptions
+Some features require a paid Clinix Pro subscription, billed through the Apple App Store or Google Play. Subscriptions renew automatically at the price shown at purchase until cancelled at least 24 hours before the end of the current period, in your App Store or Google Play account settings. Free allowances may change. Refunds are handled by the app store under its policies. Prices may vary by region and may change with notice.
+
+## 4b. Fair use
+AI features are metered to prevent abuse. Automated access, scraping, or use of the App to process documents for third parties commercially is not permitted without our written agreement.
 
 ## 5. Intellectual property
 The App and its content (excluding your data) are owned by $companyName and protected by law. You retain ownership of the health data you provide.
@@ -146,32 +153,41 @@ Questions: $contactEmail
 $companyName ("we", "us") respects your privacy. This policy explains what we collect, how we use it, and your rights. By using the App you consent to this policy.
 
 ## Information we collect
-- **Account information:** your name and email from Sign in with Google or Apple.
-- **Health information you provide:** profile details (age, sex, blood group, allergies, conditions, emergency contact), symptoms, medications, reminders, insurance policies and claims, and medical documents/images you scan or upload.
-- **Voice input** you record to describe symptoms.
-- **Technical/diagnostic data:** crash reports and basic device information to keep the App stable.
+- **Account information:** your name and email from Sign in with Google or Apple; your country/region and the goals you select.
+- **Consumer health and financial information you provide:** medical bills, insurance statements (EOBs), denial letters, policy documents, medical records, and the details extracted from them (providers, insurers, amounts, procedure codes, diagnoses); profile details (age, sex, blood group, allergies, conditions, emergency contact); symptoms, medications and reminders; the outcomes you record (amounts recovered).
+- **Voice input** you choose to record.
+- **Usage and diagnostic data:** feature usage events (for example that a scan or an audit was run — never the content), crash reports, and basic device information.
+- **Purchase information:** subscription status from the app store via RevenueCat. We never see your card details.
 
 ## How we use it
-- To provide the App's features (records vault, reminders, AI assistance, insurance tools).
-- To generate AI summaries, reports, and letters at your request.
-- To send you notifications you enable (e.g. medication reminders).
-- To diagnose crashes and improve reliability.
+- To provide the App's features: reading your documents, checking bills against public fair-price references, explaining denials, drafting letters, tracking deadlines, storing records, and reminders.
+- To generate AI outputs at your request.
+- To send notifications you enable.
+- To keep the App reliable, prevent abuse (usage metering), and understand which features are used.
 
-We do **not** sell your personal or health data.
+We do **not** sell your personal or health data, and we do not use your health data for advertising. We do not share it with insurers, providers, employers or data brokers.
+
+## Consumer health data
+Health information you provide is "consumer health data" under laws such as Washington's My Health My Data Act. We collect and use it only with your consent and only to provide the features you ask for. You may withdraw consent by deleting the relevant data or your account. We do not sell consumer health data and we do not use geofencing.
 
 ## Third-party processing
-To provide AI features, content you submit is sent to:
-- **Google Gemini** — text and document/image analysis.
-- **Deepgram** — voice-to-text transcription.
-- **Google Firebase** — authentication, encrypted database/storage, push notifications, and crash reporting.
+To provide AI features, the content you submit is sent through our own servers (Google Cloud) to:
+- **Google Gemini** — text, image and PDF analysis. We use a paid tier whose terms state that your prompts and outputs are **not used to train or improve Google's models** and are not reviewed by humans for that purpose.
+- **Deepgram** — voice-to-text transcription, if you use voice input.
 
-These providers process data under their own privacy terms. Only share information you are comfortable processing this way.
+Other processors: **Google Firebase** (authentication, encrypted database and file storage, push notifications, analytics, crash reporting) and **RevenueCat** (subscription status). These providers process data under their own privacy terms and data-processing agreements. Only share information you are comfortable processing this way.
 
-## Storage & security
-Your data is stored in your private, access-controlled Firebase account space and on your device. Documents you scan are also kept locally on your device so they remain available offline. We use reasonable technical measures to protect your data, but no system is perfectly secure.
+## Storage, security & retention
+Your data is stored in your private, access-controlled Firebase account space (Google Cloud, United States) and on your device. Documents you scan are kept locally on your device first, so they remain available offline. Data is encrypted in transit and at rest. AI requests are not stored by us beyond operational logs, which contain no document content. We retain your data until you delete it or your account. Server-side usage counters are deleted with your account.
+
+## Security incidents
+If a breach of unsecured identifiable health information occurs we will notify affected users (and regulators where required, including under the FTC Health Breach Notification Rule) without unreasonable delay.
 
 ## Your rights
-You can view and edit your data in the App. You can **delete your account and associated data at any time** from Profile → Delete Account. Depending on your region (e.g. GDPR/CCPA), you may have rights to access, correct, export, or erase your data; contact us to exercise them.
+You can view, edit and delete your data in the App and **delete your account and all associated data at any time** from Profile → Delete Account. Depending on where you live you may also have rights to access, correct, export, restrict or object to processing of your data, and to complain to a supervisory authority — including under the GDPR / UK GDPR (EU/EEA and UK), PIPEDA (Canada), the Privacy Act 1988 (Australia), the CCPA/CPRA and state consumer health data laws (United States) and the Digital Personal Data Protection Act 2023 (India). Contact us to exercise them; we respond within the time the applicable law requires (at most 45 days).
+
+## International transfers
+Our servers are in the United States. Where required, transfers from the EU/EEA, UK and other regions rely on standard contractual clauses or equivalent safeguards provided by our processors.
 
 ## Children
 The App is not intended for children under 18 and we do not knowingly collect their data.

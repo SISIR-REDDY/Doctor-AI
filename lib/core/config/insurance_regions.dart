@@ -1,5 +1,20 @@
 import 'package:intl/intl.dart';
 
+/// One stage of a region's appeal path, with the deadline the app uses to
+/// create reminders (mirrors functions/src/regions.ts).
+class AppealStage {
+  final String stage;
+  final String deadline;
+  final int daysFromDenial; // 0 = no automatic reminder
+  final String notes;
+  const AppealStage({
+    required this.stage,
+    required this.deadline,
+    this.daysFromDenial = 0,
+    this.notes = '',
+  });
+}
+
 /// A supported country/region for insurance handling. Drives currency display
 /// and the regulator / ombudsman / legal-escalation context injected into the
 /// AI prompts so claim advice and appeals are correct per country.
@@ -25,6 +40,12 @@ class InsuranceRegion {
   /// Key consumer-protection laws / rights the policyholder can rely on.
   final String keyRights;
 
+  /// Country-correct appeal stages with deadlines counted from the denial.
+  final List<AppealStage> appealStages;
+
+  /// Short description of how bills / private insurance work here.
+  final String billingNote;
+
   const InsuranceRegion({
     required this.code,
     required this.name,
@@ -36,6 +57,8 @@ class InsuranceRegion {
     this.ombudsman = 'the financial/insurance ombudsman',
     this.escalationSteps = const [],
     this.keyRights = '',
+    this.appealStages = const [],
+    this.billingNote = '',
   });
 
   String get flag => _flagFor(code);
@@ -61,6 +84,16 @@ const List<InsuranceRegion> kInsuranceRegions = [
     ],
     keyRights:
         'ACA internal & external appeal rights, the No Surprises Act, ERISA (employer plans), and state prompt-payment laws.',
+    appealStages: [
+      AppealStage(stage: 'Internal appeal (1st level)', deadline: '180 days from the denial notice', daysFromDenial: 180,
+          notes: 'Decision within 30 days (pre-service) / 60 days (post-service); 72 h if urgent.'),
+      AppealStage(stage: 'Internal appeal (2nd level)', deadline: 'Usually 60 days after the 1st-level decision', daysFromDenial: 240),
+      AppealStage(stage: 'External review (IRO)', deadline: '4 months after the final internal denial', daysFromDenial: 300,
+          notes: 'Independent and binding on the insurer. Free.'),
+      AppealStage(stage: 'State Department of Insurance complaint', deadline: 'Any time'),
+    ],
+    billingNote:
+        'Itemized bills use CPT/HCPCS codes; the insurer’s EOB shows billed vs allowed vs paid. Medicare rates are the fair-price reference; the No Surprises Act limits balance billing.',
   ),
   InsuranceRegion(
     code: 'GB',
@@ -78,6 +111,13 @@ const List<InsuranceRegion> kInsuranceRegions = [
     ],
     keyRights:
         "the FCA's ICOBS rules, the Consumer Rights Act 2015, and free, binding FOS dispute resolution.",
+    appealStages: [
+      AppealStage(stage: 'Formal complaint to the insurer', deadline: 'Insurer must give a final response within 8 weeks', daysFromDenial: 30),
+      AppealStage(stage: 'Financial Ombudsman Service', deadline: '6 months from the final response letter', daysFromDenial: 236,
+          notes: 'Free; binding on the insurer if you accept.'),
+    ],
+    billingNote:
+        'Disputes mostly concern private medical insurance (pre-authorisation, exclusions, consultant fee shortfalls) and private hospital invoices.',
   ),
   InsuranceRegion(
     code: 'CA',
@@ -95,6 +135,12 @@ const List<InsuranceRegion> kInsuranceRegions = [
     ],
     keyRights:
         'provincial Insurance Acts, your access rights under PIPEDA, and OLHI recommendations.',
+    appealStages: [
+      AppealStage(stage: 'Insurer internal appeal', deadline: 'Commonly 30–90 days — check the letter', daysFromDenial: 60),
+      AppealStage(stage: 'OLHI complaint', deadline: 'After the final position letter, within 1 year', daysFromDenial: 180),
+    ],
+    billingNote:
+        'Provincial plans cover hospital and physician care; disputes involve extended-health benefits (drugs, dental, paramedical) and travel insurance.',
   ),
   InsuranceRegion(
     code: 'AU',
@@ -112,6 +158,13 @@ const List<InsuranceRegion> kInsuranceRegions = [
     ],
     keyRights:
         'the Insurance Contracts Act 1984, the duty of utmost good faith, and binding AFCA decisions.',
+    appealStages: [
+      AppealStage(stage: 'Internal Dispute Resolution', deadline: 'Insurer must respond within 30 days', daysFromDenial: 30),
+      AppealStage(stage: 'AFCA / Private Health Insurance Ombudsman', deadline: 'Within 2 years of the IDR response', daysFromDenial: 120,
+          notes: 'Free; AFCA decisions bind the insurer.'),
+    ],
+    billingNote:
+        'Medicare covers public care and part of the MBS fee; gap fees and product-tier exclusions drive most private-cover disputes.',
   ),
   InsuranceRegion(
     code: 'EU',
@@ -129,6 +182,12 @@ const List<InsuranceRegion> kInsuranceRegions = [
     ],
     keyRights:
         'the Insurance Distribution Directive, GDPR (access to your records), and national consumer-protection law.',
+    appealStages: [
+      AppealStage(stage: 'Written complaint to the insurer', deadline: 'As soon as possible — reply within 15 working days to 2 months', daysFromDenial: 30),
+      AppealStage(stage: 'National ombudsman / ADR body', deadline: 'After the final answer, typically within 1 year', daysFromDenial: 180),
+    ],
+    billingNote:
+        'Statutory insurance covers most care; disputes concern supplementary/private cover, tariffs and cross-border reimbursement.',
   ),
   InsuranceRegion(
     code: 'IN',
@@ -148,6 +207,14 @@ const List<InsuranceRegion> kInsuranceRegions = [
     ],
     keyRights:
         "the IRDAI (Protection of Policyholders' Interests) Regulations and the Consumer Protection Act, 2019.",
+    appealStages: [
+      AppealStage(stage: 'Grievance Redressal Officer', deadline: 'Insurer must resolve within 15 days', daysFromDenial: 15),
+      AppealStage(stage: 'IRDAI Bima Bharosa portal', deadline: 'If unresolved after 15 days', daysFromDenial: 30),
+      AppealStage(stage: 'Insurance Ombudsman', deadline: 'Within 1 year of the rejection', daysFromDenial: 365,
+          notes: 'Free; claims up to ₹50 lakh.'),
+    ],
+    billingNote:
+        'Cashless claims are pre-authorised by the TPA; deductions cite room-rent capping, non-payable consumables, sub-limits and waiting periods.',
   ),
 ];
 
