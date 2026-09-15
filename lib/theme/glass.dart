@@ -57,25 +57,32 @@ class GlassPanel extends StatelessWidget {
         borderRadius: DS.squircle(radius),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Container(
-            padding: padding,
+          // Fill and sheen are separate boxes: a gradient in the same
+          // BoxDecoration replaces the colour rather than layering on it.
+          child: DecoratedBox(
             decoration: BoxDecoration(
               color: fill,
               borderRadius: DS.squircle(radius),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: dark ? 0.10 : 0.65),
-                width: 0.8,
-              ),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withValues(alpha: dark ? 0.06 : 0.35),
-                  Colors.white.withValues(alpha: 0.0),
-                ],
-              ),
             ),
-            child: child,
+            child: Container(
+              padding: padding,
+              decoration: BoxDecoration(
+                borderRadius: DS.squircle(radius),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: dark ? 0.10 : 0.65),
+                  width: 0.8,
+                ),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: dark ? 0.06 : 0.35),
+                    Colors.white.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
+              child: child,
+            ),
           ),
         ),
       ),

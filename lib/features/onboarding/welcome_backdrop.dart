@@ -183,8 +183,12 @@ class ProgressRail extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // heightFactor is required: without it the fill box has
+                  // no intrinsic height and paints nothing.
                   FractionallySizedBox(
                     widthFactor: fill,
+                    heightFactor: 1,
+                    alignment: Alignment.centerLeft,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: color,

@@ -58,9 +58,7 @@ class LiquidGlass extends StatelessWidget {
     // Base tint. Light mode leans on white so text stays dark-on-light;
     // dark mode uses a lifted grey so the panel separates from the ground.
     final base = tint ?? (dark ? const Color(0xFF2A2D36) : Colors.white);
-    final fill = base.withValues(
-      alpha: (dark ? 0.55 : 0.62) * opacity,
-    );
+    final fill = base.withValues(alpha: (dark ? 0.55 : 0.62) * opacity);
 
     return Container(
       decoration: BoxDecoration(
@@ -85,33 +83,40 @@ class LiquidGlass extends StatelessWidget {
             outer: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
             inner: ColorFilter.matrix(_saturate(1.7)),
           ),
+          // Fill and sheen are two boxes on purpose. In one BoxDecoration a
+          // gradient becomes the paint's shader and the colour is discarded —
+          // the panel would render as sheen only, a near-invisible film.
           child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: border,
-              // Top-biased sheen: the specular catch that reads as glass.
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: dark
-                    ? [
-                        Colors.white.withValues(alpha: 0.10),
-                        Colors.white.withValues(alpha: 0.02),
-                        Colors.transparent,
-                      ]
-                    : [
-                        Colors.white.withValues(alpha: 0.55),
-                        Colors.white.withValues(alpha: 0.15),
-                        Colors.transparent,
-                      ],
-                stops: const [0, 0.42, 1],
+            decoration: BoxDecoration(color: fill, borderRadius: border),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: border,
+                // Top-biased sheen: the specular catch that reads as glass.
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: dark
+                      ? [
+                          Colors.white.withValues(alpha: 0.10),
+                          Colors.white.withValues(alpha: 0.02),
+                          Colors.transparent,
+                        ]
+                      : [
+                          // A coloured fill needs a lighter touch or the
+                          // top third bleaches toward white.
+                          Colors.white.withValues(alpha: tint == null ? 0.55 : 0.22),
+                          Colors.white.withValues(alpha: tint == null ? 0.15 : 0.05),
+                          Colors.transparent,
+                        ],
+                  stops: const [0, 0.42, 1],
+                ),
               ),
-            ),
-            child: CustomPaint(
-              // Painted rather than a Border so the rim can vary around the
-              // edge — bright where light lands, dark where it falls away.
-              foregroundPainter: _RimPainter(radius: radius, dark: dark),
-              child: Padding(padding: padding, child: child),
+              child: CustomPaint(
+                // Painted rather than a Border so the rim can vary around the
+                // edge — bright where light lands, dark where it falls away.
+                foregroundPainter: _RimPainter(radius: radius, dark: dark),
+                child: Padding(padding: padding, child: child),
+              ),
             ),
           ),
         ),
@@ -125,10 +130,26 @@ class LiquidGlass extends StatelessWidget {
     const lr = 0.213, lg = 0.715, lb = 0.072;
     final sr = (1 - s) * lr, sg = (1 - s) * lg, sb = (1 - s) * lb;
     return [
-      sr + s, sg, sb, 0, 0,
-      sr, sg + s, sb, 0, 0,
-      sr, sg, sb + s, 0, 0,
-      0, 0, 0, 1, 0,
+      sr + s,
+      sg,
+      sb,
+      0,
+      0,
+      sr,
+      sg + s,
+      sb,
+      0,
+      0,
+      sr,
+      sg,
+      sb + s,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
     ];
   }
 }
