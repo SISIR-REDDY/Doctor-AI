@@ -1,7 +1,7 @@
 name: docpilot
-description: Clinix AI - Personal health organizer for records, reminders, and insurance documents, with an AI helper.
+description: Clinix — AI medical bill & insurance advocate. Scan bills, statements and denial letters; find errors, appeal, track deadlines and money recovered.
 publish_to: 'none'
-version: 2.1.0+7
+version: 3.0.0+8
 
 environment:
   sdk: ^3.11.0

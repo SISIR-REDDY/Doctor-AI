@@ -75,7 +75,9 @@ export async function generate<T = string>(opts: GenerateOptions): Promise<Gener
   for (const model of models) {
     try {
       const started = Date.now();
-      const isFlash = model.includes('flash');
+      // Only the 2.5 flash family accepts thinkingBudget: 0; other models
+      // reject the field, so gate it precisely rather than by "flash".
+      const isFlash = /2\.5-flash/.test(model);
       const response = await ai.models.generateContent({
         model,
         contents,

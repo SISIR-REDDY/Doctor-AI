@@ -1,83 +1,95 @@
-# App Store & Legal Compliance — Clinix AI
+# Clinix — launch & compliance checklist
 
-## Account type: you CAN ship on your individual (personal) account ✅
+Clinix is positioned as an **AI medical bill & insurance advocate**: it reads bills,
+insurer statements (EOBs), denial letters and policies; audits bills against
+public fair-price references; explains denials; drafts letters the **user reviews
+and sends themselves**; tracks deadlines and money recovered. It does **not**
+diagnose, treat, represent, negotiate, appeal or submit anything on the user's
+behalf. Keep that framing everywhere (app copy, store listing, review notes) —
+it is what keeps the app out of medical-device, legal-services and
+debt-settlement regulation, and lets it ship from an individual developer
+account under **Health & Fitness** (or **Finance**).
 
-Apple forces an **Organization** account only when an app provides a *regulated
-service* — e.g. it performs real diagnosis/triage as a medical device, dispenses
-medication, IS an insurer/provider, or uses HealthKit **clinical health records**.
+## 1. Backend (must be live before any public build)
 
-Clinix AI does **none** of these. It is a **personal organizer** for documents you
-already have, plus an AI that gives **general information with disclaimers**. The
-only iOS capabilities used are **Push Notifications** and **Sign in with Apple** —
-both available on an individual account. There is **no HealthKit, no clinical
-records entitlement**.
+| Step | Where | Why |
+|---|---|---|
+| Blaze plan, `firebase use clinixai-9bb6d` | Firebase console / CLI | Cloud Functions + outbound API calls |
+| `firebase functions:secrets:set GEMINI_API_KEY` — key from a project **with billing enabled** | CLI | Paid tier: prompts are not used for training and not human-reviewed. A free-tier key is a privacy violation for health documents. |
+| `firebase functions:secrets:set REVENUECAT_WEBHOOK_SECRET` | CLI | Authenticates subscription webhooks |
+| `firebase deploy --only firestore:rules,storage,functions` | CLI | Rules lock `benchmarks/`, `app_runtime/config`, `users/*/private/*`; functions hold the AI keys |
+| After deploy: set `legacyKeysReadable()` → `false` in `firestore.rules`, redeploy, delete `app_runtime/api_keys`, **rotate** the old Gemini/Deepgram keys | Console + CLI | Old builds could read those keys |
+| `cd functions && npm run seed:benchmarks`, then `npm run import:cms` with the current CMS PFS/CLFS files | CLI | Exact Medicare reference prices instead of the approximate seed |
+| Create `app_runtime/config` (`everyonePro: true` for beta; `enforceAppCheck: true` once App Check is registered) | Firestore console | Beta switch / abuse protection |
+| Enable App Check (Play Integrity + App Attest); register debug tokens for dev devices | Firebase console | Blocks scripted abuse of the AI endpoints |
+| Enable Crashlytics, Analytics, Remote Config params (`min_build_number`, `everyone_pro`, `rc_android_key`, `rc_ios_key`, prices) | Firebase console | Already wired in the app |
 
-To keep it that way, the app's user-facing copy was repositioned away from
-"medical service / diagnosis / fight your insurer / legal strategy" toward
-"organize, prepare documents, general information." Keep this framing in your
-**App Store Connect metadata** too (description, subtitle, keywords, screenshots).
+## 2. Subscriptions (RevenueCat)
 
-**Recommended submission settings**
-- **Category:** Health & Fitness (honest; allowed on individual accounts). Avoid
-  the word "Medical" as the category.
-- **Subtitle/description:** "Personal health & document organizer with an AI
-  helper." Do NOT say "diagnose", "treatment", "medical device", "we fight
-  insurers", or "legal advice".
-- **Age rating:** expect a "Medical/Treatment Information" infrequent flag →
-  rating ~12+/17+; that's normal, not a rejection.
-- **Review notes:** "Informational and organizational tool for personal use. Not
-  a medical device; does not diagnose or treat. AI provides general information
-  with emergency redirection and disclaimers. Not an insurer and does not submit
-  claims." Provide a demo account.
+1. Products in App Store Connect / Play Console: `clinix_pro_monthly`, `clinix_pro_yearly`.
+2. RevenueCat: entitlement `pro`, offering `default` with the two packages, webhook →
+   `revenuecatWebhook` function URL, Authorization header = the secret above.
+3. Public SDK keys via `--dart-define=RC_ANDROID_KEY=… --dart-define=RC_IOS_KEY=…` or
+   Remote Config `rc_android_key` / `rc_ios_key`.
+4. Both stores require IAP for digital subscriptions — never link to external payment.
+5. Free allowances (per month): 6 document reads, 1 audit, 1 letter, 2 denial analyses,
+   20 chats — see `functions/src/config.ts`. Adjust in `app_runtime/config.limits`.
 
----
+## 3. Legal (have counsel review before launch)
 
+- `lib/core/config/legal_content.dart` — Terms (drafts-not-advice, no representation,
+  subscriptions, fair use), Privacy Policy (consumer health data, paid-tier AI
+  processing, retention, breach notification, regional rights, transfers), Medical
+  and Insurance disclaimers. **Set the real company name and a non-Gmail contact.**
+- Consent is captured on the sign-in step (checkbox gates the buttons); bump
+  `AppLegal.consentVersion` when terms change materially.
+- **Do not charge contingency / success fees yourself** until counsel has reviewed
+  state debt-settlement / credit-services laws (medical bills are consumer debt) and
+  any patient-advocate rules — subscription + per-case pricing is clean.
+- Letters are drafts; the app never sends anything itself. Keep it that way unless
+  counsel signs off on fax/mail integrations.
+- Regional: GDPR/UK GDPR (health = special category — keep the explicit consent,
+  DPIA on file, EU representative when serving EU users at scale), PIPEDA, Australian
+  Privacy Act, CCPA/CPRA + Washington MHMDA / Nevada / Connecticut consumer-health
+  laws (separate consumer-health-data policy section is in the privacy policy),
+  India DPDP 2023 (when launching there).
+- FTC Health Breach Notification Rule applies (non-HIPAA health app): keep a breach
+  response procedure; notify users/FTC within the statutory windows.
+- Google Gemini paid-tier data terms and Firebase DPA cover processor obligations;
+  add RevenueCat's and Deepgram's DPAs to your records.
 
-This document tracks the compliance work done in-app and the steps **you** must
-complete outside the code before submitting to the App Store. Health + insurance
-apps get extra scrutiny under App Review Guidelines **1.4.1 (physical harm)** and
-**5.1.1 (privacy / data / account)**.
+## 4. App Store Connect / Google Play
 
-## ✅ Done in the app
+- **Category:** Health & Fitness or Finance. Avoid "Medical".
+- **Privacy nutrition label / Data safety:** health & financial documents, identifiers,
+  contact info, usage data, diagnostics, purchases; shared with processors (Google,
+  Deepgram, RevenueCat); not used for advertising/tracking; deletable in-app.
+- **Google Play Health apps declaration:** yes — health & fitness / medical information;
+  no HealthKit/Health Connect access.
+- **Review notes:** "Personal organisation and information tool for medical bills and
+  insurance documents. Not a medical device; does not diagnose. AI outputs are
+  general information and drafts the user reviews and sends themselves. Not an
+  insurer, advocate or law firm. Subscriptions via IAP." Provide a demo account with
+  sample documents already scanned and `everyonePro` on for the reviewer.
+- Account deletion: Profile → Delete Account (client) + `onUserDeleted` function
+  (server wipe incl. Storage). ✅
+- Sign in with Apple offered alongside Google. ✅
+- iOS usage strings for camera / photo library / microphone / Face ID present. ✅
+- Push/notification permission requested contextually (deadlines, medications). ✅
+- Accessibility: dynamic type works; audit VoiceOver labels on icon-only buttons before submission.
 
-| Risk | Fix | Where |
-|------|-----|-------|
-| No account deletion (auto-reject, 5.1.1(v)) | "Delete Account" in Profile → wipes all Firestore data + deletes auth user (re-auths if needed) | `AuthService.deleteAccount`, `FirestoreService.deleteAllUserData`, Profile screen |
-| No privacy policy / terms | Full in-app Privacy Policy, Terms, Medical & Insurance disclaimers + URL slots | `core/config/legal_content.dart`, `features/legal/` |
-| No consent / disclaimer gate | First-run blocking consent screen (checkbox required) + legal links on sign-in | `features/legal/consent_gate_screen.dart`, `ConsentService`, `auth_gate_screen.dart` |
-| AI gives unsafe medical advice | System prompt now forces emergency/self-harm redirection, no diagnosis, no doses; persistent in-chat disclaimer | `features/ai_chat/ai_health_assistant_screen.dart` |
-| Insurance = unlicensed legal advice | Insurance disclaimer (consent + Legal hub) + "not legal advice, review before submitting" footer on every generated PDF | `legal_content.dart`, `claim_pdf_service.dart` |
-| Third-party health-data processing undisclosed | Privacy policy + consent screen disclose Gemini, Deepgram, Firebase | `legal_content.dart`, consent gate |
+## 5. Positioning guardrails (do not regress)
 
-## ⚠️ You MUST do before submitting
+- No "diagnose", "treatment", "medical device", "we fight insurers", "we negotiate",
+  "guaranteed savings", "legal advice" anywhere in copy or screenshots.
+- Savings are always "potential" / "estimated"; benchmarks are labelled approximate
+  until the CMS import runs.
+- Emergency redirection and "not medical advice" remain in the health chat prompt
+  (server-side, `functions/src/ai/prompts.ts`).
 
-1. **Have a lawyer review** `legal_content.dart`. The text is a thorough starting
-   point, not legal advice. Set your real company name / contact email there.
-2. **App Store Connect → App Privacy:** declare every data type collected (health,
-   contact info, identifiers, audio, diagnostics) and that data is sent to
-   third parties (Google, Deepgram). This "nutrition label" must match the app.
-3. **Privacy Policy URL** is a required field in App Store Connect. Host the
-   policy and put the URL in `AppLegal.privacyPolicyUrl` (and App Store Connect).
-4. **App Review notes:** state that the app is an informational/organizational
-   tool, NOT a medical device, and explain the AI is general guidance with
-   emergency redirection. Provide a demo account.
-5. **🔴 API key exposure (security/billing risk):** `app_runtime/api_keys` is
-   readable by any signed-in user, so your Gemini + Deepgram keys can be
-   extracted. Firestore rules cannot hide a value the client reads. **Before
-   public launch, proxy these calls through a backend (Cloud Function / Cloud
-   Run) that holds the keys server-side**, then set the rule to `allow read: if
-   false`. See the comment in `firestore.rules`. Also rotate any keys that have
-   shipped in a build.
-6. **Secrets in repo:** `firebase_options.dart`, `google-services.json`,
-   `GoogleService-Info.plist` are committed. Firebase client config is not secret
-   *if* Firestore/Storage rules are locked down (they are, for user data) — but
-   the Gemini/Deepgram keys behind item 5 are the real exposure.
-7. **Deploy the Firestore rules** in `firestore.rules` (and `storage.rules`) to
-   your Firebase project — verify in the console they are published.
-8. Confirm **Sign in with Apple** is offered (it is) since you also offer Google —
-   required by 4.8 when using a third-party login.
+## 6. Before scaling
 
-## Notes
-- Consent acceptance is versioned (`AppLegal.consentVersion`). Bump it when terms
-  change materially to re-prompt all users.
-- The in-chat and PDF disclaimers are intentionally always visible, not one-time.
+- Rate limits are per user; add a per-IP layer (Cloud Armor / App Check enforcement)
+  before marketing pushes.
+- Consider Vertex AI with a regional endpoint (EU) for EU/UK data-residency asks.
+- Add a status page / support email (not Gmail) in Profile → Legal.
