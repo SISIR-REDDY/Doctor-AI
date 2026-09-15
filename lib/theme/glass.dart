@@ -224,7 +224,35 @@ class HeroButton extends StatelessWidget {
               ),
             ],
           ),
-          child: Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Specular sheen behind the label: a top-biased highlight and a
+              // hairline bright edge read as a lit surface, not a flat slab.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(height / 2),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.26),
+                          Colors.white.withValues(alpha: 0.05),
+                          Colors.transparent,
+                        ],
+                        stops: const [0, 0.45, 1],
+                      ),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.28),
+                        width: 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Center(
             child: loading
                 ? SizedBox(
                     width: 22,
@@ -249,6 +277,8 @@ class HeroButton extends StatelessWidget {
                       ),
                     ],
                   ),
+              ),
+            ],
           ),
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../../theme/liquid_glass.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
 import '../../theme/motion.dart';
@@ -30,39 +31,36 @@ abstract class SceneWidget extends StatefulWidget {
 class SceneFrame extends StatelessWidget {
   final double offset;
   final Widget child;
-  final Gradient? gradient;
+
+  /// Tints the glass with the brand colour and carries white content — used
+  /// by the payoff scene, where the figure should read as a statement rather
+  /// than another neutral card.
+  final bool accented;
   final EdgeInsets padding;
 
   const SceneFrame({
     super.key,
     required this.offset,
     required this.child,
-    this.gradient,
+    this.accented = false,
     this.padding = const EdgeInsets.all(18),
   });
 
   @override
   Widget build(BuildContext context) {
     // Cards drift slightly slower than the page, which reads as depth.
-    final parallax = offset * -46;
+    final parallax = offset * -28;
     final fade = (1 - offset.abs().clamp(0.0, 1.0) * 0.75).clamp(0.0, 1.0);
 
-    final card = Container(
+    final card = LiquidGlass(
       padding: padding,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        color: gradient == null ? AppTheme.surfaceColor : null,
-        borderRadius: DS.squircle(DS.rXl),
-        border: Border.all(color: AppTheme.glassBorder, width: 0.8),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1B2A4A)
-                .withValues(alpha: AppTheme.isDark ? 0.5 : 0.14),
-            blurRadius: 40,
-            offset: const Offset(0, 18),
-          ),
-        ],
-      ),
+      radius: DS.rXl,
+      blur: 26,
+      // The accented card needs a near-opaque fill: white text over a
+      // translucent panel loses contrast against a light backdrop.
+      tint: accented ? const Color(0xFF0A57C2) : null,
+      opacity: accented ? 1.55 : 1,
+      elevation: accented ? 1.15 : 1,
       child: child,
     );
 
@@ -562,11 +560,12 @@ class _TickStep extends StatelessWidget {
               const SizedBox(width: 11),
               Expanded(
                 child: Opacity(
-                  opacity: (0.35 + (0.65 * done)).clamp(0.0, 1.0),
+                  opacity: (0.55 + (0.45 * done)).clamp(0.0, 1.0),
                   child: Text(text,
                       style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w600,
+                          letterSpacing: -0.15,
                           color: AppTheme.textPrimary)),
                 ),
               ),
@@ -608,7 +607,7 @@ class _MoneySceneState extends State<MoneyScene>
   Widget build(BuildContext context) {
     return SceneFrame(
       offset: widget.offset,
-      gradient: AppTheme.primaryGradient,
+      accented: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

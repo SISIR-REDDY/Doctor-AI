@@ -1,6 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
@@ -65,8 +63,8 @@ class _WelcomeBackdropState extends State<WelcomeBackdrop>
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: dark
-                          ? const [Color(0xFF0D1220), Color(0xFF0A0A0E)]
-                          : const [Color(0xFFEAF1FF), Color(0xFFF7F9FD)],
+                          ? const [Color(0xFF0A1020), Color(0xFF07070B)]
+                          : const [Color(0xFFDCE9FF), Color(0xFFEFF4FE)],
                     ),
                   ),
                 ),
@@ -77,7 +75,7 @@ class _WelcomeBackdropState extends State<WelcomeBackdrop>
                   -0.68 + math.cos(t * 0.8) * 0.16,
                 ),
                 size: 0.95,
-                color: accent.withValues(alpha: dark ? 0.45 : 0.40),
+                color: accent.withValues(alpha: dark ? 0.55 : 0.52),
               ),
               _Orb(
                 alignment: Alignment(
@@ -86,14 +84,7 @@ class _WelcomeBackdropState extends State<WelcomeBackdrop>
                 ),
                 size: 0.78,
                 color: Color.lerp(accent, AppTheme.secondaryColor, 0.55)!
-                    .withValues(alpha: dark ? 0.34 : 0.28),
-              ),
-              // One blur pass over both orbs is far cheaper than blurring each.
-              Positioned.fill(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70),
-                  child: const SizedBox.expand(),
-                ),
+                    .withValues(alpha: dark ? 0.42 : 0.38),
               ),
               // Settles the colour so text keeps its contrast ratio.
               Positioned.fill(
@@ -102,14 +93,19 @@ class _WelcomeBackdropState extends State<WelcomeBackdrop>
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
+                      // Weighted to the lower half, where the copy sits, so
+                      // the art keeps its colour while text keeps contrast.
+                      stops: const [0, 0.46, 1],
                       colors: dark
                           ? [
-                              const Color(0xFF0A0A0E).withValues(alpha: 0.10),
-                              const Color(0xFF0A0A0E).withValues(alpha: 0.72),
+                              Colors.transparent,
+                              const Color(0xFF07070B).withValues(alpha: 0.35),
+                              const Color(0xFF07070B).withValues(alpha: 0.80),
                             ]
                           : [
-                              Colors.white.withValues(alpha: 0.18),
-                              Colors.white.withValues(alpha: 0.80),
+                              Colors.transparent,
+                              Colors.white.withValues(alpha: 0.42),
+                              Colors.white.withValues(alpha: 0.86),
                             ],
                     ),
                   ),

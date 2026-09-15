@@ -14,6 +14,7 @@ import '../../services/firebase/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
+import '../../theme/liquid_glass.dart';
 import '../../theme/motion.dart';
 import '../legal/legal_screens.dart';
 import 'welcome_backdrop.dart';
@@ -452,15 +453,14 @@ class _SlideState extends State<_Slide>
               children: [
                 // A plain box, not a flex child: inside a scrollable the
                 // height is unbounded, so flex has nothing to divide.
-                LimitedBox(
-                  maxHeight: math.max(demoFloor, c.maxHeight * 0.52),
-                  child: SizedBox(
-                    height: math.max(demoFloor, c.maxHeight * 0.52),
-                    width: double.infinity,
-                    child: Align(
-                      alignment: Alignment.center,
-                      child: widget.scene(offset, widget.active),
-                    ),
+                SizedBox(
+                  height: math.max(demoFloor, c.maxHeight * 0.52),
+                  width: double.infinity,
+                  // Bottom-aligned: the card meets the copy instead of
+                  // floating mid-region with a void beneath it.
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: widget.scene(offset, widget.active),
                   ),
                 ),
                 SizedBox(height: gap),
@@ -481,13 +481,11 @@ class _Eyebrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor.withValues(alpha: AppTheme.isDark ? 0.5 : 0.75),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.glassBorder, width: 0.8),
-      ),
+    return LiquidGlass(
+      radius: 30,
+      blur: 14,
+      elevation: 0.45,
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
       child: Text(
         text,
         style: TextStyle(
