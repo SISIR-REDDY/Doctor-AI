@@ -18,6 +18,14 @@ class Motion {
   /// Slight overshoot for things that "land" (flags, badges, checkmarks).
   static const Curve settle = Curves.easeOutBack;
 
+  /// Critically-damped spring: fast approach, one small overshoot, no ringing.
+  /// Use where something should feel physical rather than tweened — a flag
+  /// snapping onto a row, a card arriving.
+  static const Curve spring = _Spring(damping: 0.62, frequency: 2.4);
+
+  /// A heavier spring for large objects (whole cards, sheets).
+  static const Curve springHeavy = _Spring(damping: 0.78, frequency: 1.6);
+
   /// Symmetric, for crossfades and colour shifts.
   static const Curve shift = Curves.easeInOut;
 
@@ -36,6 +44,30 @@ class Motion {
   }
 }
 
+/// Damped-spring curve.
+///
+/// Flutter's easeOutBack overshoots on a fixed schedule, which looks the same
+/// on every element and reads as "tweened". A spring's overshoot decays, so
+/// heavier things settle differently from lighter ones.
+class _Spring extends Curve {
+  /// 0 = undamped (rings forever), 1 = critically damped (no overshoot).
+  final double damping;
+
+  /// Oscillations over the curve's duration. Higher = snappier.
+  final double frequency;
+
+  const _Spring({required this.damping, required this.frequency});
+
+  @override
+  double transformInternal(double t) {
+    final w = frequency * 2 * math.pi;
+    final decay = math.exp(-damping * w * t);
+    // Damped sinusoid approaching 1 from below, then settling onto it.
+    final wd = w * math.sqrt(math.max(1 - (damping * damping), 0.0001));
+    return 1 - decay * (math.cos(wd * t) + (damping * w / wd) * math.sin(wd * t));
+  }
+}
+
 /// Drives a scene's 0→1 timeline, replaying it whenever the scene becomes
 /// active (e.g. its onboarding page scrolls into view).
 ///
@@ -43,10 +75,16 @@ class Motion {
 /// [FadeSlide], [CountUp] and flag shows its final state with no movement.
 mixin SceneTimeline<T extends StatefulWidget> on State<T>
     implements TickerProvider {
-  late final AnimationController scene = AnimationController(
-    vsync: this,
-    duration: sceneDuration,
-  );
+  AnimationController? _scene;
+
+  /// The scene's timeline. Created on first use.
+  ///
+  /// Deliberately not `late final`: a PageView can build a page and discard it
+  /// before the scene ever plays, and a `late final` initialiser would then run
+  /// inside dispose(), constructing an AnimationController against a
+  /// deactivated element (TickerMode lookup throws).
+  AnimationController get scene =>
+      _scene ??= AnimationController(vsync: this, duration: sceneDuration);
 
   /// Total length of the scene's story. Override per scene.
   Duration get sceneDuration => const Duration(milliseconds: 2600);
@@ -62,7 +100,7 @@ mixin SceneTimeline<T extends StatefulWidget> on State<T>
 
   @override
   void dispose() {
-    scene.dispose();
+    _scene?.dispose();
     super.dispose();
   }
 }
@@ -105,8 +143,9 @@ class FadeSlide extends StatelessWidget {
         final v = t.value;
         return Opacity(
           // Fade in over the first 60% so movement finishes after the fade —
-          // it reads as arriving, not as sliding while invisible.
-          opacity: Curves.easeOut.transform(math.min(v * 1.6, 1.0)),
+          // it reads as arriving, not as sliding while invisible. Spring
+          // curves overshoot past 1, so clamp before transforming.
+          opacity: Curves.easeOut.transform((v * 1.6).clamp(0.0, 1.0)),
           child: Transform.translate(
             offset: Offset(dx * (1 - v), dy * (1 - v)),
             child: from == 1 ? c : Transform.scale(scale: from + ((1 - from) * v), child: c),
@@ -322,7 +361,15 @@ class Floating extends StatefulWidget {
 
 class _FloatingState extends State<Floating> with SingleTickerProviderStateMixin {
   late final AnimationController _c =
-      AnimationController(vsync: this, duration: widget.period)..repeat();
+      AnimationController(vsync: this, duration: widget.period);
+
+  @override
+  void initState() {
+    super.initState();
+    // Started here rather than in a field initialiser so the controller always
+    // exists by dispose() — see the note on SceneTimeline.scene.
+    _c.repeat();
+  }
 
   @override
   void dispose() {

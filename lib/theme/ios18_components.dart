@@ -487,16 +487,22 @@ class _Pressable extends StatefulWidget {
 
 class _PressableState extends State<_Pressable>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 110),
-    lowerBound: 0,
-    upperBound: 1,
-  );
+  AnimationController? _controller;
+
+  /// Created on first use. Not `late final`: when [onTap] is null build()
+  /// returns early and never touches it, so a `late final` initialiser would
+  /// run inside dispose() and construct a controller against a deactivated
+  /// element (the TickerMode lookup throws).
+  AnimationController get _c => _controller ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 110),
+        lowerBound: 0,
+        upperBound: 1,
+      );
 
   @override
   void dispose() {
-    _c.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 

@@ -165,7 +165,7 @@ class _BillSceneState extends State<BillScene>
             _BillLine(
               animation: scene,
               appear: const Interval(0.26, 0.46, curve: Motion.enter),
-              flagAt: const Interval(0.56, 0.72, curve: Motion.settle),
+              flagAt: const Interval(0.56, 0.78, curve: Motion.spring),
               label: 'CBC with differential',
               amount: r'$92',
               tag: 'Duplicate',
@@ -173,7 +173,7 @@ class _BillSceneState extends State<BillScene>
             _BillLine(
               animation: scene,
               appear: const Interval(0.32, 0.52, curve: Motion.enter),
-              flagAt: const Interval(0.66, 0.82, curve: Motion.settle),
+              flagAt: const Interval(0.66, 0.88, curve: Motion.spring),
               label: 'CT head w/o contrast',
               amount: r'$1,850',
               tag: '5.9× rate',
@@ -187,7 +187,7 @@ class _BillSceneState extends State<BillScene>
             const SizedBox(height: 12),
             FadeSlide(
               animation: scene,
-              interval: const Interval(0.76, 0.96, curve: Motion.settle),
+              interval: const Interval(0.78, 1.0, curve: Motion.springHeavy),
               dy: 12,
               from: 0.94,
               child: Container(
@@ -461,22 +461,22 @@ class _DenialSceneState extends State<DenialScene>
           // Each step ticks off in turn — the work happening, not a list.
           _TickStep(
             animation: scene,
-            interval: const Interval(0.20, 0.40, curve: Motion.settle),
+            interval: const Interval(0.20, 0.40, curve: Motion.spring),
             text: 'Denial reason decoded in plain English',
           ),
           _TickStep(
             animation: scene,
-            interval: const Interval(0.34, 0.54, curve: Motion.settle),
+            interval: const Interval(0.34, 0.54, curve: Motion.spring),
             text: 'Your appeal rights under state law found',
           ),
           _TickStep(
             animation: scene,
-            interval: const Interval(0.48, 0.68, curve: Motion.settle),
+            interval: const Interval(0.48, 0.68, curve: Motion.spring),
             text: 'Appeal drafted, citing your own policy',
           ),
           _TickStep(
             animation: scene,
-            interval: const Interval(0.62, 0.82, curve: Motion.settle),
+            interval: const Interval(0.62, 0.82, curve: Motion.spring),
             text: 'Deadline set — 172 days to file',
             accent: AppTheme.warningColor,
             icon: CupertinoIcons.bell_fill,
@@ -484,7 +484,7 @@ class _DenialSceneState extends State<DenialScene>
           const SizedBox(height: 14),
           FadeSlide(
             animation: scene,
-            interval: const Interval(0.80, 1, curve: Motion.settle),
+            interval: const Interval(0.80, 1, curve: Motion.spring),
             dy: 10,
             from: 0.92,
             // Wraps rather than overflowing when the type scale is large.

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
@@ -15,6 +16,7 @@ import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
 import '../../theme/motion.dart';
 import '../legal/legal_screens.dart';
+import 'welcome_backdrop.dart';
 import 'welcome_scenes.dart';
 
 /// First-run experience: three value slides, then consent + sign-in.
@@ -34,7 +36,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   final _page = PageController();
   final _auth = AuthService();
   int _index = 0;
-  /// Continuous scroll position, for per-scene parallax.
+
+  /// Continuous scroll position — drives the backdrop, rail and parallax.
   double _scroll = 0;
   bool _agreed = false;
   bool _loadingGoogle = false;
@@ -42,6 +45,36 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   static const _slideCount = 3;
   bool get _onSignIn => _index == _slideCount;
+
+  /// Backdrop accent per page. The sign-in step keeps the last slide's hue so
+  /// the transition into it feels continuous rather than like a new screen.
+  static const _accents = <Color>[
+    Color(0xFF007AFF),
+    Color(0xFF5856D6),
+    Color(0xFF30B0C7),
+    Color(0xFF30B0C7),
+  ];
+
+  static const _slides = <_SlideCopy>[
+    _SlideCopy(
+      eyebrow: '8 in 10 bills contain an error',
+      title: 'Photograph it.\nWe find the errors.',
+      body:
+          'Clinix reads every line, matches each code against published Medicare rates, and shows you which charges don’t hold up — and what they should have cost.',
+    ),
+    _SlideCopy(
+      eyebrow: 'Under 1% of denials are ever appealed',
+      title: 'Denied?\nThat’s not the end.',
+      body:
+          'Roughly half of appeals succeed — most people just never file one. Snap the letter and Clinix explains the real reason, finds your rights, and drafts the appeal.',
+    ),
+    _SlideCopy(
+      eyebrow: 'Every letter, deadline and outcome in one place',
+      title: 'You send it.\nYou keep it.',
+      body:
+          'Clinix never contacts your insurer and never takes a cut. It prepares the case; you stay in control. Every dollar you win back is counted here.',
+    ),
+  ];
 
   @override
   void initState() {
@@ -67,12 +100,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     HapticFeedback.lightImpact();
     if (_index < _slideCount) {
       _page.animateToPage(_index + 1,
-          duration: const Duration(milliseconds: 420), curve: Curves.easeOutCubic);
+          duration: const Duration(milliseconds: 520), curve: Curves.easeOutCubic);
     }
   }
 
-  void _skip() => _page.animateToPage(_slideCount,
-      duration: const Duration(milliseconds: 420), curve: Curves.easeOutCubic);
+  void _skip() {
+    HapticFeedback.selectionClick();
+    _page.animateToPage(_slideCount,
+        duration: const Duration(milliseconds: 560), curve: Curves.easeOutCubic);
+  }
 
   Future<void> _signIn(Future<void> Function() action, void Function(bool) setLoading) async {
     if (!_agreed) return;
@@ -94,128 +130,174 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dark = AppTheme.isDark;
+    final accent = _accents[_index.clamp(0, _accents.length - 1)];
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: dark
-                ? const [Color(0xFF0E1420), Color(0xFF0B0B0F)]
-                : const [Color(0xFFE4EEFF), Color(0xFFF4F7FC), Color(0xFFF0F4FB)],
+      // Full-bleed: the backdrop runs under the status bar and home indicator.
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: WelcomeBackdrop(scroll: _scroll, accents: _accents),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Top bar: brand + skip
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 12, 0),
-                child: Row(
-                  children: [
-                    const _BrandMark(),
-                    const Spacer(),
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: _onSignIn ? 0 : 1,
-                      child: TextButton(
-                        onPressed: _onSignIn ? null : _skip,
-                        child: Text('Skip',
-                            style: TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                    ),
-                  ],
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                _TopBar(
+                  onSkip: _onSignIn ? null : _skip,
+                  showSkip: !_onSignIn,
                 ),
-              ),
-              Expanded(
-                child: PageView(
-                  controller: _page,
-                  physics: const BouncingScrollPhysics(),
-                  onPageChanged: (i) {
-                    setState(() => _index = i);
-                    Analytics.onboardingStep('welcome_$i');
-                  },
-                  children: [
-                    _Slide(
-                      index: 0,
-                      scroll: _scroll,
-                      active: _index == 0,
-                      art: (o, a) => BillScene(offset: o, active: a),
-                      eyebrow: '8 in 10 bills contain an error',
-                      title: 'Photograph it.\nWe find the errors.',
-                      body:
-                          'Clinix reads every line, matches each code against published Medicare rates, and shows you exactly which charges don’t hold up — and what they should have cost.',
-                    ),
-                    _Slide(
-                      index: 1,
-                      scroll: _scroll,
-                      active: _index == 1,
-                      art: (o, a) => DenialScene(offset: o, active: a),
-                      eyebrow: 'Fewer than 1% of denials are ever appealed',
-                      title: 'Denied?\nThat’s not the end.',
-                      body:
-                          'Roughly half of appeals succeed — most people just never file one. Snap the letter and Clinix explains the real reason, finds your rights, drafts the appeal and tracks the deadline.',
-                    ),
-                    _Slide(
-                      index: 2,
-                      scroll: _scroll,
-                      active: _index == 2,
-                      art: (o, a) => MoneyScene(offset: o, active: a),
-                      eyebrow: 'Every letter, deadline and outcome in one place',
-                      title: 'You send it.\nYou keep it.',
-                      body:
-                          'Clinix never contacts your insurer or takes a cut — it prepares the case and you stay in control. Every dollar you win back is counted here.',
-                    ),
-                    _SignInStep(
-                      agreed: _agreed,
-                      onAgreedChanged: (v) => setState(() => _agreed = v),
-                      loadingGoogle: _loadingGoogle,
-                      loadingApple: _loadingApple,
-                      onGoogle: () => _signIn(
-                          () => _auth.signInWithGoogle(),
-                          (v) => setState(() => _loadingGoogle = v)),
-                      onApple: () => _signIn(
-                          () => _auth.signInWithApple(),
-                          (v) => setState(() => _loadingApple = v)),
-                    ),
-                  ],
+                Expanded(
+                  child: PageView.builder(
+                    controller: _page,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: _slideCount + 1,
+                    onPageChanged: (i) {
+                      HapticFeedback.selectionClick();
+                      setState(() => _index = i);
+                      Analytics.onboardingStep('welcome_$i');
+                    },
+                    itemBuilder: (context, i) {
+                      if (i == _slideCount) {
+                        return _SignInStep(
+                          agreed: _agreed,
+                          onAgreedChanged: (v) => setState(() => _agreed = v),
+                          loadingGoogle: _loadingGoogle,
+                          loadingApple: _loadingApple,
+                          onGoogle: () => _signIn(() => _auth.signInWithGoogle(),
+                              (v) => setState(() => _loadingGoogle = v)),
+                          onApple: () => _signIn(() => _auth.signInWithApple(),
+                              (v) => setState(() => _loadingApple = v)),
+                        );
+                      }
+                      return _Slide(
+                        index: i,
+                        scroll: _scroll,
+                        active: _index == i,
+                        copy: _slides[i],
+                        scene: switch (i) {
+                          0 => (o, a) => BillScene(offset: o, active: a),
+                          1 => (o, a) => DenialScene(offset: o, active: a),
+                          _ => (o, a) => MoneyScene(offset: o, active: a),
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-              // Bottom: dots + continue
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-                child: Column(
-                  children: [
-                    _Dots(count: _slideCount + 1, index: _index),
-                    const SizedBox(height: 16),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      child: _onSignIn
-                          ? const SizedBox(height: 0, key: ValueKey('none'))
-                          : HeroButton(
-                              key: const ValueKey('next'),
-                              label: _index == _slideCount - 1
-                                  ? 'Get started'
-                                  : 'Continue',
-                              onTap: _next,
-                            ),
-                    ),
-                  ],
+                _BottomBar(
+                  index: _index,
+                  scroll: _scroll,
+                  slideCount: _slideCount,
+                  accent: accent,
+                  onNext: _next,
+                  onSignIn: _onSignIn,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-// ── Pieces ────────────────────────────────────────────────────────────────────
+/// Copy for one slide, kept separate so the slide widget stays presentational.
+class _SlideCopy {
+  final String eyebrow;
+  final String title;
+  final String body;
+  const _SlideCopy({required this.eyebrow, required this.title, required this.body});
+}
+
+// ── Chrome ────────────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  final VoidCallback? onSkip;
+  final bool showSkip;
+  const _TopBar({required this.onSkip, required this.showSkip});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 8, 14, 0),
+      child: Row(
+        children: [
+          const _BrandMark(),
+          const Spacer(),
+          AnimatedOpacity(
+            duration: Motion.fast,
+            opacity: showSkip ? 1 : 0,
+            child: IgnorePointer(
+              ignoring: !showSkip,
+              child: TextButton(
+                onPressed: onSkip,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text('Skip',
+                    style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BottomBar extends StatelessWidget {
+  final int index;
+  final double scroll;
+  final int slideCount;
+  final Color accent;
+  final VoidCallback onNext;
+  final bool onSignIn;
+
+  const _BottomBar({
+    required this.index,
+    required this.scroll,
+    required this.slideCount,
+    required this.accent,
+    required this.onNext,
+    required this.onSignIn,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 4, 24, 14 + bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ProgressRail(
+            count: slideCount,
+            scroll: scroll.clamp(0.0, slideCount.toDouble()),
+            color: accent,
+          ),
+          const SizedBox(height: 18),
+          // The CTA collapses on the sign-in page, where the auth buttons
+          // are the only affordance that should be competing for attention.
+          AnimatedSize(
+            duration: Motion.medium,
+            curve: Motion.enter,
+            child: onSignIn
+                ? const SizedBox(width: double.infinity, height: 0)
+                : HeroButton(
+                    label: index == slideCount - 1 ? 'Get started' : 'Continue',
+                    onTap: onNext,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _BrandMark extends StatelessWidget {
   const _BrandMark();
@@ -229,76 +311,49 @@ class _BrandMark extends StatelessWidget {
           borderRadius: BorderRadius.circular(9),
           child: Image.asset(
             'assets/images/logo.png',
-            width: 30,
-            height: 30,
+            width: 28,
+            height: 28,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
-              width: 30,
-              height: 30,
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
                 gradient: AppTheme.primaryGradient,
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: const Icon(Icons.shield_rounded, color: Colors.white, size: 18),
+              child: const Icon(Icons.shield_rounded, color: Colors.white, size: 17),
             ),
           ),
         ),
         const SizedBox(width: 9),
         Text('Clinix',
             style: TextStyle(
-                fontSize: 19,
+                fontSize: 18,
                 fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
+                letterSpacing: -0.4,
                 color: AppTheme.textPrimary)),
       ],
     );
   }
 }
 
-class _Dots extends StatelessWidget {
-  final int count;
-  final int index;
-  const _Dots({required this.count, required this.index});
+// ── Slide ─────────────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(count, (i) {
-        final on = i == index;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOut,
-          margin: const EdgeInsets.symmetric(horizontal: 3.5),
-          width: on ? 22 : 7,
-          height: 7,
-          decoration: BoxDecoration(
-            color: on ? AppTheme.primaryColor : AppTheme.textTertiary.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(4),
-          ),
-        );
-      }),
-    );
-  }
-}
+typedef _SceneBuilder = Widget Function(double offset, bool active);
 
 class _Slide extends StatefulWidget {
   final int index;
   final double scroll;
   final bool active;
-  final Widget Function(double offset, bool active) art;
-  final String eyebrow;
-  final String title;
-  final String body;
+  final _SlideCopy copy;
+  final _SceneBuilder scene;
 
   const _Slide({
     required this.index,
     required this.scroll,
     required this.active,
-    required this.art,
-    required this.eyebrow,
-    required this.title,
-    required this.body,
+    required this.copy,
+    required this.scene,
   });
 
   @override
@@ -308,7 +363,7 @@ class _Slide extends StatefulWidget {
 class _SlideState extends State<_Slide>
     with SingleTickerProviderStateMixin, SceneTimeline {
   @override
-  Duration get sceneDuration => const Duration(milliseconds: 1100);
+  Duration get sceneDuration => const Duration(milliseconds: 1400);
 
   @override
   void initState() {
@@ -324,72 +379,125 @@ class _SlideState extends State<_Slide>
 
   @override
   Widget build(BuildContext context) {
-    // How far this page is from centre: 0 when settled, ±1 when a page away.
+    // Distance from centre: 0 settled, ±1 a full page away.
     final offset = widget.scroll - widget.index;
+
     return LayoutBuilder(builder: (context, c) {
-      final compact = c.maxHeight < 620;
+      final tight = c.maxHeight < 640;
+      final titleSize = tight ? 30.0 : 36.0;
+
+      final copy = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FadeSlide(
+            animation: scene,
+            interval: const Interval(0.0, 0.45, curve: Motion.enter),
+            dy: 14,
+            dx: 10,
+            child: _Eyebrow(text: widget.copy.eyebrow),
+          ),
+          SizedBox(height: tight ? 10 : 14),
+          FadeSlide(
+            animation: scene,
+            interval: const Interval(0.12, 0.62, curve: Motion.springHeavy),
+            dy: 20,
+            child: Text(
+              widget.copy.title,
+              style: TextStyle(
+                fontSize: titleSize,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -1.4,
+                height: 1.04,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ),
+          SizedBox(height: tight ? 10 : 14),
+          FadeSlide(
+            animation: scene,
+            interval: const Interval(0.26, 0.8, curve: Motion.enter),
+            dy: 22,
+            child: Text(
+              widget.copy.body,
+              style: TextStyle(
+                fontSize: tight ? 14.5 : 16,
+                height: 1.5,
+                letterSpacing: -0.1,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          SizedBox(height: tight ? 8 : 16),
+        ],
+      );
+
+      // Reserve a floor for the demo; if the copy needs more than what is
+      // left, the slide scrolls rather than squeezing the demo to nothing —
+      // the same thing iOS does under large Dynamic Type.
+      const demoFloor = 180.0;
+      final gap = tight ? 14.0 : 26.0;
+
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          children: [
-            Expanded(
-              flex: compact ? 5 : 6,
-              child: Center(child: widget.art(offset, widget.active)),
-            ),
-            // Copy trails the art slightly so the eye lands on the card first.
-            FadeSlide(
-              animation: scene,
-              interval: const Interval(0.05, 0.55, curve: Motion.enter),
-              dy: 16,
-              child: Text(
-                widget.eyebrow.toUpperCase(),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.9,
-                  color: AppTheme.primaryColor,
+        padding: EdgeInsets.fromLTRB(24, tight ? 4 : 12, 24, 0),
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: ConstrainedBox(
+            // Fill the viewport when content is short, grow past it when not.
+            constraints: BoxConstraints(minHeight: c.maxHeight),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // A plain box, not a flex child: inside a scrollable the
+                // height is unbounded, so flex has nothing to divide.
+                LimitedBox(
+                  maxHeight: math.max(demoFloor, c.maxHeight * 0.52),
+                  child: SizedBox(
+                    height: math.max(demoFloor, c.maxHeight * 0.52),
+                    width: double.infinity,
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: widget.scene(offset, widget.active),
+                    ),
+                  ),
                 ),
-              ),
+                SizedBox(height: gap),
+                copy,
+              ],
             ),
-            SizedBox(height: compact ? 8 : 11),
-            FadeSlide(
-              animation: scene,
-              interval: const Interval(0.15, 0.7, curve: Motion.enter),
-              dy: 18,
-              child: Text(
-                widget.title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: compact ? 29 : 34,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1.2,
-                  height: 1.06,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-            SizedBox(height: compact ? 9 : 13),
-            FadeSlide(
-              animation: scene,
-              interval: const Interval(0.28, 0.85, curve: Motion.enter),
-              dy: 20,
-              child: Text(
-                widget.body,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: compact ? 14.5 : 15.5,
-                  height: 1.5,
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            SizedBox(height: compact ? 10 : 20),
-          ],
+          ),
         ),
       );
     });
+  }
+}
+
+/// Small capsule above the headline carrying the statistic that makes the case.
+class _Eyebrow extends StatelessWidget {
+  final String text;
+  const _Eyebrow({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor.withValues(alpha: AppTheme.isDark ? 0.5 : 0.75),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.glassBorder, width: 0.8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.1,
+          color: AppTheme.textSecondary,
+        ),
+      ),
+    );
   }
 }
 
@@ -478,8 +586,14 @@ class _SignInStep extends StatelessWidget {
             children: [
               Icon(CupertinoIcons.lock_fill, size: 12, color: AppTheme.textTertiary),
               const SizedBox(width: 5),
-              Text('Encrypted in transit and at rest',
-                  style: TextStyle(fontSize: 11.5, color: AppTheme.textTertiary, fontWeight: FontWeight.w600)),
+              // Wraps instead of overflowing at large accessibility type.
+              Flexible(
+                child: Text('Encrypted in transit and at rest',
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppTheme.textTertiary,
+                        fontWeight: FontWeight.w600)),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -659,12 +773,18 @@ class _AuthButton extends StatelessWidget {
                     children: [
                       icon,
                       const SizedBox(width: 10),
-                      Text(label,
-                          style: TextStyle(
-                              color: foreground,
-                              fontSize: 16.5,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.2)),
+                      // Ellipsise rather than overflow on a narrow phone or
+                      // at large type — the icon already identifies the button.
+                      Flexible(
+                        child: Text(label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: foreground,
+                                fontSize: 16.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2)),
+                      ),
                     ],
                   ),
           ),
