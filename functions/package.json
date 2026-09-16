@@ -1,8 +1,10 @@
 {
   "name": "clinix-functions",
-  "description": "Clinix AI backend — server-side AI proxy, quotas, entitlements, benchmarks.",
+  "description": "Clinix AI backend \u2014 server-side AI proxy, quotas, entitlements, benchmarks.",
   "private": true,
-  "engines": { "node": "22" },
+  "engines": {
+    "node": "22"
+  },
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
@@ -12,7 +14,8 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "seed:benchmarks": "node lib/scripts/seed_benchmarks.js",
-    "import:cms": "node lib/scripts/import_cms_pfs.js"
+    "import:cms": "node lib/scripts/import_cms_pfs.js",
+    "test": "tsc -p tsconfig.test.json && node --test lib-test/test/*.test.js"
   },
   "dependencies": {
     "@google/genai": "^1.20.0",

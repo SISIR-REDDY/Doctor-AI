@@ -46,7 +46,7 @@ export const auditInput = z.object({
 });
 export type AuditInput = z.infer<typeof auditInput>;
 
-interface DeterministicFinding {
+export interface DeterministicFinding {
   type: 'duplicate' | 'overpriced' | 'quantity' | 'math_error';
   detail: string;
   expenseIds: string[];
@@ -130,7 +130,7 @@ Produce the audit report now. Use ${currency} for all amounts.`;
 }
 
 /** Cheap, explainable checks that do not depend on the model. */
-function runRules(input: AuditInput, benchmarks: Map<string, Benchmark>, setting: 'office' | 'hospital'): DeterministicFinding[] {
+export function runRules(input: AuditInput, benchmarks: Map<string, Benchmark>, setting: 'office' | 'hospital'): DeterministicFinding[] {
   const out: DeterministicFinding[] = [];
   const seen = new Map<string, { expenseId: string; amount: number; desc: string }>();
 

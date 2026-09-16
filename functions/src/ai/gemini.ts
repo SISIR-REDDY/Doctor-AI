@@ -114,7 +114,8 @@ export async function generate<T = string>(opts: GenerateOptions): Promise<Gener
         const parsed = safeParseJson(raw);
         if (parsed === undefined) {
           lastError = new Error(`${model}: invalid JSON`);
-          logger.warn('gemini.badjson', { model, head: raw.slice(0, 200) });
+          // Length only: the body may contain health information.
+          logger.warn('gemini.badjson', { model, length: raw.length });
           continue;
         }
         return { data: parsed as T, model, raw, usage };

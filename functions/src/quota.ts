@@ -103,3 +103,23 @@ export async function consumeQuota(ctx: AuthedContext, op: QuotaOp): Promise<voi
     );
   });
 }
+
+/**
+ * Gives back one unit of `op` after a server-side failure, so a user is not
+ * charged for a call that produced nothing. Best-effort: a failure here is
+ * logged, never surfaced.
+ */
+export async function refundQuota(ctx: AuthedContext, op: QuotaOp): Promise<void> {
+  const ref = getFirestore().doc(`users/${ctx.uid}/private/usage`);
+  try {
+    await getFirestore().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const data = (snap.data() ?? {}) as { counts?: Partial<Record<QuotaOp, number>>; dayCount?: number };
+      const counts = { ...(data.counts ?? {}) };
+      counts[op] = Math.max(0, (counts[op] ?? 0) - 1);
+      tx.set(ref, { counts, dayCount: Math.max(0, (data.dayCount ?? 0) - 1) }, { merge: true });
+    });
+  } catch (err) {
+    logger.warn('quota.refund_failed', { uid: ctx.uid, op, err: String(err) });
+  }
+}

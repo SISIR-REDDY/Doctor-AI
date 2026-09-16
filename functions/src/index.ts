@@ -11,10 +11,11 @@ import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { logger, setGlobalOptions } from 'firebase-functions/v2';
 import { defineSecret } from 'firebase-functions/params';
 import { HttpsError, onCall, onRequest, type CallableRequest } from 'firebase-functions/v2/https';
+import { timingSafeEqual } from 'node:crypto';
 import { ZodError, z } from 'zod';
 import * as functionsV1 from 'firebase-functions/v1';
 
-import { authorize, consumeQuota } from './quota';
+import { authorize, consumeQuota, refundQuota } from './quota';
 import type { QuotaOp } from './config';
 import { analyzeDocument as runAnalyze, analyzeInput } from './tasks/analyze';
 import { auditBills as runAudit, auditInput } from './tasks/audit';
@@ -56,12 +57,23 @@ async function runTask<S extends z.ZodTypeAny, TOut>(
     return { ...out, plan: ctx.plan };
   } catch (err) {
     logger.error('task.fail', { op, uid: ctx.uid, ms: Date.now() - started, err: String((err as Error)?.message ?? err) });
+    // The user pays a quota unit for a result, not for our outage. Refund
+    // unless the failure was theirs (bad input) — provider errors included.
+    const code = err instanceof HttpsError ? err.code : 'internal';
+    if (code !== 'invalid-argument' && code !== 'permission-denied') {
+      await refundQuota(ctx, op);
+    }
     if (err instanceof HttpsError) throw err;
     throw new HttpsError('internal', 'Something went wrong while processing. Please try again.');
   }
 }
 
-const aiOpts = { secrets: [GEMINI_API_KEY], memory: '1GiB' as const, timeoutSeconds: 240, cors: true };
+// 1 GiB / 240 s per instance. Concurrency is capped because each request can
+// hold up to ~20 MB of base64 pages in memory; 80 (the v2 default) would let
+// one instance run out. 20 instances × 12 = 240 in-flight AI calls, enough for
+// tens of thousands of daily actives; raise maxInstances in setGlobalOptions
+// before a marketing push.
+const aiOpts = { secrets: [GEMINI_API_KEY], memory: '1GiB' as const, cpu: 1, concurrency: 12, timeoutSeconds: 240, cors: true };
 
 /** Classify + extract structured data from bill / EOB / denial / policy / record images or PDFs. */
 export const analyzeDocument = onCall(aiOpts, (req) => runTask(req, 'analyze', analyzeInput, runAnalyze));
@@ -94,7 +106,7 @@ export const revenuecatWebhook = onRequest({ secrets: [REVENUECAT_WEBHOOK_SECRET
   }
   const auth = req.get('Authorization') ?? '';
   const expected = REVENUECAT_WEBHOOK_SECRET.value();
-  if (!expected || (auth !== expected && auth !== `Bearer ${expected}`)) {
+  if (!expected || !(safeEqual(auth, expected) || safeEqual(auth, `Bearer ${expected}`))) {
     res.status(401).send('Unauthorized');
     return;
   }
@@ -107,6 +119,7 @@ export const revenuecatWebhook = onRequest({ secrets: [REVENUECAT_WEBHOOK_SECRET
     product_id?: string;
     store?: string;
     environment?: string;
+    event_timestamp_ms?: number;
   };
   const uid = [event.app_user_id, event.original_app_user_id].find((id) => id && !id.startsWith('$RCAnonymousID:'));
   if (!uid) {
@@ -116,22 +129,38 @@ export const revenuecatWebhook = onRequest({ secrets: [REVENUECAT_WEBHOOK_SECRET
   const hasPro = (event.entitlement_ids ?? []).includes('pro');
   const expiresMs = event.expiration_at_ms ?? 0;
   const active = hasPro && (expiresMs === 0 || expiresMs > Date.now()) && event.type !== 'EXPIRATION';
-  await getFirestore()
-    .doc(`users/${uid}/private/entitlement`)
-    .set(
+  const eventAt = event.event_timestamp_ms ?? Date.now();
+  const ref = getFirestore().doc(`users/${uid}/private/entitlement`);
+  // Webhooks retry and can arrive out of order; an older RENEWAL must not
+  // overwrite a newer EXPIRATION. Compare event timestamps inside the write.
+  const applied = await getFirestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const prevAt = (snap.data()?.lastEventAt as number | undefined) ?? 0;
+    if (eventAt < prevAt) return false;
+    tx.set(
+      ref,
       {
         plan: active ? 'pro' : 'free',
         expiresAt: expiresMs ? Timestamp.fromMillis(expiresMs) : null,
         source: `revenuecat:${event.store ?? 'unknown'}:${event.environment ?? ''}`,
         productId: event.product_id ?? '',
         lastEvent: event.type ?? '',
+        lastEventAt: eventAt,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
-  logger.info('revenuecat.synced', { uid, type: event.type, active });
-  res.status(200).send('ok');
+    return true;
+  });
+  logger.info('revenuecat.synced', { uid, type: event.type, active, applied });
+  res.status(200).send(applied ? 'ok' : 'stale (ignored)');
 });
+
+function safeEqual(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 
 /**
  * Account deletion clean-up: the client deletes what the rules let it touch;

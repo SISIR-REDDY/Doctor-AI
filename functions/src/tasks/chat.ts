@@ -12,7 +12,8 @@ export const chatInput = z.object({
     .min(1)
     .max(24),
   /** Summaries of the user's documents / cases / policies (built client-side). */
-  context: z.string().max(12000).default(''),
+  // Must stay ≥ the client's ChatContextBuilder._maxChars (14 000).
+  context: z.string().max(16000).default(''),
   profileSummary: z.string().max(2000).default(''),
 });
 export type ChatInput = z.infer<typeof chatInput>;
