@@ -15,6 +15,7 @@ import '../../features/records/record_detail_screen.dart';
 import '../../features/records/records_vault_screen.dart';
 import '../../features/symptom_journal/symptom_journal_screen.dart';
 import '../../models/patient_models.dart';
+import '../../features/home/how_it_works_screen.dart';
 
 class AppRouter {
   static const String healthProfile = '/healthProfile';
@@ -31,6 +32,7 @@ class AppRouter {
   static const String reminders = '/reminders';
   static const String deadlines = '/deadlines';
   static const String paywall = '/paywall';
+  static const String howItWorks = '/howItWorks';
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -61,6 +63,9 @@ class AppRouter {
 
       case medications:
         return _slide(const MedicationsScreen(), settings);
+
+      case howItWorks:
+        return _slide(HowItWorksScreen(initialTab: (settings.arguments as int?) ?? 0), settings);
 
       case reminders:
         return _slide(const RemindersScreen(), settings);

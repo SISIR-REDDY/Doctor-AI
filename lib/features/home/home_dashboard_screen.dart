@@ -537,7 +537,79 @@ class _Toolkit extends StatelessWidget {
               children: [for (final t in tools) _ToolTile(t)],
             );
           }),
+          const SizedBox(height: 10),
+          // Two rows that answer "how does it actually do that?" — the
+          // question every new user asks before they trust a scan.
+          InsetCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                _ExplainRow(
+                  icon: CupertinoIcons.doc_text_search,
+                  color: AppTheme.warningColor,
+                  title: 'How bills & claims are audited',
+                  subtitle: '7 steps · rules, Medicare rates, your policy',
+                  onTap: () => Navigator.pushNamed(context, AppRouter.howItWorks, arguments: 0),
+                ),
+                Divider(height: 1, indent: 58, color: AppTheme.dividerColor),
+                _ExplainRow(
+                  icon: CupertinoIcons.lab_flask_solid,
+                  color: AppTheme.infoColor,
+                  title: 'How lab reports are analysed',
+                  subtitle: '6 steps · ranges, trends, plain English',
+                  onTap: () => Navigator.pushNamed(context, AppRouter.howItWorks, arguments: 1),
+                ),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _ExplainRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _ExplainRow({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DSPressable(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
+        child: Row(
+          children: [
+            IconBadge(icon, color: color, size: 34),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                  Text(subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                ],
+              ),
+            ),
+            Icon(CupertinoIcons.chevron_right, size: 15, color: AppTheme.textTertiary),
+          ],
+        ),
       ),
     );
   }
@@ -775,7 +847,14 @@ class _HowItWorks extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const DSSectionLabel('HOW CLINIX WORKS'),
+          DSSectionLabel(
+            'HOW CLINIX WORKS',
+            trailing: GestureDetector(
+              onTap: () => Navigator.pushNamed(context, AppRouter.howItWorks),
+              child: Text('Every step',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
+            ),
+          ),
           InsetCard(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
             child: Column(
