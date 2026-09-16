@@ -91,6 +91,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
     final rc = RemoteConfigService.instance;
     final monthlyPrice = _monthly?.storeProduct.priceString ?? rc.string('pro_monthly_price', r'$9.99');
     final yearlyPrice = _annual?.storeProduct.priceString ?? rc.string('pro_yearly_price', r'$79.99');
+    // Saving is computed from the store's real prices, never hard-coded, so
+    // the badge stays true when pricing changes per country or promotion.
+    final mp = _monthly?.storeProduct.price ?? 9.99;
+    final yp = _annual?.storeProduct.price ?? 79.99;
+    final savePct = mp > 0 ? (((mp * 12 - yp) / (mp * 12)) * 100).round() : 0;
+    final saveBadge = savePct >= 5 ? 'Save $savePct%' : null;
     final configured = ent.isConfigured && _offerings?.current != null;
     final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
 
@@ -157,7 +163,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                             color: AppTheme.textPrimary)),
                     const SizedBox(height: 6),
                     Text(
-                      'One recovered charge usually pays for a year.',
+                      'One corrected charge can pay for a year.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 15.5, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
                     ),
@@ -174,10 +180,20 @@ class _PaywallScreenState extends State<PaywallScreen> {
                               title: 'Deadline tracking', body: 'Appeal windows added automatically, with reminders.'),
                           _Feature(icon: CupertinoIcons.chat_bubble_2_fill, color: Color(0xFF5856D6),
                               title: 'Ask anything about your coverage', body: 'Answers grounded in your own policy and statements.'),
+                          _Feature(icon: CupertinoIcons.lab_flask_solid, color: Color(0xFF32ADE6),
+                              title: 'Unlimited reports & records', body: 'Lab results decoded with trends; every document in the vault.'),
                           _Feature(icon: CupertinoIcons.person_2_fill, color: Color(0xFF34C759),
                               title: 'Family cases', body: 'Handle bills and claims for dependants too.', last: true),
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Say what stays free. A paywall that hides this reads as
+                    // bait-and-switch in reviews; one that states it reads fair.
+                    Text(
+                      'Free always includes 6 document scans, 1 bill audit, 1 letter, 2 denial analyses and 20 assistant chats a month — plus medications, reminders and your vault.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12.5, height: 1.4, color: AppTheme.textSecondary),
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -187,7 +203,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                             title: 'Yearly',
                             price: yearlyPrice,
                             per: '/ year',
-                            badge: 'Save 33%',
+                            badge: saveBadge,
                             selected: _selected == 'yearly',
                             onTap: () => setState(() => _selected = 'yearly'),
                           ),

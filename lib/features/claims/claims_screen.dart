@@ -9,6 +9,7 @@ import '../../core/providers/health_data_provider.dart';
 import '../../models/advocate_models.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
+import '../../core/errors/app_error_handler.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
@@ -124,7 +125,7 @@ class _ClaimsScreenState extends State<ClaimsScreen> {
                         child: _CaseCard(
                           claim: c,
                           onTap: () => Navigator.pushNamed(context, AppRouter.claimDetail, arguments: c),
-                          onDelete: () => _delete(uid, c),
+                          onDelete: () => runGuarded(context, () => _delete(uid, c)),
                         ),
                       ),
                     const SizedBox(height: 8),

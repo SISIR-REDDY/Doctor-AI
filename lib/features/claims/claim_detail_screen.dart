@@ -16,6 +16,7 @@ import '../../models/patient_models.dart';
 import '../../services/advocate/advocate_service.dart';
 import '../../services/ai/ai_error_ui.dart';
 import '../../services/analytics_service.dart';
+import '../../services/review_prompt_service.dart';
 import '../../services/claim_pdf_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
@@ -224,7 +225,10 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
       setState(() => _claim = updated);
       if (status == OutcomeStatus.won || status == OutcomeStatus.partial) {
         HapticFeedback.heavyImpact();
-        _offerShare(amount);
+        await _offerShare(amount);
+        // The best moment to ask for a review is right after a real win,
+        // once the share prompt has been answered — never on top of it.
+        if (mounted) await ReviewPromptService.instance.maybeAskAfterWin(amount: amount);
       }
     } catch (e) {
       if (mounted) AppErrorHandler.showSnackBar(context, e);

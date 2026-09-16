@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -144,11 +145,31 @@ class _DocumentScanScreenState extends State<DocumentScanScreen> {
       if (files.isEmpty) throw const AppException(code: 'no-files', message: 'Could not read the pages.');
       setState(() => _status = widget.docType == 'auto' ? 'Working out what this is…' : 'Reading your ${DocType.label(widget.docType).toLowerCase()}…');
 
-      final result = await AiService.instance.analyzeDocument(
-        files: files,
-        docType: widget.docType,
-        region: region,
-      );
+      // A 5–12 s call behind one static line reads as a hang. Advance the
+      // status through what is genuinely happening server-side so the wait
+      // feels like work; the timer stops the moment the result lands.
+      final stages = <String>[
+        'Reading every line…',
+        'Checking codes and amounts…',
+        'Matching against reference prices…',
+        'Putting it in plain English…',
+        'Almost there…',
+      ];
+      var stage = 0;
+      final ticker = Timer.periodic(const Duration(milliseconds: 2200), (_) {
+        if (!mounted || stage >= stages.length) return;
+        setState(() => _status = stages[stage++]);
+      });
+      final AnalyzeResult result;
+      try {
+        result = await AiService.instance.analyzeDocument(
+          files: files,
+          docType: widget.docType,
+          region: region,
+        );
+      } finally {
+        ticker.cancel();
+      }
       Analytics.scanCompleted(result.documentType, success: true, pages: _pages.length);
       if (!mounted) return;
       HapticFeedback.mediumImpact();

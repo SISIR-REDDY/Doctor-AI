@@ -9,6 +9,7 @@ import '../../models/patient_models.dart';
 import '../../services/chatbot_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/glass.dart';
 import '../../theme/ios_dropdown.dart';
 import '../../theme/ios18_components.dart';
 
@@ -77,7 +78,7 @@ class _SymptomJournalScreenState extends State<SymptomJournalScreen> {
                       }
                       final entries = snap.data ?? [];
                       if (entries.isEmpty) {
-                        return _EmptyState();
+                        return _EmptyState(onAdd: () => _showAddSheet(context, uid));
                       }
                       return ListView.builder(
                         physics: const BouncingScrollPhysics(),
@@ -286,6 +287,9 @@ class _SymptomCard extends StatelessWidget {
 // ── Empty State ───────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _EmptyState({required this.onAdd});
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -298,9 +302,19 @@ class _EmptyState extends StatelessWidget {
           Text('No symptoms logged yet',
               style: AppTheme.headingSmall),
           const SizedBox(height: AppTheme.sm),
-          Text('Track your daily symptoms to get AI trend analysis',
-              style: AppTheme.bodySmall,
-              textAlign: TextAlign.center),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              'Log how you feel in ten seconds. After a few entries Clinix spots patterns and gives you a summary to bring to your doctor.',
+              style: AppTheme.bodySmall.copyWith(height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 22),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: HeroButton(label: 'Log a symptom', icon: CupertinoIcons.add, onTap: onAdd),
+          ),
         ],
       ),
     );

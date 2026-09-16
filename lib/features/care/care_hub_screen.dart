@@ -8,6 +8,7 @@ import '../../core/providers/health_data_provider.dart';
 import '../../models/care_models.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
+import '../../core/errors/app_error_handler.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
@@ -293,7 +294,7 @@ class _TodaySection extends StatelessWidget {
                               (l) => l.medicationId == s.med.id && l.time == s.time,
                               orElse: () => MedicationLog(),
                             ),
-                            onSet: (status) => _set(s.med, s.time, status, logList),
+                            onSet: (status) => runGuarded(context, () => _set(s.med, s.time, status, logList)),
                           ),
                       ],
                     ),

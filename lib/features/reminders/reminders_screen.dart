@@ -7,6 +7,7 @@ import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/notification_service.dart';
+import '../../core/errors/app_error_handler.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/ios18_components.dart';
 import 'add_reminder_screen.dart';
@@ -205,7 +206,7 @@ class _DoseTile extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Skip',
-            onPressed: () => _set('skipped'),
+            onPressed: () => runGuarded(context, () => _set('skipped')),
             icon: Icon(
               skipped ? CupertinoIcons.xmark_circle_fill : CupertinoIcons.xmark_circle,
               color: skipped ? AppTheme.warningColor : AppTheme.textTertiary,
@@ -213,7 +214,7 @@ class _DoseTile extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Taken',
-            onPressed: () => _set('taken'),
+            onPressed: () => runGuarded(context, () => _set('taken')),
             icon: Icon(
               taken
                   ? CupertinoIcons.checkmark_circle_fill
@@ -320,7 +321,7 @@ class _ReminderTile extends StatelessWidget {
         child: const Icon(CupertinoIcons.trash,
             color: AppTheme.dangerColor),
       ),
-      onDismissed: (_) => _delete(),
+      onDismissed: (_) => runGuarded(context, _delete),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => Navigator.push(
@@ -379,7 +380,7 @@ class _ReminderTile extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'Mark done',
-              onPressed: _complete,
+              onPressed: () => runGuarded(context, _complete),
               icon: const Icon(CupertinoIcons.checkmark_circle,
                   color: AppTheme.successColor),
             ),

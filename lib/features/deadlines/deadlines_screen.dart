@@ -9,7 +9,9 @@ import '../../models/advocate_models.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/notification_service.dart';
+import '../../core/errors/app_error_handler.dart';
 import '../../theme/app_theme.dart';
+import '../scan/document_scan_screen.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
 
@@ -65,6 +67,12 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
                           'When you add a denial letter or plan an appeal, Clinix adds the appeal windows here and reminds you before they close.',
                           textAlign: TextAlign.center,
                           style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary, height: 1.4),
+                        ),
+                        const SizedBox(height: 22),
+                        HeroButton(
+                          label: 'Scan a denial letter',
+                          icon: CupertinoIcons.doc_text_viewfinder,
+                          onTap: () => DocumentScanScreen.open(context, trigger: 'deadlines_empty', docType: DocType.denial),
                         ),
                       ],
                     ),
@@ -150,7 +158,7 @@ class _DeadlineCard extends StatelessWidget {
           child: Row(
             children: [
               GestureDetector(
-                onTap: _toggle,
+                onTap: () => runGuarded(context, _toggle),
                 child: Container(
                   width: 30,
                   height: 30,

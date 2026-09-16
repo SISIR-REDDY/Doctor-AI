@@ -13,6 +13,7 @@ import 'core/providers/theme_controller.dart';
 import 'screens/auth/auth_gate_screen.dart';
 import 'screens/force_update_screen.dart';
 import 'services/entitlement_service.dart';
+import 'services/review_prompt_service.dart';
 import 'services/firebase/firebase_bootstrap_service.dart';
 import 'services/notification_service.dart';
 import 'services/push_notification_service.dart';
@@ -48,6 +49,9 @@ Future<void> main() async {
 
       // Subscriptions / Pro entitlement (RevenueCat + Firestore + RC flag).
       await EntitlementService.instance.initialize();
+
+      // Records first-open so the review prompt never fires on day one.
+      await ReviewPromptService.instance.noteAppOpened();
 
       runApp(const ClinixAIApp());
     },

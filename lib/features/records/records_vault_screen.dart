@@ -11,6 +11,7 @@ import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/firebase/storage_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
 import '../scan/document_scan_screen.dart';
 
@@ -161,7 +162,7 @@ class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
               // Quietly retry cloud upload for any local-only records.
               if (all.isNotEmpty) {
                 WidgetsBinding.instance.addPostFrameCallback(
-                    (_) => _resyncPending(uid, all));
+                    (_) => _resyncPending(uid, all).catchError((_) {}));
               }
               var filtered = _filterType == 'All'
                   ? all
@@ -483,6 +484,15 @@ class _EmptyState extends StatelessWidget {
               style: AppTheme.bodyMedium
                   .copyWith(color: AppTheme.textSecondary),
               textAlign: TextAlign.center),
+          const SizedBox(height: 22),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: HeroButton(
+              label: 'Scan a report or record',
+              icon: CupertinoIcons.doc_text_viewfinder,
+              onTap: () => DocumentScanScreen.open(context, trigger: 'records_empty', docType: DocType.record),
+            ),
+          ),
         ],
       ),
     );
