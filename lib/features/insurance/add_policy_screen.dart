@@ -765,7 +765,7 @@ class _HeroBar extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0055E5), Color(0xFF5856D6)],
+          colors: [Color(0xFF007AFF), Color(0xFF007AFF)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1003,7 +1003,7 @@ class _GradientSaveButton extends StatelessWidget {
               ? LinearGradient(
                   colors: [AppTheme.dividerColor, AppTheme.dividerColor])
               : const LinearGradient(
-                  colors: [Color(0xFF0055E5), Color(0xFF5856D6)],
+                  colors: [Color(0xFF007AFF), Color(0xFF007AFF)],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),

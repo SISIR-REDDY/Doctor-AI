@@ -378,7 +378,7 @@ class _Bubble extends StatelessWidget {
               gradient: mine ? AppTheme.primaryGradient : null,
               color: mine
                   ? null
-                  : (dark ? const Color(0xFF2A2D36) : const Color(0xFFF1F4FA)),
+                  : (dark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7)),
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(18),
                 topRight: const Radius.circular(18),
@@ -533,7 +533,7 @@ class _VaultTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF2A2D36) : const Color(0xFFF1F4FA),
+        color: dark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(

@@ -156,7 +156,7 @@ class _ScreenHeader extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0055E5), Color(0xFF5856D6), Color(0xFFAF52DE)],
+          colors: [Color(0xFF007AFF), Color(0xFF007AFF), Color(0xFF007AFF)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -695,7 +695,7 @@ class _AddPolicyFab extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 40),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF0055E5), Color(0xFF5856D6)],
+            colors: [Color(0xFF007AFF), Color(0xFF007AFF)],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
@@ -740,7 +740,7 @@ class _EmptyState extends StatelessWidget {
           width: 80, height: 80,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF0055E5), Color(0xFF5856D6)],
+              colors: [Color(0xFF007AFF), Color(0xFF007AFF)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),

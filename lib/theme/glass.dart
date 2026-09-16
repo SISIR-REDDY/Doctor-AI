@@ -224,10 +224,11 @@ class HeroButton extends StatelessWidget {
             color: color,
             borderRadius: BorderRadius.circular(height / 2),
             boxShadow: [
+              // Faint lift only — a filled iOS button does not glow.
               BoxShadow(
-                color: (color ?? AppTheme.primaryColor).withValues(alpha: 0.30),
-                blurRadius: 22,
-                offset: const Offset(0, 10),
+                color: (color ?? AppTheme.primaryColor).withValues(alpha: 0.16),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
               ),
             ],
           ),

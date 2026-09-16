@@ -103,7 +103,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
             end: Alignment.bottomCenter,
             colors: AppTheme.isDark
                 ? const [Color(0xFF17122B), Color(0xFF0B0B0F)]
-                : const [Color(0xFFEDE7FF), Color(0xFFF4F6FB), Color(0xFFF0F4FB)],
+                : const [Color(0xFFFFFFFF), Color(0xFFFFFFFF), Color(0xFFFFFFFF)],
           ),
         ),
         child: SafeArea(

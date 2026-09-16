@@ -56,22 +56,24 @@ class AppTheme {
   static const Color textOnPrimary = Color(0xFFFFFFFF);
 
   // ── Neutral palette: explicit light + dark values ─────────────────────────
-  static const Color _lightBackground = Color(0xFFF0F4FB);
+  // Apple system palette (HIG). Pure white pages, systemGroupedBackground
+  // for muted surfaces, systemGray5/4 for separators — no blue cast anywhere.
+  static const Color _lightBackground = Color(0xFFFFFFFF);
   static const Color _lightSurface = Color(0xFFFFFFFF);
-  static const Color _lightSurfaceMuted = Color(0xFFE3EEFF);
-  static const Color _lightSurfaceVariant = Color(0xFFE2E9F6);
-  static const Color _lightDivider = Color(0xFFE8EDF8);
-  static const Color _lightBorder = Color(0xFFEBEFF8);
-  static const Color _lightTextPrimary = Color(0xFF1C1C1E);
-  static const Color _lightTextSecondary = Color(0xFF636366);
+  static const Color _lightSurfaceMuted = Color(0xFFF2F2F7);
+  static const Color _lightSurfaceVariant = Color(0xFFE5E5EA);
+  static const Color _lightDivider = Color(0xFFE5E5EA);
+  static const Color _lightBorder = Color(0xFFE5E5EA);
+  static const Color _lightTextPrimary = Color(0xFF000000);
+  static const Color _lightTextSecondary = Color(0xFF6E6E73); // secondaryLabel on white
   static const Color _lightTextTertiary = Color(0xFF8E8E93);
 
-  static const Color _darkBackground = Color(0xFF0B0B0F);
-  static const Color _darkSurface = Color(0xFF1C1C22);
-  static const Color _darkSurfaceMuted = Color(0xFF2A2A33);
-  static const Color _darkSurfaceVariant = Color(0xFF26262E);
-  static const Color _darkDivider = Color(0xFF2C2C36);
-  static const Color _darkBorder = Color(0xFF33333D);
+  static const Color _darkBackground = Color(0xFF000000);
+  static const Color _darkSurface = Color(0xFF1C1C1E);
+  static const Color _darkSurfaceMuted = Color(0xFF2C2C2E);
+  static const Color _darkSurfaceVariant = Color(0xFF3A3A3C);
+  static const Color _darkDivider = Color(0xFF38383A);
+  static const Color _darkBorder = Color(0xFF38383A);
   static const Color _darkTextPrimary = Color(0xFFF2F2F7);
   static const Color _darkTextSecondary = Color(0xFFAEAEB6);
   static const Color _darkTextTertiary = Color(0xFF8A8A93);
@@ -95,28 +97,30 @@ class AppTheme {
 
   /// Hairline border tuned for frosted/glass surfaces in each mode.
   static Color get glassBorder =>
-      _isDark ? const Color(0x1FFFFFFF) : const Color(0xFFE8EDF8);
+      _isDark ? const Color(0x1FFFFFFF) : const Color(0xFFE5E5EA);
 
   static LinearGradient get screenGradient => _isDark
       ? const LinearGradient(
-          colors: [Color(0xFF15151C), Color(0xFF101015), Color(0xFF0B0B0F)],
+          colors: [Color(0xFF000000), Color(0xFF000000), Color(0xFF000000)],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         )
       : const LinearGradient(
-          colors: [Color(0xFFDCEBFF), Color(0xFFEBF2FF), Color(0xFFF0F4FB)],
+          colors: [Color(0xFFFFFFFF), Color(0xFFFFFFFF), Color(0xFFFFFFFF)],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         );
 
+  // Flat systemBlue. Kept as a gradient type so every caller compiles, but
+  // both stops are the same colour: iOS buttons are not two-tone.
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF0055E5), Color(0xFF00B0F0)],
+    colors: [Color(0xFF007AFF), Color(0xFF007AFF)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient heroGradient = LinearGradient(
-    colors: [Color(0xFF0055E5), Color(0xFF5048D4), Color(0xFF00B0F0)],
+    colors: [Color(0xFF007AFF), Color(0xFF007AFF), Color(0xFF007AFF)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -128,7 +132,7 @@ class AppTheme {
   );
 
   static const LinearGradient fabGradient = LinearGradient(
-    colors: [Color(0xFF0055E5), Color(0xFF00C8C2)],
+    colors: [Color(0xFF007AFF), Color(0xFF007AFF)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
