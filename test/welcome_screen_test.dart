@@ -51,7 +51,7 @@ void main() {
         // Let the entrance settle, then confirm the first slide is complete.
         await tester.pump(const Duration(seconds: 4));
         expectNoLayoutError(tester, reason: 'settled at $size');
-        expect(find.textContaining('We find the errors'), findsOneWidget);
+        expect(find.textContaining('Clinix sorts it.'), findsOneWidget);
       });
     }
   }
@@ -67,6 +67,7 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
 
     for (final expected in const [
+      'We find the errors.',
       'That’s not the end.',
       'in plain English.',
       'Any hour.',

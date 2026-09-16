@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
-import '../../theme/liquid_glass.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
 import '../../theme/motion.dart';
@@ -52,15 +51,33 @@ class SceneFrame extends StatelessWidget {
     final parallax = offset * -28;
     final fade = (1 - offset.abs().clamp(0.0, 1.0) * 0.75).clamp(0.0, 1.0);
 
-    final card = LiquidGlass(
+    // On a white ground there is nothing for glass to refract, so the card is
+    // a plain iOS surface: white, hairline border, one soft shadow. The
+    // accented (payoff) card is the single solid-colour surface in the flow.
+    final dark = AppTheme.isDark;
+    final card = Container(
       padding: padding,
-      radius: DS.rXl,
-      blur: 26,
-      // The accented card needs a near-opaque fill: white text over a
-      // translucent panel loses contrast against a light backdrop.
-      tint: accented ? const Color(0xFF0A57C2) : null,
-      opacity: accented ? 1.55 : 1,
-      elevation: accented ? 1.15 : 1,
+      decoration: BoxDecoration(
+        color: accented
+            ? const Color(0xFF0A57C2)
+            : (dark ? const Color(0xFF1C1C1E) : Colors.white),
+        borderRadius: DS.squircle(DS.rXl),
+        border: Border.all(
+          color: accented
+              ? Colors.white.withValues(alpha: 0.18)
+              : (dark ? const Color(0xFF3A3A3C) : const Color(0xFFE5E5EA)),
+          width: 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (accented ? const Color(0xFF0A57C2) : const Color(0xFF16233F))
+                .withValues(alpha: dark ? 0.0 : (accented ? 0.28 : 0.10)),
+            blurRadius: 30,
+            offset: const Offset(0, 12),
+            spreadRadius: -6,
+          ),
+        ],
+      ),
       child: child,
     );
 

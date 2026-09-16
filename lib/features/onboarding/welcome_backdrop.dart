@@ -3,143 +3,47 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 
-/// Living backdrop for the welcome flow.
+/// Backdrop for the welcome flow: clean white (or true black), with a faint
+/// accent wash at the top that follows the current slide's colour.
 ///
-/// Two large colour orbs drift behind a heavy blur and shift hue as the user
-/// pages through, so the background belongs to the current slide instead of
-/// sitting behind it as a flat gradient. Everything is painted — no images,
-/// no per-frame layout — so it stays cheap on older devices.
-class WelcomeBackdrop extends StatefulWidget {
+/// Deliberately restrained. The content — the cards and the copy — carries
+/// the screen; the background only hints which chapter you are in.
+class WelcomeBackdrop extends StatelessWidget {
   /// Continuous page position from the PageView.
   final double scroll;
 
-  /// Accent per page; the backdrop interpolates between neighbours.
+  /// Accent per page; the wash interpolates between neighbours.
   final List<Color> accents;
 
   const WelcomeBackdrop({super.key, required this.scroll, required this.accents});
 
-  @override
-  State<WelcomeBackdrop> createState() => _WelcomeBackdropState();
-}
-
-class _WelcomeBackdropState extends State<WelcomeBackdrop>
-    with SingleTickerProviderStateMixin {
-  // Slow, unsynced drift so the orbs never appear to loop in step.
-  late final AnimationController _drift =
-      AnimationController(vsync: this, duration: const Duration(seconds: 22))
-        ..repeat();
-
-  @override
-  void dispose() {
-    _drift.dispose();
-    super.dispose();
-  }
-
   Color _accentAt(double p) {
-    final list = widget.accents;
-    if (list.isEmpty) return AppTheme.primaryColor;
-    final clamped = p.clamp(0.0, (list.length - 1).toDouble());
+    if (accents.isEmpty) return AppTheme.primaryColor;
+    final clamped = p.clamp(0.0, (accents.length - 1).toDouble());
     final i = clamped.floor();
-    final j = math.min(i + 1, list.length - 1);
-    return Color.lerp(list[i], list[j], clamped - i) ?? list[i];
+    final j = math.min(i + 1, accents.length - 1);
+    return Color.lerp(accents[i], accents[j], clamped - i) ?? accents[i];
   }
 
   @override
   Widget build(BuildContext context) {
     final dark = AppTheme.isDark;
-    final accent = _accentAt(widget.scroll);
+    final accent = _accentAt(scroll);
     return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _drift,
-        builder: (_, __) {
-          final t = _drift.value * math.pi * 2;
-          return Stack(
-            children: [
-              // Base wash — keeps contrast predictable behind the orbs.
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: dark
-                          ? const [Color(0xFF0A1020), Color(0xFF07070B)]
-                          : const [Color(0xFFDCE9FF), Color(0xFFEFF4FE)],
-                    ),
-                  ),
-                ),
-              ),
-              _Orb(
-                alignment: Alignment(
-                  -0.75 + math.sin(t) * 0.22 - (widget.scroll * 0.35),
-                  -0.68 + math.cos(t * 0.8) * 0.16,
-                ),
-                size: 0.95,
-                color: accent.withValues(alpha: dark ? 0.55 : 0.52),
-              ),
-              _Orb(
-                alignment: Alignment(
-                  0.85 + math.cos(t * 1.15) * 0.2 - (widget.scroll * 0.5),
-                  0.12 + math.sin(t * 0.9) * 0.2,
-                ),
-                size: 0.78,
-                color: Color.lerp(accent, AppTheme.secondaryColor, 0.55)!
-                    .withValues(alpha: dark ? 0.42 : 0.38),
-              ),
-              // Settles the colour so text keeps its contrast ratio.
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      // Weighted to the lower half, where the copy sits, so
-                      // the art keeps its colour while text keeps contrast.
-                      stops: const [0, 0.46, 1],
-                      colors: dark
-                          ? [
-                              Colors.transparent,
-                              const Color(0xFF07070B).withValues(alpha: 0.35),
-                              const Color(0xFF07070B).withValues(alpha: 0.80),
-                            ]
-                          : [
-                              Colors.transparent,
-                              Colors.white.withValues(alpha: 0.42),
-                              Colors.white.withValues(alpha: 0.86),
-                            ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _Orb extends StatelessWidget {
-  final Alignment alignment;
-  final double size;
-  final Color color;
-
-  const _Orb({required this.alignment, required this.size, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: alignment,
-      child: FractionallySizedBox(
-        widthFactor: size,
-        heightFactor: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(color: dark ? Colors.black : Colors.white),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
             gradient: RadialGradient(
-              colors: [color, color.withValues(alpha: 0)],
+              center: const Alignment(0, -1.15),
+              radius: 1.15,
+              colors: [
+                accent.withValues(alpha: dark ? 0.22 : 0.10),
+                accent.withValues(alpha: 0),
+              ],
             ),
           ),
+          child: const SizedBox.expand(),
         ),
       ),
     );

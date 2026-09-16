@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:docpilot/features/onboarding/welcome_scenes.dart';
+import 'package:docpilot/features/onboarding/welcome_overview.dart';
 import 'package:docpilot/features/onboarding/welcome_scenes_care.dart';
 
 /// The welcome scenes are the first thing a user sees, so a layout overflow
@@ -43,6 +44,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
 
         for (final w in const [
+          OverviewScene(offset: 0, active: true),
           BillScene(offset: 0, active: true),
           DenialScene(offset: 0, active: true),
           ReportScene(offset: 0, active: true),

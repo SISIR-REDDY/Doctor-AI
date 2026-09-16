@@ -14,11 +14,11 @@ import '../../services/firebase/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
-import '../../theme/liquid_glass.dart';
 import '../../theme/motion.dart';
 import '../legal/legal_screens.dart';
 import 'welcome_backdrop.dart';
 import 'welcome_scenes.dart';
+import 'welcome_overview.dart';
 import 'welcome_scenes_care.dart';
 
 /// First-run experience: three value slides, then consent + sign-in.
@@ -45,12 +45,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   bool _loadingGoogle = false;
   bool _loadingApple = false;
 
-  static const _slideCount = 6;
+  static const _slideCount = 7;
   bool get _onSignIn => _index == _slideCount;
 
   /// Backdrop accent per page. The sign-in step keeps the last slide's hue so
   /// the transition into it feels continuous rather than like a new screen.
   static const _accents = <Color>[
+    Color(0xFF007AFF), // overview
     Color(0xFF007AFF), // bills
     Color(0xFF5856D6), // denials
     Color(0xFF32ADE6), // reports
@@ -65,6 +66,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   /// tools, then the payoff. Every statistic is sourced in the launch
   /// checklist; keep them defensible.
   static const _slides = <_SlideCopy>[
+    _SlideCopy(
+      eyebrow: 'Bills · appeals · results · meds · records · family',
+      title: 'Healthcare is a mess.\nClinix sorts it.',
+      body:
+          'One private place for every bill, letter, report and prescription — read for you, explained in plain English, and turned into the next step.',
+    ),
     _SlideCopy(
       eyebrow: '8 in 10 medical bills contain an error',
       title: 'Photograph it.\nWe find the errors.',
@@ -203,11 +210,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         active: _index == i,
                         copy: _slides[i],
                         scene: switch (i) {
-                          0 => (o, a) => BillScene(offset: o, active: a),
-                          1 => (o, a) => DenialScene(offset: o, active: a),
-                          2 => (o, a) => ReportScene(offset: o, active: a),
-                          3 => (o, a) => AssistantScene(offset: o, active: a),
-                          4 => (o, a) => VaultScene(offset: o, active: a),
+                          0 => (o, a) => OverviewScene(offset: o, active: a),
+                          1 => (o, a) => BillScene(offset: o, active: a),
+                          2 => (o, a) => DenialScene(offset: o, active: a),
+                          3 => (o, a) => ReportScene(offset: o, active: a),
+                          4 => (o, a) => AssistantScene(offset: o, active: a),
+                          5 => (o, a) => VaultScene(offset: o, active: a),
                           _ => (o, a) => MoneyScene(offset: o, active: a),
                         },
                       );
@@ -510,18 +518,22 @@ class _Eyebrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LiquidGlass(
-      radius: 30,
-      blur: 14,
-      elevation: 0.45,
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+    // iOS tinted capsule: accent text on a light accent fill.
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: AppTheme.isDark ? 0.22 : 0.10),
+        borderRadius: BorderRadius.circular(30),
+      ),
       child: Text(
         text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.1,
-          color: AppTheme.textSecondary,
+          color: AppTheme.primaryColor,
         ),
       ),
     );
