@@ -212,6 +212,24 @@ export const recordSchema: Schema = {
     title: str('Short descriptive title, e.g. "Complete Blood Count — 12 Mar 2026".'),
     summary: str('Patient-friendly Markdown summary. Explain what was tested/found and what it generally means. No diagnosis; recommend discussing with the treating clinician.'),
     keyValues: str('Every notable test name, value, unit and reference range — one per line; medication names/doses for a prescription; vaccine names for vaccination.'),
+    labMarkers: {
+      type: Type.ARRAY,
+      description:
+        'For lab reports only: one entry per measured marker, exactly as printed. Leave empty for other record types.',
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: str('Marker name as printed, e.g. "LDL Cholesterol", "HbA1c".'),
+          value: num('Numeric result. Omit the entry if the result is not numeric.'),
+          unit: str('Unit as printed, e.g. mg/dL, %, ng/mL. Empty if none.'),
+          refLow: num('Lower bound of the printed reference range, or 0 when the range is "< X".'),
+          refHigh: num('Upper bound of the printed reference range, or 0 when the range is "> X" or absent.'),
+          refText: str('Reference range exactly as printed, e.g. "< 100", "30 – 100", "3.5–5.1".'),
+          flag: { type: Type.STRING, enum: ['low', 'normal', 'high', 'abnormal', 'unknown'], description: 'The lab\'s own flag if printed (H/L/A); otherwise derive from value vs range; "unknown" if no range.' },
+        },
+        required: ['name', 'value', 'unit', 'refLow', 'refHigh', 'refText', 'flag'],
+      },
+    },
     abnormalFindings: strList('Values flagged outside reference range, verbatim.'),
     followUps: strList('Follow-up instructions printed on the document.'),
     confidence: num(),

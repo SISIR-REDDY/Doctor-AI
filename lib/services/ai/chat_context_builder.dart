@@ -9,7 +9,7 @@ class ChatContextBuilder {
   final FirestoreService db;
   ChatContextBuilder(this.db);
 
-  static const int _maxChars = 10000;
+  static const int _maxChars = 14000;
 
   Future<String> build(String uid) async {
     final buf = StringBuffer();
@@ -84,6 +84,40 @@ class ChatContextBuilder {
         buf.writeln('RECENT DOCUMENTS:');
         for (final d in docs.take(6)) {
           buf.writeln('- ${d.docType}: ${d.title} — ${d.summary}');
+        }
+      }
+    } catch (_) {}
+
+    // Lab history as a per-marker series, newest first, so the assistant can
+    // compare today's reading with earlier ones by date rather than guessing.
+    try {
+      final records = await db.watchMedicalRecords(uid).first;
+      final labs = records.where((r) => r.labMarkers.isNotEmpty).toList()
+        ..sort((a, b) => b.recordDate.compareTo(a.recordDate));
+      if (labs.isNotEmpty) {
+        buf.writeln('LAB HISTORY (newest first; status per the lab’s own range):');
+        final series = <String, List<String>>{};
+        final label = <String, String>{};
+        for (final r in labs.take(8)) {
+          final d = r.recordDate.toIso8601String().split('T').first;
+          for (final m in r.labMarkers) {
+            label.putIfAbsent(m.key, () => m.name);
+            (series[m.key] ??= []).add('${m.value}${m.unit.isEmpty ? '' : ' ${m.unit}'} on $d [${m.status.name}${m.refText.isEmpty ? '' : ', ref ${m.refText}'}]');
+          }
+        }
+        for (final e in series.entries.take(40)) {
+          buf.writeln('- ${label[e.key]}: ${e.value.take(4).join(' ← ')}');
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final meds = await db.watchMedications(uid).first;
+      final active = meds.where((m) => m.isActive).take(12);
+      if (active.isNotEmpty) {
+        buf.writeln('ACTIVE MEDICATIONS:');
+        for (final m in active) {
+          buf.writeln('- ${m.name} ${m.dosage} ${m.frequency}${m.purpose.isEmpty ? '' : ' for ${m.purpose}'}');
         }
       }
     } catch (_) {}

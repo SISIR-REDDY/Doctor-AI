@@ -2,12 +2,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/errors/app_error_handler.dart';
+import '../../core/providers/health_data_provider.dart';
 import '../../core/widgets/ai_summary_view.dart';
+import '../../models/care_models.dart';
 import '../../models/patient_models.dart';
 import '../../services/claim_pdf_service.dart';
+import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import 'lab_results_view.dart';
 
 class RecordDetailScreen extends StatelessWidget {
   final MedicalRecord record;
@@ -69,6 +74,12 @@ class RecordDetailScreen extends StatelessWidget {
                     record.hospitalName),
             ]),
             const SizedBox(height: AppTheme.lg),
+            // Structured results sit above the prose: the numbers are what
+            // the user opened the report for; the summary explains them.
+            if (record.labMarkers.isNotEmpty) ...[
+              _LabResultsWithHistory(record: record),
+              const SizedBox(height: AppTheme.lg),
+            ],
             if (record.aiSummary.isNotEmpty)
               AiSummaryView(
                 content: record.aiSummary,
@@ -264,6 +275,25 @@ class _Row extends StatelessWidget {
           Expanded(child: Text(value, style: AppTheme.labelLarge)),
         ],
       ),
+    );
+  }
+}
+
+/// Loads the user's other lab records so each marker can show its trend.
+class _LabResultsWithHistory extends StatelessWidget {
+  final MedicalRecord record;
+  const _LabResultsWithHistory({required this.record});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = context.read<HealthDataProvider>().uid;
+    if (uid == null) return LabResultsView(markers: record.labMarkers);
+    return StreamBuilder<List<MedicalRecord>>(
+      stream: FirestoreService().watchMedicalRecords(uid),
+      builder: (context, snap) {
+        final priors = priorReadings(record, snap.data ?? const []);
+        return LabResultsView(markers: record.labMarkers, priors: priors);
+      },
     );
   }
 }

@@ -9,6 +9,7 @@ import '../../core/errors/app_error_handler.dart';
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
 import '../../models/advocate_models.dart';
+import '../../models/care_models.dart';
 import '../../models/patient_models.dart';
 import '../../services/ai/ai_service.dart';
 import '../../services/analytics_service.dart';
@@ -135,9 +136,9 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
         case DocType.policy:
           await _savePolicy(uid, provider.profile);
         case DocType.record:
-          await _saveRecord(uid);
+          await _saveRecord(uid, provider.profile);
         default:
-          await _saveRecord(uid);
+          await _saveRecord(uid, provider.profile);
       }
     } catch (e) {
       if (mounted) AppErrorHandler.showSnackBar(context, e);
@@ -346,7 +347,7 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
     nav.push(CupertinoPageRoute(builder: (_) => AddPolicyScreen(existingPolicy: policy)));
   }
 
-  Future<void> _saveRecord(String uid) async {
+  Future<void> _saveRecord(String uid, PatientProfile? profile) async {
     final id = const Uuid().v4();
     final saved = await _storage.saveDocumentImages(filePaths: widget.pagePaths, patientId: uid, recordId: id);
     final local = saved.localPaths.isNotEmpty ? saved.localPaths : widget.pagePaths;
@@ -373,6 +374,8 @@ class _DocumentReviewScreenState extends State<DocumentReviewScreen> {
       doctorName: '',
       hospitalName: _party.text.trim(),
       recordDate: DateTime.tryParse(_str('date')),
+      labMarkers: LabMarker.listFrom(_d['labMarkers']),
+      patientName: _familyPatientName(profile),
     );
     await _db.saveMedicalRecord(uid, record);
     Analytics.log('record_added', {'type': record.recordType});

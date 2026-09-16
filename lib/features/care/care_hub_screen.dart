@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/navigation/app_router.dart';
 import '../../core/providers/health_data_provider.dart';
+import '../../models/care_models.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
@@ -27,6 +28,7 @@ class _CareHubScreenState extends State<CareHubScreen> {
   String? _dateKey;
   Stream<List<Medication>>? _meds;
   Stream<List<MedicationLog>>? _logs;
+  Stream<List<MedicationLog>>? _recentLogs;
   Stream<List<HealthReminder>>? _reminders;
 
   void _ensure(String? uid) {
@@ -36,6 +38,10 @@ class _CareHubScreenState extends State<CareHubScreen> {
     _dateKey = today;
     _meds = _db.watchMedications(uid);
     _logs = _db.watchMedicationLogs(uid, today);
+    // 30-day window for the streak and adherence rate. A streak longer than
+    // that still shows correctly: only the rate is bounded by the window.
+    _recentLogs = _db.watchRecentMedicationLogs(
+        uid, DateFormat('yyyy-MM-dd').format(DateTime.now().subtract(const Duration(days: 400))));
     _reminders = _db.watchReminders(uid);
   }
 
@@ -52,6 +58,7 @@ class _CareHubScreenState extends State<CareHubScreen> {
       automaticallyImplyLeading: false,
       contentPadding: const EdgeInsets.fromLTRB(DS.gutter, 4, DS.gutter, 120),
       children: [
+        if (uid != null) _AdherenceCard(meds: _meds, recentLogs: _recentLogs),
         if (uid != null) _TodaySection(uid: uid, db: _db, dateKey: _dateKey!, meds: _meds, logs: _logs),
         if (uid != null) _UpcomingSection(reminders: _reminders),
         const DSSectionLabel('TOOLS'),
@@ -114,6 +121,109 @@ class _CareHubScreenState extends State<CareHubScreen> {
     if (cond > 0) parts.add('$cond conditions');
     if (p.bloodGroup.isNotEmpty && p.bloodGroup != 'Unknown') parts.add(p.bloodGroup);
     return parts.isEmpty ? 'Add allergies, conditions, emergency contact' : parts.join(' · ');
+  }
+}
+
+// ── Adherence ─────────────────────────────────────────────────────────────────
+
+/// Streak + 30-day rate. Shown only once there is a medication with reminder
+/// times, so a new user is not greeted with "0-day streak".
+class _AdherenceCard extends StatelessWidget {
+  final Stream<List<Medication>>? meds;
+  final Stream<List<MedicationLog>>? recentLogs;
+  const _AdherenceCard({required this.meds, required this.recentLogs});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Medication>>(
+      stream: meds,
+      builder: (context, medSnap) {
+        final medList = medSnap.data ?? const <Medication>[];
+        if (!medList.any((m) => m.isActive && m.reminderTimes.isNotEmpty)) {
+          return const SizedBox.shrink();
+        }
+        return StreamBuilder<List<MedicationLog>>(
+          stream: recentLogs,
+          builder: (context, logSnap) {
+            final a = Adherence.compute(
+              logs: logSnap.data ?? const [],
+              medications: medList,
+              today: DateTime.now(),
+            );
+            final rate = a.rate;
+            final streakColor = a.streakDays >= 7
+                ? AppTheme.successColor
+                : a.streakDays > 0
+                    ? AppTheme.primaryColor
+                    : AppTheme.textTertiary;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 22),
+              child: InsetCard(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                child: Row(
+                  children: [
+                    IconBadge(
+                      a.streakDays > 0 ? CupertinoIcons.flame_fill : CupertinoIcons.flame,
+                      color: streakColor,
+                      size: 40,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            a.streakDays == 0
+                                ? 'Start a streak today'
+                                : '${a.streakDays}-day streak',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                                color: AppTheme.textPrimary),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            rate == null
+                                ? 'Every scheduled dose taken, day after day.'
+                                : '${(rate * 100).round()}% of doses taken in the last 30 days',
+                            style: TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (rate != null) ...[
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              value: rate,
+                              strokeWidth: 5,
+                              strokeCap: StrokeCap.round,
+                              backgroundColor: AppTheme.textTertiary.withValues(alpha: 0.18),
+                              color: rate >= 0.8 ? AppTheme.successColor : AppTheme.warningColor,
+                            ),
+                            Text('${(rate * 100).round()}',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.textPrimary)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }
 

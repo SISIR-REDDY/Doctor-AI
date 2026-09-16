@@ -2,6 +2,7 @@
 // All domain models for the patient-facing Clinix AI app.
 
 import 'advocate_models.dart';
+import 'care_models.dart';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -589,6 +590,13 @@ class MedicalRecord {
   final DateTime recordDate;
   final DateTime uploadedAt;
 
+  /// Structured markers for lab reports; empty for every other record type.
+  /// Drives the range bars, status colours and cross-report trends.
+  final List<LabMarker> labMarkers;
+
+  /// Which family member this record belongs to; empty = the account holder.
+  final String patientName;
+
   MedicalRecord({
     this.id = '',
     this.userId = '',
@@ -606,8 +614,14 @@ class MedicalRecord {
     this.hospitalName = '',
     DateTime? recordDate,
     DateTime? uploadedAt,
+    this.labMarkers = const <LabMarker>[],
+    this.patientName = '',
   })  : recordDate = recordDate ?? DateTime.now(),
         uploadedAt = uploadedAt ?? DateTime.now();
+
+  bool get isLab => recordType == 'lab' || labMarkers.isNotEmpty;
+  int get abnormalCount =>
+      labMarkers.where((m) => m.status != LabStatus.normal && m.status != LabStatus.unknown).length;
 
   /// All displayable cloud URLs: [imageUrls] when non-empty, else [imageUrl].
   List<String> get allImageUrls =>
@@ -630,6 +644,8 @@ class MedicalRecord {
     String? hospitalName,
     DateTime? recordDate,
     DateTime? uploadedAt,
+    List<LabMarker>? labMarkers,
+    String? patientName,
   }) =>
       MedicalRecord(
         id: id ?? this.id,
@@ -648,6 +664,8 @@ class MedicalRecord {
         hospitalName: hospitalName ?? this.hospitalName,
         recordDate: recordDate ?? this.recordDate,
         uploadedAt: uploadedAt ?? this.uploadedAt,
+        labMarkers: labMarkers ?? this.labMarkers,
+        patientName: patientName ?? this.patientName,
       );
 
   Map<String, dynamic> toMap() => {
@@ -655,6 +673,8 @@ class MedicalRecord {
         'userId': userId,
         'title': title,
         'recordType': recordType,
+        'labMarkers': labMarkers.map((m) => m.toMap()).toList(),
+        'patientName': patientName,
         'imagePath': imagePath,
         'imageUrl': imageUrl,
         'imageUrls': imageUrls,
@@ -686,6 +706,8 @@ class MedicalRecord {
         hospitalName: (map['hospitalName'] ?? '').toString(),
         recordDate: _toDateTime(map['recordDate']),
         uploadedAt: _toDateTime(map['uploadedAt']),
+        labMarkers: LabMarker.listFrom(map['labMarkers']),
+        patientName: (map['patientName'] ?? '').toString(),
       );
 }
 

@@ -370,6 +370,37 @@ class _RecordCard extends StatelessWidget {
                             .format(record.uploadedAt),
                         style: AppTheme.bodySmall.copyWith(fontSize: 11),
                       ),
+                      // Lab reports say up front whether anything is flagged.
+                      if (record.abnormalCount > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warningColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '${record.abnormalCount} flagged',
+                            style: TextStyle(
+                                color: AppTheme.warningColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                      if (record.patientName.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            record.patientName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.bodySmall.copyWith(
+                                fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
                       if (!record.isSynced &&
                           record.localImagePaths.isNotEmpty) ...[
                         const SizedBox(width: 8),
