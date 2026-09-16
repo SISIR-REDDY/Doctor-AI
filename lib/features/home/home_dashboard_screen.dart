@@ -78,7 +78,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         body: IndexedStack(
           index: _navIndex,
           children: [
-            _HomeTab(onOpenCases: () => _onNav(1), onOpenCare: () => _onNav(3)),
+            _HomeTab(onOpenCases: () => _onNav(1), onOpenRecords: () => _onNav(2), onOpenCare: () => _onNav(3)),
             _underTabBar(context, ClaimsScreen(embedded: true)),
             _underTabBar(context, RecordsVaultScreen()),
             _underTabBar(context, CareHubScreen()),
@@ -105,8 +105,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
 class _HomeTab extends StatefulWidget {
   final VoidCallback onOpenCases;
+  final VoidCallback onOpenRecords;
   final VoidCallback onOpenCare;
-  const _HomeTab({required this.onOpenCases, required this.onOpenCare});
+  const _HomeTab({required this.onOpenCases, required this.onOpenRecords, required this.onOpenCare});
 
   @override
   State<_HomeTab> createState() => _HomeTabState();
@@ -119,10 +120,12 @@ class _HomeTabState extends State<_HomeTab> {
   Stream<List<CaseDeadline>>? _deadlines;
   Stream<List<Medication>>? _meds;
   Stream<List<HealthReminder>>? _reminders;
+  Stream<List<MedicalRecord>>? _records;
 
   void _ensureStreams(String? uid) {
     if (uid == null || uid == _uid) return;
     _uid = uid;
+    _records = _db.watchMedicalRecords(uid);
     _claims = _db.watchClaims(uid);
     _deadlines = _db.watchDeadlines(uid);
     _meds = _db.watchMedications(uid);
@@ -177,6 +180,16 @@ class _HomeTabState extends State<_HomeTab> {
                         child: _ScanActions(),
                       ),
                     ),
+                    SliverToBoxAdapter(
+                      child: SlideUpAnimation(
+                        delay: const Duration(milliseconds: 120),
+                        child: _Toolkit(
+                          onOpenCases: widget.onOpenCases,
+                          onOpenRecords: widget.onOpenRecords,
+                          onOpenCare: widget.onOpenCare,
+                        ),
+                      ),
+                    ),
                     if (deadlines.isNotEmpty || claims.any((c) => !c.isClosed))
                       SliverToBoxAdapter(
                         child: SlideUpAnimation(
@@ -206,6 +219,12 @@ class _HomeTabState extends State<_HomeTab> {
                           ),
                         ),
                       ),
+                    SliverToBoxAdapter(
+                      child: SlideUpAnimation(
+                        delay: const Duration(milliseconds: 215),
+                        child: _RecentRecords(records: _records, onSeeAll: widget.onOpenRecords),
+                      ),
+                    ),
                     SliverToBoxAdapter(
                       child: SlideUpAnimation(
                         delay: const Duration(milliseconds: 240),
@@ -457,95 +476,221 @@ class _ScanActions extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      child: HeroButton(
+        label: 'Scan a bill, report or letter',
+        icon: CupertinoIcons.camera_viewfinder,
+        onTap: () => DocumentScanScreen.open(context, trigger: 'home'),
+      ),
+    );
+  }
+}
+
+// ── Toolkit ───────────────────────────────────────────────────────────────────
+
+/// Every feature, always visible, each a real entry point. This is the
+/// answer to "what can this app do?" on a fresh account, where the money
+/// card reads $0 and the case list is empty.
+class _Toolkit extends StatelessWidget {
+  final VoidCallback onOpenCases;
+  final VoidCallback onOpenRecords;
+  final VoidCallback onOpenCare;
+  const _Toolkit({required this.onOpenCases, required this.onOpenRecords, required this.onOpenCare});
+
+  @override
+  Widget build(BuildContext context) {
+    void go(String route) => Navigator.pushNamed(context, route);
+    final tools = <_Tool>[
+      _Tool(CupertinoIcons.doc_text_viewfinder, const Color(0xFF007AFF), 'Bill audit',
+          'Find overcharges', () => DocumentScanScreen.open(context, trigger: 'toolkit_bill')),
+      _Tool(CupertinoIcons.envelope_open_fill, const Color(0xFF5856D6), 'Appeals',
+          'Fight a denial', onOpenCases),
+      _Tool(CupertinoIcons.lab_flask_solid, const Color(0xFF32ADE6), 'Lab results',
+          'Decoded, with trends', onOpenRecords),
+      _Tool(CupertinoIcons.waveform, const Color(0xFF34C759), 'Assistant',
+          'Ask about your health', () => go(AppRouter.aiChat)),
+      _Tool(CupertinoIcons.capsule_fill, const Color(0xFFAF52DE), 'Medications',
+          'Reminders & streaks', () => go(AppRouter.medications)),
+      _Tool(CupertinoIcons.shield_lefthalf_fill, const Color(0xFFFF9500), 'Coverage',
+          'Deductible & policies', () => go(AppRouter.insurance)),
+      _Tool(CupertinoIcons.calendar_badge_plus, const Color(0xFFFF2D55), 'Deadlines',
+          'Appeal & dispute dates', () => go(AppRouter.deadlines)),
+      _Tool(CupertinoIcons.pencil_ellipsis_rectangle, const Color(0xFF30B0C7), 'Journal',
+          'Symptoms over time', () => go(AppRouter.symptomJournal)),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // The scanner is universal — bills, denials, lab reports, letters —
-          // so the label says so; the onboarding promises all four.
-          HeroButton(
-            label: 'Scan a bill, report or letter',
-            icon: CupertinoIcons.camera_viewfinder,
-            onTap: () => DocumentScanScreen.open(context, trigger: 'home'),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _QuickAction(
-                  icon: CupertinoIcons.chat_bubble_2_fill,
-                  color: AppTheme.successColor,
-                  label: 'Ask the assistant',
-                  onTap: () => Navigator.pushNamed(context, AppRouter.aiChat),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _QuickAction(
-                  icon: CupertinoIcons.capsule_fill,
-                  color: AppTheme.oncologyColor,
-                  label: 'Medications',
-                  onTap: () => Navigator.pushNamed(context, AppRouter.medications),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _QuickAction(
-                  icon: CupertinoIcons.folder_fill,
-                  color: AppTheme.primaryColor,
-                  label: 'Records vault',
-                  onTap: () => Navigator.pushNamed(context, AppRouter.recordsVault),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _QuickAction(
-                  icon: CupertinoIcons.shield_lefthalf_fill,
-                  color: AppTheme.warningColor,
-                  label: 'My policies',
-                  onTap: () => Navigator.pushNamed(context, AppRouter.insurance),
-                ),
-              ),
-            ],
-          ),
+          const DSSectionLabel('EVERYTHING CLINIX DOES'),
+          LayoutBuilder(builder: (context, c) {
+            final scale = MediaQuery.textScalerOf(context).scale(1);
+            final cellH = 32 + 8 + (13.5 * 1.2 + 11.5 * 1.25) * scale + 22;
+            final cellW = (c.maxWidth - 10) / 2;
+            return GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: cellW / cellH,
+              children: [for (final t in tools) _ToolTile(t)],
+            );
+          }),
         ],
       ),
     );
   }
 }
 
-class _QuickAction extends StatelessWidget {
+class _Tool {
   final IconData icon;
   final Color color;
-  final String label;
+  final String title;
+  final String blurb;
   final VoidCallback onTap;
-  const _QuickAction({required this.icon, required this.color, required this.label, required this.onTap});
+  const _Tool(this.icon, this.color, this.title, this.blurb, this.onTap);
+}
+
+class _ToolTile extends StatelessWidget {
+  final _Tool t;
+  const _ToolTile(this.t);
 
   @override
   Widget build(BuildContext context) {
     return DSPressable(
-      onTap: onTap,
+      onTap: t.onTap,
       child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.fromLTRB(12, 11, 10, 10),
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: DS.squircle(DS.rMd),
           border: Border.all(color: AppTheme.glassBorder, width: 0.8),
-          boxShadow: DS.softShadow(y: 3, blur: 10),
+          boxShadow: DS.softShadow(y: 2, blur: 10),
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(color: t.color, borderRadius: DS.squircle(9)),
+              child: Icon(t.icon, size: 17, color: Colors.white),
+            ),
+            const Spacer(),
+            Text(t.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                    color: AppTheme.textPrimary)),
+            Text(t.blurb,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, color: AppTheme.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Recent records ────────────────────────────────────────────────────────────
+
+/// Latest scanned reports with their flag count, so a lab result you just
+/// added is one tap away instead of buried in the vault.
+class _RecentRecords extends StatelessWidget {
+  final Stream<List<MedicalRecord>>? records;
+  final VoidCallback onSeeAll;
+  const _RecentRecords({required this.records, required this.onSeeAll});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<MedicalRecord>>(
+      stream: records,
+      builder: (context, snap) {
+        final all = snap.data ?? const <MedicalRecord>[];
+        if (all.isEmpty) return const SizedBox.shrink();
+        final recent = [...all]..sort((a, b) => b.uploadedAt.compareTo(a.uploadedAt));
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DSSectionLabel(
+                'RECENT RECORDS',
+                trailing: GestureDetector(
+                  onTap: onSeeAll,
+                  child: Text('See all',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.primaryColor)),
+                ),
+              ),
+              InsetCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    for (var i = 0; i < recent.length && i < 3; i++) ...[
+                      if (i > 0) Divider(height: 1, indent: 58, color: AppTheme.dividerColor),
+                      _RecordRow(record: recent[i]),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RecordRow extends StatelessWidget {
+  final MedicalRecord record;
+  const _RecordRow({required this.record});
+
+  @override
+  Widget build(BuildContext context) {
+    final lab = record.isLab;
+    final flagged = record.abnormalCount;
+    final color = lab ? AppTheme.infoColor : AppTheme.textSecondary;
+    return DSPressable(
+      onTap: () => Navigator.pushNamed(context, AppRouter.recordDetail, arguments: record),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
         child: Row(
           children: [
-            IconBadge(icon, color: color, size: 30),
-            const SizedBox(width: 10),
+            IconBadge(lab ? CupertinoIcons.lab_flask_solid : CupertinoIcons.doc_text_fill,
+                color: color, size: 34),
+            const SizedBox(width: 12),
             Expanded(
-              child: Text(label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(record.title.isEmpty ? 'Medical record' : record.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                  Text(
+                    lab
+                        ? (record.labMarkers.isEmpty
+                            ? 'Lab report'
+                            : flagged == 0
+                                ? '${record.labMarkers.length} markers · all in range'
+                                : '${record.labMarkers.length} markers · $flagged flagged')
+                        : record.recordType[0].toUpperCase() + record.recordType.substring(1),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: flagged > 0 ? AppTheme.warningColor : AppTheme.textSecondary,
+                        fontWeight: flagged > 0 ? FontWeight.w600 : FontWeight.w400),
+                  ),
+                ],
+              ),
             ),
+            Icon(CupertinoIcons.chevron_right, size: 15, color: AppTheme.textTertiary),
           ],
         ),
       ),
