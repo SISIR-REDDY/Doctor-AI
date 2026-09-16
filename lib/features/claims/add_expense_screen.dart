@@ -1,4 +1,5 @@
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,8 @@ import '../../services/ai/ai_error_ui.dart';
 import '../../services/ai/ai_service.dart';
 import '../../services/firebase/storage_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios_dropdown.dart';
+import '../../theme/ios_pickers.dart';
 
 /// Categories a bill can fall under. value → display label.
 const Map<String, String> kExpenseCategories = {
@@ -28,13 +31,13 @@ const Map<String, String> kExpenseCategories = {
 };
 
 const Map<String, IconData> kExpenseCategoryIcons = {
-  'hospital': Icons.local_hospital_outlined,
-  'pharmacy': Icons.medication_outlined,
-  'lab': Icons.science_outlined,
-  'consultation': Icons.medical_services_outlined,
-  'imaging': Icons.monitor_heart_outlined,
-  'procedure': Icons.healing_outlined,
-  'other': Icons.receipt_long_outlined,
+  'hospital': CupertinoIcons.building_2_fill,
+  'pharmacy': CupertinoIcons.capsule,
+  'lab': CupertinoIcons.lab_flask,
+  'consultation': CupertinoIcons.staroflife,
+  'imaging': CupertinoIcons.waveform_path_ecg,
+  'procedure': CupertinoIcons.bandage,
+  'other': CupertinoIcons.doc_plaintext,
 };
 
 /// Adds (or edits) a single itemized bill for a case. Supports manual entry and
@@ -111,7 +114,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   Future<void> _pickDate() async {
-    final d = await showDatePicker(
+    final d = await showIosDatePicker(
       context: context,
       initialDate: _date ?? DateTime.now(),
       firstDate: DateTime(2000),
@@ -207,12 +210,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         content: const Text('Capture or choose a photo of the bill/receipt.'),
         actions: [
           TextButton.icon(
-            icon: const Icon(Icons.camera_alt_rounded),
+            icon: const Icon(CupertinoIcons.camera_fill),
             label: const Text('Camera'),
             onPressed: () => Navigator.pop(context, ImageSource.camera),
           ),
           TextButton.icon(
-            icon: const Icon(Icons.photo_library_rounded),
+            icon: const Icon(CupertinoIcons.photo_on_rectangle),
             label: const Text('Gallery'),
             onPressed: () => Navigator.pop(context, ImageSource.gallery),
           ),
@@ -289,7 +292,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CupertinoActivityIndicator())
                 : const Text('Save',
                     style: TextStyle(
                         color: AppTheme.primaryColor,
@@ -312,7 +315,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           _Card(children: [
             Text('Bill Details', style: AppTheme.headingSmall),
             const SizedBox(height: AppTheme.lg),
-            DropdownButtonFormField<String>(
+            IosDropdownFormField<String>(
               initialValue: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               items: kExpenseCategories.entries
@@ -363,7 +366,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                           labelText: 'Bill Date',
                           hintText: 'Select',
                           suffixIcon: const Icon(
-                              Icons.calendar_today_rounded, size: 16),
+                              CupertinoIcons.calendar, size: 16),
                         ),
                         controller: TextEditingController(
                           text: _date != null
@@ -452,7 +455,7 @@ class _ScanCard extends StatelessWidget {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.document_scanner_rounded,
+                  : const Icon(CupertinoIcons.doc_text_viewfinder,
                       color: Colors.white, size: 24),
             ),
             const SizedBox(width: AppTheme.md),
@@ -484,7 +487,7 @@ class _ScanCard extends StatelessWidget {
               ),
             ),
             if (!scanning)
-              const Icon(Icons.chevron_right_rounded, color: Colors.white),
+              const Icon(CupertinoIcons.chevron_right, color: Colors.white),
           ],
         ),
       ),

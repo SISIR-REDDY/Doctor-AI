@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart' show CupertinoThemeData;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -362,14 +363,89 @@ class AppTheme {
         error: dangerColor,
       ),
       scaffoldBackgroundColor: background,
+      // iOS conventions applied at the theme layer so every screen — including
+      // ones still built with Material widgets — reads as native.
+      splashFactory: NoSplash.splashFactory,
+      highlightColor: Colors.transparent,
+      pageTransitionsTheme: const PageTransitionsTheme(builders: {
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      }),
       appBarTheme: AppBarTheme(
         backgroundColor: background,
         foregroundColor: textPrimaryColor,
         elevation: 0,
         scrolledUnderElevation: 0,
-        centerTitle: false,
+        // Centred 17pt semibold with a hairline under it, like UINavigationBar.
+        centerTitle: true,
         titleTextStyle: titleStyle,
         systemOverlayStyle: overlayStyle,
+        shape: Border(bottom: BorderSide(color: divider, width: 0.5)),
+        iconTheme: const IconThemeData(color: primaryColor, size: 22),
+        actionsIconTheme: const IconThemeData(color: primaryColor, size: 22),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: primaryColor,
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w400),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          minimumSize: const Size(44, 44),
+          shape: const StadiumBorder(),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: primaryColor,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(50),
+          padding: const EdgeInsets.symmetric(horizontal: xl, vertical: 14),
+          shape: const StadiumBorder(),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          elevation: 0,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primaryColor,
+          minimumSize: const Size.fromHeight(50),
+          side: BorderSide(color: border),
+          shape: const StadiumBorder(),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: textPrimaryColor,
+        contentTextStyle: TextStyle(fontSize: 14.5, color: background, fontWeight: FontWeight.w500),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.all(Colors.white),
+        trackColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected) ? successColor : surfaceMuted),
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: surfaceMuted,
+        selectedColor: primaryColor.withValues(alpha: 0.14),
+        side: BorderSide.none,
+        shape: const StadiumBorder(),
+        labelStyle: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: textPrimaryColor),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titleTextStyle: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: textPrimaryColor),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        showDragHandle: true,
+        dragHandleColor: textTertiaryColor.withValues(alpha: 0.5),
       ),
       cardTheme: CardThemeData(
         color: surface,
@@ -410,12 +486,13 @@ class AppTheme {
         fillColor: surfaceMuted,
         border: OutlineInputBorder(
           borderRadius: mediumRadius,
-          borderSide: BorderSide(color: border),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: mediumRadius,
-          borderSide: BorderSide(color: border),
+          borderSide: BorderSide.none,
         ),
+        hintStyle: TextStyle(color: textTertiaryColor, fontWeight: FontWeight.w400),
         focusedBorder: OutlineInputBorder(
           borderRadius: mediumRadius,
           borderSide: const BorderSide(color: primaryColor, width: 1.5),
@@ -427,10 +504,19 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: xl, vertical: md),
-          shape: RoundedRectangleBorder(borderRadius: mediumRadius),
+          minimumSize: const Size.fromHeight(50),
+          padding: const EdgeInsets.symmetric(horizontal: xl, vertical: 14),
+          shape: const StadiumBorder(),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
           elevation: 0,
+          shadowColor: Colors.transparent,
         ),
+      ),
+      cupertinoOverrideTheme: CupertinoThemeData(
+        brightness: brightness,
+        primaryColor: primaryColor,
+        scaffoldBackgroundColor: background,
+        barBackgroundColor: background,
       ),
       listTileTheme: const ListTileThemeData(
         contentPadding: EdgeInsets.symmetric(horizontal: lg, vertical: 2),

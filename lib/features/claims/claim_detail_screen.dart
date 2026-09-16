@@ -19,6 +19,7 @@ import '../../services/analytics_service.dart';
 import '../../services/claim_pdf_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios_pickers.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
 import '../deadlines/deadlines_screen.dart' show DeadlineScheduler;
@@ -255,7 +256,7 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
     if (uid == null) return;
     final result = await Navigator.push<CaseExpense>(
       context,
-      MaterialPageRoute(builder: (_) => AddExpenseScreen(uid: uid, currencyCode: _currency)),
+      CupertinoPageRoute(builder: (_) => AddExpenseScreen(uid: uid, currencyCode: _currency)),
     );
     if (result == null || !mounted) return;
     final updated = _claim.copyWith(expenses: [..._claim.expenses, result], updatedAt: DateTime.now());
@@ -268,7 +269,7 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
     if (uid == null) return;
     final result = await Navigator.push<CaseExpense>(
       context,
-      MaterialPageRoute(builder: (_) => AddExpenseScreen(uid: uid, currencyCode: _currency, existing: e)),
+      CupertinoPageRoute(builder: (_) => AddExpenseScreen(uid: uid, currencyCode: _currency, existing: e)),
     );
     if (result == null || !mounted) return;
     final updated = _claim.copyWith(
@@ -292,7 +293,7 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
     if (uid == null) return;
     final title = await _askText('Deadline', 'e.g. Call insurer about claim status');
     if (title == null || title.trim().isEmpty || !mounted) return;
-    final date = await showDatePicker(
+    final date = await showIosDatePicker(
       context: context,
       initialDate: DateTime.now().add(const Duration(days: 7)),
       firstDate: DateTime.now(),
@@ -530,7 +531,7 @@ class _ClaimDetailScreenState extends State<ClaimDetailScreen> {
               IconButton(
                 tooltip: 'Export claim packet (PDF)',
                 icon: _exporting
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(width: 18, height: 18, child: CupertinoActivityIndicator())
                     : Icon(CupertinoIcons.square_arrow_up, color: AppTheme.primaryColor),
                 onPressed: _exporting ? null : _exportPacket,
               ),

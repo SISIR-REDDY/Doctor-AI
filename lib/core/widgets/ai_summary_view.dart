@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -18,7 +19,7 @@ class AiSummaryView extends StatelessWidget {
     required this.content,
     this.isLoading = false,
     this.title = 'AI Analysis',
-    this.icon = Icons.auto_awesome_rounded,
+    this.icon = CupertinoIcons.sparkles,
   });
 
   @override

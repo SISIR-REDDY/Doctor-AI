@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -25,28 +26,19 @@ class RemindersScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        titleSpacing: DS.gutter,
-        toolbarHeight: 64,
-        title: Text('Schedule',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.6,
-              color: AppTheme.textPrimary,
-            )),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: uid == null
-            ? null
-            : () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const AddReminderScreen()),
-                ),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
+        title: const Text('Schedule'),
+        actions: [
+          IconButton(
+            tooltip: 'Add reminder',
+            icon: const Icon(CupertinoIcons.add, size: 24),
+            onPressed: uid == null
+                ? null
+                : () => Navigator.push(
+                      context,
+                      CupertinoPageRoute(builder: (_) => const AddReminderScreen()),
+                    ),
+          ),
+        ],
       ),
       body: uid == null
           ? Center(child: Text('Sign in to manage reminders.',
@@ -88,7 +80,7 @@ class _TodayDoses extends StatelessWidget {
             .toList();
         if (meds.isEmpty) {
           return _EmptyCard(
-            icon: Icons.medication_outlined,
+            icon: CupertinoIcons.capsule,
             text:
                 'No medication reminders yet. Add reminder times to a medication to see today\'s doses here.',
           );
@@ -215,7 +207,7 @@ class _DoseTile extends StatelessWidget {
             tooltip: 'Skip',
             onPressed: () => _set('skipped'),
             icon: Icon(
-              skipped ? Icons.cancel_rounded : Icons.cancel_outlined,
+              skipped ? CupertinoIcons.xmark_circle_fill : CupertinoIcons.xmark_circle,
               color: skipped ? AppTheme.warningColor : AppTheme.textTertiary,
             ),
           ),
@@ -224,8 +216,8 @@ class _DoseTile extends StatelessWidget {
             onPressed: () => _set('taken'),
             icon: Icon(
               taken
-                  ? Icons.check_circle_rounded
-                  : Icons.check_circle_outline_rounded,
+                  ? CupertinoIcons.checkmark_circle_fill
+                  : CupertinoIcons.checkmark_circle,
               color: taken ? AppTheme.successColor : AppTheme.textTertiary,
             ),
           ),
@@ -260,7 +252,7 @@ class _UpcomingReminders extends StatelessWidget {
         final pending = all.where((r) => !r.completed).toList();
         if (pending.isEmpty) {
           return _EmptyCard(
-            icon: Icons.event_available_outlined,
+            icon: CupertinoIcons.calendar_badge_plus,
             text:
                 'No upcoming vaccinations, appointments or reminders. Tap “Add reminder”.',
           );
@@ -284,13 +276,13 @@ class _ReminderTile extends StatelessWidget {
       {required this.uid, required this.db, required this.reminder});
 
   static const _meta = <String, (IconData, Color, String)>{
-    'vaccination': (Icons.vaccines_outlined, AppTheme.infoColor, 'Vaccination'),
+    'vaccination': (CupertinoIcons.bandage, AppTheme.infoColor, 'Vaccination'),
     'appointment': (
-      Icons.event_outlined,
+      CupertinoIcons.calendar,
       AppTheme.primaryColor,
       'Appointment'
     ),
-    'custom': (Icons.notifications_active_outlined, AppTheme.secondaryColor,
+    'custom': (CupertinoIcons.bell, AppTheme.secondaryColor,
         'Reminder'),
   };
 
@@ -325,7 +317,7 @@ class _ReminderTile extends StatelessWidget {
           color: AppTheme.dangerColor.withValues(alpha: 0.12),
           borderRadius: AppTheme.mediumRadius,
         ),
-        child: const Icon(Icons.delete_outline_rounded,
+        child: const Icon(CupertinoIcons.trash,
             color: AppTheme.dangerColor),
       ),
       onDismissed: (_) => _delete(),
@@ -333,7 +325,7 @@ class _ReminderTile extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(
+          CupertinoPageRoute(
               builder: (_) => AddReminderScreen(existing: reminder)),
         ),
         child: Container(
@@ -388,7 +380,7 @@ class _ReminderTile extends StatelessWidget {
             IconButton(
               tooltip: 'Mark done',
               onPressed: _complete,
-              icon: const Icon(Icons.check_circle_outline_rounded,
+              icon: const Icon(CupertinoIcons.checkmark_circle,
                   color: AppTheme.successColor),
             ),
           ],

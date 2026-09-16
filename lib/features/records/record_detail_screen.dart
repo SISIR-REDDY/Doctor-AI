@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -48,7 +49,7 @@ class RecordDetailScreen extends StatelessWidget {
           if (record.aiSummary.isNotEmpty || record.extractedText.isNotEmpty)
             IconButton(
               tooltip: 'Export summary PDF',
-              icon: const Icon(Icons.ios_share_rounded),
+              icon: const Icon(CupertinoIcons.share),
               onPressed: () => _exportPdf(context),
             ),
         ],
@@ -61,16 +62,16 @@ class RecordDetailScreen extends StatelessWidget {
             _RecordImage(record: record),
             const SizedBox(height: AppTheme.lg),
             _InfoCard(children: [
-              _Row(Icons.category_outlined, 'Type',
+              _Row(CupertinoIcons.square_grid_2x2, 'Type',
                   record.recordType[0].toUpperCase() +
                       record.recordType.substring(1)),
-              _Row(Icons.calendar_today_outlined, 'Uploaded',
+              _Row(CupertinoIcons.calendar, 'Uploaded',
                   DateFormat('dd MMM yyyy, hh:mm a').format(record.uploadedAt)),
               if (record.doctorName.isNotEmpty)
-                _Row(Icons.person_outline_rounded, 'Doctor',
+                _Row(CupertinoIcons.person, 'Doctor',
                     record.doctorName),
               if (record.hospitalName.isNotEmpty)
-                _Row(Icons.local_hospital_outlined, 'Hospital',
+                _Row(CupertinoIcons.building_2_fill, 'Hospital',
                     record.hospitalName),
             ]),
             const SizedBox(height: AppTheme.lg),
@@ -91,7 +92,7 @@ class RecordDetailScreen extends StatelessWidget {
               AiSummaryView(
                 content: record.extractedText,
                 title: 'Full Analysis',
-                icon: Icons.description_outlined,
+                icon: CupertinoIcons.doc_text,
               ),
             ],
           ],
@@ -143,7 +144,7 @@ class _RecordImageState extends State<_RecordImage> {
                     return Container(
                       color: AppTheme.surfaceVariant,
                       alignment: Alignment.center,
-                      child: const CircularProgressIndicator(strokeWidth: 2),
+                      child: const CupertinoActivityIndicator(),
                     );
                   },
                   errorBuilder: (_, __, ___) => _placeholder(),
@@ -198,7 +199,7 @@ class _RecordImageState extends State<_RecordImage> {
               height: 220,
               alignment: Alignment.center,
               color: AppTheme.surfaceVariant,
-              child: const CircularProgressIndicator(strokeWidth: 2),
+              child: const CupertinoActivityIndicator(),
             );
           },
           errorBuilder: (_, __, ___) => _placeholder(),
@@ -230,7 +231,7 @@ class _RecordImageState extends State<_RecordImage> {
           border: Border.all(color: AppTheme.dividerColor),
         ),
         child: Center(
-          child: Icon(Icons.description_outlined,
+          child: Icon(CupertinoIcons.doc_text,
               size: 56, color: AppTheme.textTertiary),
         ),
       );

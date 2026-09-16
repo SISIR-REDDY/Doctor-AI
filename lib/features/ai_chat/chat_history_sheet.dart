@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -57,7 +58,7 @@ class ChatHistorySheet extends StatelessWidget {
                       color: AppTheme.surfaceMuted,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.history_rounded,
+                    child: const Icon(CupertinoIcons.clock,
                         color: AppTheme.primaryColor, size: 20),
                   ),
                   const SizedBox(width: 12),
@@ -66,7 +67,7 @@ class ChatHistorySheet extends StatelessWidget {
                   ),
                   TextButton.icon(
                     onPressed: onNewChat,
-                    icon: const Icon(Icons.add_rounded, size: 18),
+                    icon: const Icon(CupertinoIcons.add, size: 18),
                     label: const Text('New Chat'),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.primaryColor,
@@ -84,7 +85,7 @@ class ChatHistorySheet extends StatelessWidget {
                 builder: (ctx, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2));
+                        child: CupertinoActivityIndicator());
                   }
                   final sessions = snap.data ?? [];
                   if (sessions.isEmpty) return const _EmptyHistory();
@@ -194,7 +195,7 @@ class _SessionTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    Icons.chat_bubble_outline_rounded,
+                    CupertinoIcons.chat_bubble,
                     color: isActive
                         ? Colors.white
                         : AppTheme.primaryColor,
@@ -241,7 +242,7 @@ class _SessionTile extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded,
+                  icon: const Icon(CupertinoIcons.trash,
                       size: 20),
                   color: AppTheme.textTertiary,
                   onPressed: onDelete,
@@ -285,7 +286,7 @@ class _EmptyHistory extends StatelessWidget {
               color: AppTheme.surfaceMuted,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.chat_bubble_outline_rounded,
+            child: const Icon(CupertinoIcons.chat_bubble,
                 size: 34, color: AppTheme.primaryColor),
           ),
           const SizedBox(height: 16),

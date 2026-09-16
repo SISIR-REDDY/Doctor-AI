@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,8 @@ import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios_dropdown.dart';
+import '../../theme/ios_pickers.dart';
 
 class AddPolicyScreen extends StatefulWidget {
   final InsurancePolicy? existingPolicy;
@@ -52,11 +55,11 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
   static const _frequencies = ['monthly', 'quarterly', 'annual'];
 
   static const _policyTypes = [
-    ('health', 'Health', Icons.favorite_rounded, Color(0xFFFF3B30)),
-    ('term', 'Term Life', Icons.shield_rounded, Color(0xFF007AFF)),
-    ('critical_illness', 'Critical Illness', Icons.warning_rounded, Color(0xFFFF9500)),
-    ('accidental', 'Accidental', Icons.bolt_rounded, Color(0xFF5856D6)),
-    ('other', 'Other', Icons.more_horiz_rounded, Color(0xFF8E8E93)),
+    ('health', 'Health', CupertinoIcons.heart_fill, Color(0xFFFF3B30)),
+    ('term', 'Term Life', CupertinoIcons.shield_fill, Color(0xFF007AFF)),
+    ('critical_illness', 'Critical Illness', CupertinoIcons.exclamationmark_triangle_fill, Color(0xFFFF9500)),
+    ('accidental', 'Accidental', CupertinoIcons.bolt_fill, Color(0xFF5856D6)),
+    ('other', 'Other', CupertinoIcons.ellipsis, Color(0xFF8E8E93)),
   ];
 
   @override
@@ -112,7 +115,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
   }
 
   Future<void> _pickDate(bool isStart) async {
-    final d = await showDatePicker(
+    final d = await showIosDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime(2000),
@@ -193,7 +196,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
             pinned: true,
             backgroundColor: AppTheme.primaryColor,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white),
+              icon: const Icon(CupertinoIcons.back, color: Colors.white),
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
@@ -235,7 +238,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
               delegate: SliverChildListDelegate([
                 // ─ Policy Details ─
                 _Section(
-                  icon: Icons.policy_rounded,
+                  icon: CupertinoIcons.shield_lefthalf_fill,
                   title: 'Policy Details',
                   color: AppTheme.primaryColor,
                   children: [
@@ -243,7 +246,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _insurerCtrl,
                       label: 'Insurance Company *',
                       hint: 'e.g. Aetna, Bupa, Star Health',
-                      icon: Icons.business_rounded,
+                      icon: CupertinoIcons.building_2_fill,
                       color: AppTheme.primaryColor,
                       capitalize: TextCapitalization.words,
                     ),
@@ -251,25 +254,18 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _policyNumCtrl,
                       label: 'Policy Number *',
                       hint: 'e.g. HLT-123456789',
-                      icon: Icons.numbers_rounded,
+                      icon: CupertinoIcons.number,
                       color: AppTheme.primaryColor,
                     ),
                     // Country dropdown — inline, no icon Row
-                    DropdownButtonFormField<String>(
+                    IosDropdownFormField<String>(
                       initialValue: _country,
                       isExpanded: true,
                       decoration: _dec(
                         'Country',
-                        Icons.public_rounded,
+                        CupertinoIcons.globe,
                         AppTheme.primaryColor,
                       ),
-                      selectedItemBuilder: (_) => _countryCodes.map((c) {
-                        final r = regionByCode(c);
-                        return Text(
-                          '${r.flag}  ${r.name} (${r.currencyCode})',
-                          overflow: TextOverflow.ellipsis,
-                        );
-                      }).toList(),
                       items: _countryCodes.map((c) {
                         final r = regionByCode(c);
                         return DropdownMenuItem(
@@ -288,7 +284,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
 
                 // ─ Policy Type ─
                 _Section(
-                  icon: Icons.category_rounded,
+                  icon: CupertinoIcons.square_grid_2x2_fill,
                   title: 'Policy Type',
                   color: AppTheme.secondaryColor,
                   children: [
@@ -345,7 +341,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
 
                 // ─ Coverage & Premium ─
                 _Section(
-                  icon: Icons.account_balance_wallet_rounded,
+                  icon: CupertinoIcons.creditcard,
                   title: 'Coverage & Premium',
                   color: AppTheme.successColor,
                   children: [
@@ -353,7 +349,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _coverageCtrl,
                       label: 'Coverage Amount (${_region.currencySymbol})',
                       hint: 'e.g. 500000',
-                      icon: Icons.shield_rounded,
+                      icon: CupertinoIcons.shield_fill,
                       color: AppTheme.successColor,
                       keyboardType: TextInputType.number,
                     ),
@@ -361,7 +357,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _premiumCtrl,
                       label: 'Premium Amount (${_region.currencySymbol})',
                       hint: 'e.g. 12000',
-                      icon: Icons.payments_rounded,
+                      icon: CupertinoIcons.money_dollar_circle_fill,
                       color: AppTheme.successColor,
                       keyboardType: TextInputType.number,
                     ),
@@ -435,7 +431,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
 
                 // ─ Dates ─
                 _Section(
-                  icon: Icons.date_range_rounded,
+                  icon: CupertinoIcons.calendar,
                   title: 'Policy Dates',
                   color: AppTheme.accentColor,
                   children: [
@@ -443,7 +439,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       children: [
                         Expanded(
                           child: _DateTile(
-                            icon: Icons.play_circle_outline_rounded,
+                            icon: CupertinoIcons.play_circle,
                             label: 'Start Date',
                             date: _startDate,
                             color: AppTheme.successColor,
@@ -453,7 +449,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: _DateTile(
-                            icon: Icons.refresh_rounded,
+                            icon: CupertinoIcons.refresh,
                             label: 'Renewal Date',
                             date: _renewalDate,
                             color: AppTheme.accentColor,
@@ -468,7 +464,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
 
                 // ─ Cost sharing (what you pay) ─
                 _Section(
-                  icon: Icons.pie_chart_rounded,
+                  icon: CupertinoIcons.chart_pie_fill,
                   title: 'What you pay',
                   color: AppTheme.warningColor,
                   children: [
@@ -476,7 +472,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _planNameCtrl,
                       label: 'Plan name',
                       hint: 'e.g. Silver PPO 3000',
-                      icon: Icons.badge_rounded,
+                      icon: CupertinoIcons.person_badge_plus,
                       color: AppTheme.warningColor,
                       capitalize: TextCapitalization.words,
                     ),
@@ -484,7 +480,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _memberIdCtrl,
                       label: 'Member ID',
                       hint: 'As printed on your card',
-                      icon: Icons.credit_card_rounded,
+                      icon: CupertinoIcons.creditcard_fill,
                       color: AppTheme.warningColor,
                     ),
                     Row(children: [
@@ -493,7 +489,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _deductibleCtrl,
                           label: 'Deductible (${_region.currencySymbol})',
                           hint: 'individual',
-                          icon: Icons.remove_circle_outline_rounded,
+                          icon: CupertinoIcons.minus_circle,
                           color: AppTheme.warningColor,
                           keyboardType: TextInputType.number,
                         ),
@@ -504,7 +500,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _deductibleFamilyCtrl,
                           label: 'Family',
                           hint: 'optional',
-                          icon: Icons.group_rounded,
+                          icon: CupertinoIcons.person_2_fill,
                           color: AppTheme.warningColor,
                           keyboardType: TextInputType.number,
                         ),
@@ -516,7 +512,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _oopCtrl,
                           label: 'Out-of-pocket max',
                           hint: 'individual',
-                          icon: Icons.vertical_align_top_rounded,
+                          icon: CupertinoIcons.arrow_up_to_line,
                           color: AppTheme.warningColor,
                           keyboardType: TextInputType.number,
                         ),
@@ -527,7 +523,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _oopFamilyCtrl,
                           label: 'Family',
                           hint: 'optional',
-                          icon: Icons.group_rounded,
+                          icon: CupertinoIcons.person_2_fill,
                           color: AppTheme.warningColor,
                           keyboardType: TextInputType.number,
                         ),
@@ -539,7 +535,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _copayPcpCtrl,
                           label: 'Copay: GP',
                           hint: '0',
-                          icon: Icons.medical_services_rounded,
+                          icon: CupertinoIcons.staroflife_fill,
                           color: AppTheme.warningColor,
                           keyboardType: TextInputType.number,
                         ),
@@ -550,7 +546,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _copaySpecialistCtrl,
                           label: 'Specialist',
                           hint: '0',
-                          icon: Icons.person_search_rounded,
+                          icon: CupertinoIcons.person_crop_circle_badge_checkmark,
                           color: AppTheme.warningColor,
                           keyboardType: TextInputType.number,
                         ),
@@ -561,7 +557,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _copayErCtrl,
                           label: 'ER',
                           hint: '0',
-                          icon: Icons.emergency_rounded,
+                          icon: CupertinoIcons.staroflife_fill,
                           color: AppTheme.warningColor,
                           keyboardType: TextInputType.number,
                         ),
@@ -573,7 +569,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _coinsuranceCtrl,
                           label: 'Coinsurance %',
                           hint: 'e.g. 20',
-                          icon: Icons.percent_rounded,
+                          icon: CupertinoIcons.percent,
                           color: AppTheme.warningColor,
                           keyboardType: TextInputType.number,
                         ),
@@ -584,7 +580,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           controller: _networkCtrl,
                           label: 'Network',
                           hint: 'PPO / HMO / …',
-                          icon: Icons.hub_rounded,
+                          icon: CupertinoIcons.circle_grid_hex_fill,
                           color: AppTheme.warningColor,
                         ),
                       ),
@@ -595,7 +591,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
 
                 // ─ Nominee / Beneficiary ─
                 _Section(
-                  icon: Icons.person_pin_rounded,
+                  icon: CupertinoIcons.person_crop_circle_fill,
                   title: _region.beneficiaryTerm,
                   color: AppTheme.neurologyColor,
                   children: [
@@ -603,7 +599,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _nomineeNameCtrl,
                       label: '${_region.beneficiaryTerm} Name',
                       hint: 'Full name',
-                      icon: Icons.person_rounded,
+                      icon: CupertinoIcons.person_fill,
                       color: AppTheme.neurologyColor,
                       capitalize: TextCapitalization.words,
                     ),
@@ -611,7 +607,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _nomineeRelCtrl,
                       label: 'Relationship',
                       hint: 'e.g. Spouse, Child',
-                      icon: Icons.family_restroom_rounded,
+                      icon: CupertinoIcons.person_3_fill,
                       color: AppTheme.neurologyColor,
                       capitalize: TextCapitalization.words,
                     ),
@@ -621,7 +617,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
 
                 // ─ Settings ─
                 _Section(
-                  icon: Icons.tune_rounded,
+                  icon: CupertinoIcons.slider_horizontal_3,
                   title: 'Settings',
                   color: AppTheme.infoColor,
                   children: [
@@ -647,8 +643,8 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                           children: [
                             Icon(
                               _isActive
-                                  ? Icons.check_circle_rounded
-                                  : Icons.radio_button_unchecked_rounded,
+                                  ? CupertinoIcons.checkmark_circle_fill
+                                  : CupertinoIcons.circle,
                               color: _isActive
                                   ? AppTheme.successColor
                                   : AppTheme.textTertiary,
@@ -685,7 +681,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                       controller: _notesCtrl,
                       label: 'Notes (optional)',
                       hint: 'Any additional notes…',
-                      icon: Icons.notes_rounded,
+                      icon: CupertinoIcons.text_alignleft,
                       color: AppTheme.infoColor,
                       maxLines: 2,
                       capitalize: TextCapitalization.sentences,
@@ -697,7 +693,7 @@ class _AddPolicyScreenState extends State<AddPolicyScreen> {
                 // ─ Save button ─
                 _GradientSaveButton(
                   label: isEdit ? 'Update Policy' : 'Add Policy',
-                  icon: isEdit ? Icons.edit_rounded : Icons.add_rounded,
+                  icon: isEdit ? CupertinoIcons.pencil : CupertinoIcons.add,
                   loading: _saving,
                   onTap: _save,
                 ),
@@ -794,7 +790,7 @@ class _HeroBar extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(Icons.shield_rounded,
+                    child: const Icon(CupertinoIcons.shield_fill,
                         color: Colors.white, size: 26),
                   ),
                   const SizedBox(width: 14),

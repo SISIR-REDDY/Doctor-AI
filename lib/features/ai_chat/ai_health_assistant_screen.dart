@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -438,7 +439,7 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
             children: [
               IconButton(
                 icon:
-                    const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                    const Icon(CupertinoIcons.back, size: 20),
                 onPressed: () => Navigator.maybePop(context),
               ),
               Container(
@@ -455,7 +456,7 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
                     ),
                   ],
                 ),
-                child: Icon(_coverage ? Icons.auto_awesome_rounded : Icons.favorite_rounded,
+                child: Icon(_coverage ? CupertinoIcons.sparkles : CupertinoIcons.heart_fill,
                     color: Colors.white, size: 22),
               ),
               const SizedBox(width: 12),
@@ -479,7 +480,7 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
               ),
               // New chat button
               IconButton(
-                icon: const Icon(Icons.add_comment_outlined, size: 22),
+                icon: const Icon(CupertinoIcons.text_bubble, size: 22),
                 onPressed:
                     _initializingSession ? null : _newChat,
                 tooltip: 'New chat',
@@ -487,7 +488,7 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
               ),
               // History button
               IconButton(
-                icon: const Icon(Icons.history_rounded, size: 22),
+                icon: const Icon(CupertinoIcons.clock, size: 22),
                 onPressed:
                     _initializingSession ? null : _openHistory,
                 tooltip: 'Chat history',
@@ -565,14 +566,14 @@ class _AiHealthAssistantScreenState extends State<AiHealthAssistantScreen> {
               gradient: AppTheme.primaryGradient,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.smart_toy_rounded,
+            child: const Icon(CupertinoIcons.waveform,
                 color: Colors.white, size: 26),
           ),
           const SizedBox(height: 20),
           const SizedBox(
             width: 22,
             height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
+            child: CupertinoActivityIndicator(),
           ),
         ],
       ),
@@ -599,7 +600,7 @@ class _TranscribingVoiceBanner extends StatelessWidget {
             const SizedBox(
               width: 20,
               height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CupertinoActivityIndicator(),
             ),
             const SizedBox(width: 12),
             Text('Transcribing your voice…',
@@ -638,7 +639,7 @@ class _MessageBubble extends StatelessWidget {
                 gradient: AppTheme.primaryGradient,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.smart_toy_rounded,
+              child: const Icon(CupertinoIcons.waveform,
                   color: Colors.white, size: 14),
             ),
           ],
@@ -745,7 +746,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
               gradient: AppTheme.primaryGradient,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.smart_toy_rounded,
+            child: const Icon(CupertinoIcons.waveform,
                 color: Colors.white, size: 14),
           ),
           GlossyPanel(
@@ -880,7 +881,7 @@ class _ChatInputBar extends StatelessWidget {
         _roundButton(
           onPressed: busy ? null : onVoiceToggle,
           color: AppTheme.primaryColor,
-          icon: Icons.mic_rounded,
+          icon: CupertinoIcons.mic_fill,
           iconColor: Colors.white,
           tooltip: 'Voice message',
         ),
@@ -917,7 +918,7 @@ class _ChatInputBar extends StatelessWidget {
           color: hasText
               ? AppTheme.primaryColor
               : AppTheme.surfaceVariant,
-          icon: Icons.send_rounded,
+          icon: CupertinoIcons.paperplane_fill,
           iconColor: hasText ? Colors.white : AppTheme.textTertiary,
           tooltip: 'Send',
         ),
@@ -933,7 +934,7 @@ class _ChatInputBar extends StatelessWidget {
           children: [
             IconButton(
               onPressed: onVoiceCancel,
-              icon: const Icon(Icons.close_rounded,
+              icon: const Icon(CupertinoIcons.xmark,
                   color: AppTheme.dangerColor),
             ),
             Expanded(
@@ -948,7 +949,7 @@ class _ChatInputBar extends StatelessWidget {
             _roundButton(
               onPressed: onVoiceToggle,
               color: AppTheme.primaryColor,
-              icon: Icons.stop_rounded,
+              icon: CupertinoIcons.stop_fill,
               iconColor: Colors.white,
               size: 52,
             ),

@@ -247,7 +247,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   void _open(BuildContext context, LegalDoc doc) =>
-      Navigator.push(context, MaterialPageRoute(builder: (_) => LegalDocumentScreen(doc: doc)));
+      Navigator.push(context, CupertinoPageRoute(builder: (_) => LegalDocumentScreen(doc: doc)));
 }
 
 class _Feature extends StatelessWidget {

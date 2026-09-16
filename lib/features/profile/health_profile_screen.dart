@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -13,6 +14,8 @@ import '../../services/analytics_service.dart';
 import '../../services/entitlement_service.dart';
 import '../../services/firebase/auth_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios_dropdown.dart';
+import '../../theme/ios_pickers.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
 
@@ -164,7 +167,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
   }
 
   Future<void> _pickDob() async {
-    final d = await showDatePicker(
+    final d = await showIosDatePicker(
       context: context,
       initialDate: _dob ?? DateTime(1990),
       firstDate: DateTime(1900),
@@ -214,6 +217,9 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        // Tab root: large left-aligned title, like a UINavigationBar with
+        // prefersLargeTitles. Pushed screens use the centred 17pt default.
+        centerTitle: false,
         titleSpacing: 18,
         toolbarHeight: 64,
         title: Text('Profile',
@@ -235,7 +241,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
                     ? const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                        child: CupertinoActivityIndicator())
                     : const Text('Save',
                         style: TextStyle(
                             color: AppTheme.primaryColor,
@@ -258,7 +264,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
             header: 'Insurance region',
             children: [
               InsetRow(
-                icon: Icons.public_rounded,
+                icon: CupertinoIcons.globe,
                 iconColor: AppTheme.infoColor,
                 title: profile != null && profile.hasCountry
                     ? '${regionByCode(profile.country).flag}  ${regionByCode(profile.country).name}'
@@ -325,24 +331,24 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
                     enabled: true,
                     keyboardType: TextInputType.phone),
               ] else ...[
-                _InfoRow(Icons.person_outline_rounded, 'Name',
+                _InfoRow(CupertinoIcons.person, 'Name',
                     profile?.fullName ?? '—'),
-                _InfoRow(Icons.cake_outlined, 'Date of Birth',
+                _InfoRow(CupertinoIcons.gift, 'Date of Birth',
                     _dob == null
                         ? '—'
                         : '${_dob!.day}/${_dob!.month}/${_dob!.year}'),
                 _InfoRow(
-                    Icons.wc_rounded, 'Gender', profile?.gender ?? '—'),
-                _InfoRow(Icons.bloodtype_outlined, 'Blood Group',
+                    CupertinoIcons.person_2, 'Gender', profile?.gender ?? '—'),
+                _InfoRow(CupertinoIcons.drop_fill, 'Blood Group',
                     profile?.bloodGroup ?? '—'),
-                _InfoRow(Icons.height_rounded, 'Height/Weight',
+                _InfoRow(CupertinoIcons.arrow_up_down, 'Height/Weight',
                     profile != null && profile.height > 0
                         ? '${profile.height} cm / ${profile.weight} kg'
                         : '—'),
                 if (profile != null && profile.bmi > 0)
-                  _InfoRow(Icons.monitor_weight_outlined, 'BMI',
+                  _InfoRow(CupertinoIcons.gauge, 'BMI',
                       '${profile.bmi.toStringAsFixed(1)} (${profile.bmiCategory})'),
-                _InfoRow(Icons.phone_outlined, 'Phone',
+                _InfoRow(CupertinoIcons.phone, 'Phone',
                     profile?.contactNumber ?? '—'),
               ],
             ],
@@ -352,7 +358,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
           // Medical Allergies
           _ChipSection(
             title: 'Medical Allergies',
-            icon: Icons.warning_amber_rounded,
+            icon: CupertinoIcons.exclamationmark_triangle,
             iconColor: AppTheme.dangerColor,
             items: _medAllergies,
             chipColor: AppTheme.dangerColor,
@@ -365,7 +371,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
           // Food Allergies
           _ChipSection(
             title: 'Food Allergies',
-            icon: Icons.no_food_rounded,
+            icon: CupertinoIcons.nosign,
             iconColor: AppTheme.warningColor,
             items: _foodAllergies,
             chipColor: AppTheme.warningColor,
@@ -378,7 +384,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
           // Past Diseases
           _ChipSection(
             title: 'Past Diseases',
-            icon: Icons.history_rounded,
+            icon: CupertinoIcons.clock,
             iconColor: AppTheme.infoColor,
             items: _pastDiseases,
             chipColor: AppTheme.infoColor,
@@ -391,7 +397,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
           // Chronic Conditions
           _ChipSection(
             title: 'Chronic Conditions',
-            icon: Icons.monitor_heart_outlined,
+            icon: CupertinoIcons.waveform_path_ecg,
             iconColor: AppTheme.cardiologyColor,
             items: _chronicConditions,
             chipColor: AppTheme.cardiologyColor,
@@ -415,11 +421,11 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
                 _DropdownField('Relationship', _emergencyRelation, _relations,
                     (v) => setState(() => _emergencyRelation = v!)),
               ] else ...[
-                _InfoRow(Icons.person_pin_outlined, 'Name',
+                _InfoRow(CupertinoIcons.person_crop_circle, 'Name',
                     profile?.emergencyContactName ?? '—'),
-                _InfoRow(Icons.call_outlined, 'Phone',
+                _InfoRow(CupertinoIcons.phone, 'Phone',
                     profile?.emergencyContactPhone ?? '—'),
-                _InfoRow(Icons.people_outline_rounded, 'Relation',
+                _InfoRow(CupertinoIcons.person_2, 'Relation',
                     profile?.emergencyContactRelation ?? '—'),
               ],
             ],
@@ -456,7 +462,7 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
                 await context.read<HealthDataProvider>().signOut();
               }
             },
-            icon: const Icon(Icons.logout_rounded, color: AppTheme.dangerColor),
+            icon: const Icon(CupertinoIcons.square_arrow_right, color: AppTheme.dangerColor),
             label: const Text('Sign Out',
                 style: TextStyle(color: AppTheme.dangerColor)),
             style: OutlinedButton.styleFrom(
@@ -473,13 +479,13 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
           InsetSection(
             children: [
               InsetRow(
-                icon: Icons.shield_outlined,
+                icon: CupertinoIcons.shield,
                 iconColor: AppTheme.primaryColor,
                 title: 'Legal & Privacy',
                 subtitle: 'Policies, terms & disclaimers',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  CupertinoPageRoute(
                       builder: (_) => const LegalHubScreen()),
                 ),
               ),
@@ -493,8 +499,8 @@ class _HealthProfileScreenState extends State<HealthProfileScreen> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.delete_forever_rounded,
+                    child: CupertinoActivityIndicator())
+                : const Icon(CupertinoIcons.trash_fill,
                     color: AppTheme.dangerColor, size: 20),
             label: Text(_deleting ? 'Deleting…' : 'Delete Account',
                 style: const TextStyle(
@@ -607,7 +613,7 @@ class _ProfileHeader extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 4),
                     child: Row(
                       children: [
-                        const Icon(Icons.warning_amber_rounded,
+                        const Icon(CupertinoIcons.exclamationmark_triangle,
                             color: Colors.white70, size: 14),
                         const SizedBox(width: 4),
                         Expanded(
@@ -715,7 +721,7 @@ class _DropdownField extends StatelessWidget {
   const _DropdownField(this.label, this.value, this.items, this.onChanged);
 
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<String>(
+  Widget build(BuildContext context) => IosDropdownFormField<String>(
         initialValue: value,
         decoration: InputDecoration(labelText: label),
         items: items
@@ -780,7 +786,7 @@ class _ChipSection extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.add, size: 14, color: chipColor),
+                        Icon(CupertinoIcons.add, size: 14, color: chipColor),
                         const SizedBox(width: 4),
                         Text('Add',
                             style: TextStyle(
@@ -812,7 +818,7 @@ class _ChipSection extends StatelessWidget {
                         side: BorderSide(
                             color: chipColor.withValues(alpha: 0.3)),
                         deleteIcon: editing
-                            ? Icon(Icons.close, size: 16, color: chipColor)
+                            ? Icon(CupertinoIcons.xmark, size: 16, color: chipColor)
                             : null,
                         onDeleted: editing ? () => onRemove(item) : null,
                         padding: EdgeInsets.zero,
@@ -834,9 +840,9 @@ class _AppearanceSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<ThemeController>();
     const options = [
-      (ThemeMode.light, Icons.light_mode_rounded, 'Light'),
-      (ThemeMode.dark, Icons.dark_mode_rounded, 'Dark'),
-      (ThemeMode.system, Icons.brightness_auto_rounded, 'System'),
+      (ThemeMode.light, CupertinoIcons.sun_max_fill, 'Light'),
+      (ThemeMode.dark, CupertinoIcons.moon_fill, 'Dark'),
+      (ThemeMode.system, CupertinoIcons.circle_lefthalf_fill, 'System'),
     ];
 
     return Container(
@@ -966,7 +972,7 @@ class _PlanCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            IconBadge(pro ? Icons.verified_rounded : Icons.auto_awesome_rounded,
+            IconBadge(pro ? CupertinoIcons.checkmark_seal_fill : CupertinoIcons.sparkles,
                 color: Colors.white, size: 42),
             const SizedBox(width: 14),
             Expanded(
@@ -988,7 +994,7 @@ class _PlanCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+            const Icon(CupertinoIcons.chevron_right, color: Colors.white70),
           ],
         ),
       ),

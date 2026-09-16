@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -201,7 +202,7 @@ class _ScreenHeader extends StatelessWidget {
                         )),
                     const Spacer(),
                     _HeaderButton(
-                      icon: Icons.receipt_long_rounded,
+                      icon: CupertinoIcons.doc_plaintext,
                       label: 'Claims',
                       onTap: onClaimsTap,
                     ),
@@ -263,7 +264,7 @@ class _ScreenHeader extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.25),
                             width: 1.5),
                       ),
-                      child: const Icon(Icons.shield_rounded,
+                      child: const Icon(CupertinoIcons.shield_fill,
                           color: Colors.white, size: 30),
                     ),
                   ],
@@ -364,11 +365,11 @@ class _PolicyCard extends StatelessWidget {
   };
 
   static const _typeIcons = <String, IconData>{
-    'health': Icons.favorite_rounded,
-    'term': Icons.shield_rounded,
-    'critical_illness': Icons.warning_rounded,
-    'accidental': Icons.bolt_rounded,
-    'other': Icons.policy_rounded,
+    'health': CupertinoIcons.heart_fill,
+    'term': CupertinoIcons.shield_fill,
+    'critical_illness': CupertinoIcons.exclamationmark_triangle_fill,
+    'accidental': CupertinoIcons.bolt_fill,
+    'other': CupertinoIcons.shield_lefthalf_fill,
   };
 
   static const _typeLabels = <String, String>{
@@ -389,7 +390,7 @@ class _PolicyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = _typeGradients[policy.policyType] ?? _typeGradients['other']!;
     final netColors = _networkColors[policy.policyType] ?? _networkColors['other']!;
-    final icon = _typeIcons[policy.policyType] ?? Icons.policy_rounded;
+    final icon = _typeIcons[policy.policyType] ?? CupertinoIcons.shield_lefthalf_fill;
     final label = _typeLabels[policy.policyType] ?? 'Other';
     final freq = _freqShort[policy.premiumFrequency] ?? 'yr';
     final inactive = !policy.isActive;
@@ -467,7 +468,7 @@ class _PolicyCard extends StatelessWidget {
                           width: 32, height: 32,
                           child: PopupMenuButton<String>(
                             padding: EdgeInsets.zero,
-                            icon: Icon(Icons.more_horiz_rounded,
+                            icon: Icon(CupertinoIcons.ellipsis,
                                 color: Colors.white.withValues(alpha: 0.8),
                                 size: 20),
                             color: AppTheme.surfaceColor,
@@ -711,7 +712,7 @@ class _AddPolicyFab extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: const [
-            Icon(Icons.document_scanner_rounded, color: Colors.white, size: 20),
+            Icon(CupertinoIcons.doc_text_viewfinder, color: Colors.white, size: 20),
             SizedBox(width: 8),
             Text('Scan policy',
                 style: TextStyle(
@@ -746,7 +747,7 @@ class _EmptyState extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(24),
           ),
-          child: const Icon(Icons.shield_rounded, color: Colors.white, size: 38),
+          child: const Icon(CupertinoIcons.shield_fill, color: Colors.white, size: 38),
         ),
         const SizedBox(height: 20),
         Text('No Policies Yet', style: AppTheme.headingSmall),
@@ -759,7 +760,7 @@ class _EmptyState extends StatelessWidget {
         const SizedBox(height: 18),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),
-          child: HeroButton(label: 'Scan a policy', icon: Icons.document_scanner_rounded, onTap: onScan),
+          child: HeroButton(label: 'Scan a policy', icon: CupertinoIcons.doc_text_viewfinder, onTap: onScan),
         ),
         TextButton(
           onPressed: () => Navigator.pushNamed(context, AppRouter.addPolicy),
@@ -852,7 +853,7 @@ class _CoverageCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            IconBadge(Icons.pie_chart_rounded, color: AppTheme.warningColor, size: 34),
+            IconBadge(CupertinoIcons.chart_pie_fill, color: AppTheme.warningColor, size: 34),
             const SizedBox(width: 10),
             Expanded(
               child: Text('${policy.insurer}${policy.planName.isNotEmpty ? ' · ${policy.planName}' : ''}',

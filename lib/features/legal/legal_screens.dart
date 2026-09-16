@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -50,7 +51,7 @@ class LegalDocumentScreen extends StatelessWidget {
           if (url != null)
             IconButton(
               tooltip: 'Open online',
-              icon: const Icon(Icons.open_in_new_rounded),
+              icon: const Icon(CupertinoIcons.arrow_up_right_square),
               onPressed: () => launchUrl(Uri.parse(url),
                   mode: LaunchMode.externalApplication),
             ),
@@ -78,7 +79,7 @@ class LegalHubScreen extends StatelessWidget {
 
   void _open(BuildContext context, LegalDoc doc) => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => LegalDocumentScreen(doc: doc)),
+        CupertinoPageRoute(builder: (_) => LegalDocumentScreen(doc: doc)),
       );
 
   @override
@@ -93,14 +94,14 @@ class LegalHubScreen extends StatelessWidget {
             header: 'Your rights',
             children: [
               InsetRow(
-                icon: Icons.privacy_tip_outlined,
+                icon: CupertinoIcons.lock_shield,
                 iconColor: AppTheme.primaryColor,
                 title: 'Privacy Policy',
                 subtitle: 'What we collect and how it is used',
                 onTap: () => _open(context, LegalDoc.privacy),
               ),
               InsetRow(
-                icon: Icons.description_outlined,
+                icon: CupertinoIcons.doc_text,
                 iconColor: AppTheme.secondaryColor,
                 title: 'Terms of Use',
                 onTap: () => _open(context, LegalDoc.terms),
@@ -114,14 +115,14 @@ class LegalHubScreen extends StatelessWidget {
                 'legal, or financial advice.',
             children: [
               InsetRow(
-                icon: Icons.medical_information_outlined,
+                icon: CupertinoIcons.doc_text_search,
                 iconColor: AppTheme.dangerColor,
                 title: 'Medical Disclaimer',
                 subtitle: 'Not a substitute for professional care',
                 onTap: () => _open(context, LegalDoc.medical),
               ),
               InsetRow(
-                icon: Icons.gavel_outlined,
+                icon: CupertinoIcons.hammer,
                 iconColor: AppTheme.warningColor,
                 title: 'Insurance Disclaimer',
                 subtitle: 'Not legal or financial advice',

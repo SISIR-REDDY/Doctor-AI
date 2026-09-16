@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,8 @@ import '../../core/providers/health_data_provider.dart';
 import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios_dropdown.dart';
+import '../../theme/ios_pickers.dart';
 import 'add_expense_screen.dart';
 
 /// Builds an insurance *case*: a country, an optional linked policy, clinical
@@ -55,7 +58,7 @@ class _NewClaimScreenState extends State<NewClaimScreen> {
   }
 
   Future<void> _pickDate(bool isAdmission) async {
-    final d = await showDatePicker(
+    final d = await showIosDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime(2000),
@@ -70,7 +73,7 @@ class _NewClaimScreenState extends State<NewClaimScreen> {
     final uid = context.read<HealthDataProvider>().uid ?? '';
     final result = await Navigator.push<CaseExpense>(
       context,
-      MaterialPageRoute(
+      CupertinoPageRoute(
         builder: (_) => AddExpenseScreen(
           uid: uid,
           currencyCode: _currencyCode,
@@ -155,7 +158,7 @@ class _NewClaimScreenState extends State<NewClaimScreen> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CupertinoActivityIndicator())
                 : const Text('Save',
                     style: TextStyle(
                         color: AppTheme.primaryColor,
@@ -174,7 +177,7 @@ class _NewClaimScreenState extends State<NewClaimScreen> {
                 hint: 'e.g. Knee surgery – Apr 2026',
                 capitalization: TextCapitalization.sentences),
             const SizedBox(height: AppTheme.md),
-            DropdownButtonFormField<String>(
+            IosDropdownFormField<String>(
               initialValue: _country,
               decoration: const InputDecoration(labelText: 'Country'),
               items: kInsuranceRegions
@@ -219,7 +222,7 @@ class _NewClaimScreenState extends State<NewClaimScreen> {
                   }
                   return Padding(
                     padding: const EdgeInsets.only(bottom: AppTheme.md),
-                    child: DropdownButtonFormField<String>(
+                    child: IosDropdownFormField<String>(
                       initialValue: _selectedPolicyId != null &&
                               policies.any((p) => p.id == _selectedPolicyId)
                           ? _selectedPolicyId
@@ -339,7 +342,7 @@ class _NewClaimScreenState extends State<NewClaimScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.auto_awesome_rounded, color: AppTheme.primaryColor, size: 18),
+                const Icon(CupertinoIcons.sparkles, color: AppTheme.primaryColor, size: 18),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -433,8 +436,8 @@ class _CaseTypeToggle extends StatelessWidget {
       ),
       child: Row(
         children: [
-          seg('inpatient', 'Inpatient', Icons.local_hospital_outlined),
-          seg('outpatient', 'Outpatient', Icons.medical_services_outlined),
+          seg('inpatient', 'Inpatient', CupertinoIcons.building_2_fill),
+          seg('outpatient', 'Outpatient', CupertinoIcons.staroflife),
         ],
       ),
     );
@@ -489,7 +492,7 @@ class _ExpensesCard extends StatelessWidget {
       const SizedBox(height: AppTheme.sm),
       OutlinedButton.icon(
         onPressed: onAdd,
-        icon: const Icon(Icons.add_rounded, color: AppTheme.primaryColor),
+        icon: const Icon(CupertinoIcons.add, color: AppTheme.primaryColor),
         label: const Text('Add bill',
             style: TextStyle(color: AppTheme.primaryColor)),
         style: OutlinedButton.styleFrom(
@@ -533,7 +536,7 @@ class _ExpenseRow extends StatelessWidget {
               ),
               child: Icon(
                 kExpenseCategoryIcons[expense.category] ??
-                    Icons.receipt_long_outlined,
+                    CupertinoIcons.doc_plaintext,
                 size: 18,
                 color: AppTheme.primaryColor,
               ),
@@ -565,7 +568,7 @@ class _ExpenseRow extends StatelessWidget {
             Text(formatMoney(expense.amount, currencyCode),
                 style: AppTheme.labelLarge),
             IconButton(
-              icon: const Icon(Icons.close_rounded, size: 18),
+              icon: const Icon(CupertinoIcons.xmark, size: 18),
               color: AppTheme.textTertiary,
               onPressed: onRemove,
             ),
@@ -631,7 +634,7 @@ class _DateField extends StatelessWidget {
           decoration: InputDecoration(
             labelText: label,
             hintText: 'Select date',
-            suffixIcon: const Icon(Icons.calendar_today_rounded, size: 16),
+            suffixIcon: const Icon(CupertinoIcons.calendar, size: 16),
           ),
           controller: TextEditingController(
               text: date != null

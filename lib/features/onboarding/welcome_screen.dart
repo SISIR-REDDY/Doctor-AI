@@ -359,7 +359,7 @@ class _BrandMark extends StatelessWidget {
                 gradient: AppTheme.primaryGradient,
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: const Icon(Icons.shield_rounded, color: Colors.white, size: 17),
+              child: const Icon(CupertinoIcons.shield_fill, color: Colors.white, size: 17),
             ),
           ),
         ),
@@ -561,7 +561,7 @@ class _SignInStep extends StatelessWidget {
 
   void _open(BuildContext context, LegalDoc doc) => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => LegalDocumentScreen(doc: doc)),
+        CupertinoPageRoute(builder: (_) => LegalDocumentScreen(doc: doc)),
       );
 
   @override
@@ -806,7 +806,7 @@ class _AuthButton extends StatelessWidget {
                 ? SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2.2, color: foreground))
+                    child: const CupertinoActivityIndicator())
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

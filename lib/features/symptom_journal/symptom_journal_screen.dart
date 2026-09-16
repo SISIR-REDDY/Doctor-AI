@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,7 @@ import '../../models/patient_models.dart';
 import '../../services/chatbot_service.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios_dropdown.dart';
 import '../../theme/ios18_components.dart';
 
 class SymptomJournalScreen extends StatefulWidget {
@@ -40,20 +42,17 @@ class _SymptomJournalScreenState extends State<SymptomJournalScreen> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        titleSpacing: 18,
-        toolbarHeight: 64,
-        title: Text('Journal',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.6,
-              color: AppTheme.textPrimary,
-            )),
+        title: const Text('Journal'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.auto_awesome_rounded),
-            tooltip: 'AI Trend Analysis',
+            icon: const Icon(CupertinoIcons.sparkles, size: 22),
+            tooltip: 'AI trend analysis',
             onPressed: uid != null ? () => _analyzeTrend(uid) : null,
+          ),
+          IconButton(
+            icon: const Icon(CupertinoIcons.add, size: 24),
+            tooltip: 'Log a symptom',
+            onPressed: () => _showAddSheet(context, uid ?? ''),
           ),
         ],
       ),
@@ -97,13 +96,6 @@ class _SymptomJournalScreenState extends State<SymptomJournalScreen> {
                 ),
               ],
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddSheet(context, uid ?? ''),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Log Symptom'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-      ),
     );
   }
 
@@ -183,7 +175,7 @@ class _TrendCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.auto_awesome_rounded,
+          const Icon(CupertinoIcons.sparkles,
               color: AppTheme.primaryColor, size: 20),
           const SizedBox(width: 10),
           Expanded(
@@ -263,7 +255,7 @@ class _SymptomCard extends StatelessWidget {
                       style: AppTheme.bodySmall),
                 Row(
                   children: [
-                    Icon(Icons.access_time_rounded,
+                    Icon(CupertinoIcons.time,
                         size: 12, color: AppTheme.textTertiary),
                     const SizedBox(width: 4),
                     Text(
@@ -281,7 +273,7 @@ class _SymptomCard extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: Icon(Icons.delete_outline_rounded,
+            icon: Icon(CupertinoIcons.trash,
                 color: AppTheme.textTertiary, size: 20),
             onPressed: onDelete,
           ),
@@ -300,7 +292,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.edit_note_rounded,
+          Icon(CupertinoIcons.square_pencil,
               size: 64, color: AppTheme.textTertiary),
           const SizedBox(height: AppTheme.lg),
           Text('No symptoms logged yet',
@@ -435,7 +427,7 @@ class _AddSymptomSheetState extends State<_AddSymptomSheet> {
                     setState(() => _severity = v.round()),
               ),
               const SizedBox(height: AppTheme.md),
-              DropdownButtonFormField<String>(
+              IosDropdownFormField<String>(
                 initialValue: _timeOfDay,
                 decoration:
                     const InputDecoration(labelText: 'Time of Day'),

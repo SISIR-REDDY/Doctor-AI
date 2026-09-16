@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,8 @@ import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios_dropdown.dart';
+import '../../theme/ios_pickers.dart';
 
 /// Creates (or edits) a vaccination / appointment / custom reminder and
 /// schedules a local notification for it.
@@ -41,9 +44,9 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   };
 
   static const _types = <String, (IconData, String)>{
-    'vaccination': (Icons.vaccines_outlined, 'Vaccination'),
-    'appointment': (Icons.event_outlined, 'Appointment'),
-    'custom': (Icons.notifications_active_outlined, 'Reminder'),
+    'vaccination': (CupertinoIcons.bandage, 'Vaccination'),
+    'appointment': (CupertinoIcons.calendar, 'Appointment'),
+    'custom': (CupertinoIcons.bell, 'Reminder'),
   };
 
   static const _notifyOptions = <int, String>{
@@ -90,7 +93,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
       DateTime(_date.year, _date.month, _date.day, _time.hour, _time.minute);
 
   Future<void> _pickDate() async {
-    final d = await showDatePicker(
+    final d = await showIosDatePicker(
       context: context,
       initialDate: _date,
       firstDate: DateTime.now().subtract(const Duration(days: 1)),
@@ -100,7 +103,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
   }
 
   Future<void> _pickTime() async {
-    final t = await showTimePicker(context: context, initialTime: _time);
+    final t = await showIosTimePicker(context: context, initialTime: _time);
     if (t != null) setState(() => _time = t);
   }
 
@@ -169,7 +172,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CupertinoActivityIndicator())
                 : const Text('Save',
                     style: TextStyle(
                         color: AppTheme.primaryColor,
@@ -260,7 +263,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                   child: _PickField(
                     label: 'Date',
                     value: DateFormat('EEE, d MMM yyyy').format(_date),
-                    icon: Icons.calendar_today_rounded,
+                    icon: CupertinoIcons.calendar,
                     onTap: _pickDate,
                   ),
                 ),
@@ -269,14 +272,14 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
                   child: _PickField(
                     label: 'Time',
                     value: _time.format(context),
-                    icon: Icons.access_time_rounded,
+                    icon: CupertinoIcons.time,
                     onTap: _pickTime,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: AppTheme.md),
-            DropdownButtonFormField<int>(
+            IosDropdownFormField<int>(
               initialValue: _notifyBefore,
               decoration: const InputDecoration(labelText: 'Remind me'),
               items: _notifyOptions.entries
@@ -286,7 +289,7 @@ class _AddReminderScreenState extends State<AddReminderScreen> {
               onChanged: (v) => setState(() => _notifyBefore = v ?? 60),
             ),
             const SizedBox(height: AppTheme.md),
-            DropdownButtonFormField<String>(
+            IosDropdownFormField<String>(
               initialValue: _recurrence,
               decoration: const InputDecoration(labelText: 'Repeat'),
               items: _recurrenceOptions.entries

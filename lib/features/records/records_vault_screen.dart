@@ -1,4 +1,5 @@
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -98,15 +99,14 @@ class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
     return LargeTitleScaffold(
       title: 'Records',
       subtitle: 'Your medical documents, summarized by AI',
-      floatingActionButton: uid == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => DocumentScanScreen.open(context, trigger: 'records', docType: DocType.record),
-              icon: const Icon(Icons.document_scanner_rounded),
-              label: const Text('Scan'),
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-            ),
+      actions: [
+        if (uid != null)
+          IconButton(
+            tooltip: 'Scan a record',
+            icon: const Icon(CupertinoIcons.doc_text_viewfinder, size: 24),
+            onPressed: () => DocumentScanScreen.open(context, trigger: 'records', docType: DocType.record),
+          ),
+      ],
       slivers: [
         if (uid == null)
           const SliverFillRemaining(
@@ -122,7 +122,7 @@ class _RecordsVaultScreenState extends State<RecordsVaultScreen> {
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: 'Search records, results, values…',
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  prefixIcon: const Icon(CupertinoIcons.search, size: 20),
                   isDense: true,
                   filled: true,
                   fillColor: AppTheme.surfaceColor,
@@ -303,18 +303,18 @@ class _RecordCard extends StatelessWidget {
   };
 
   static const _typeIcons = <String, IconData>{
-    'lab': Icons.science_outlined,
-    'imaging': Icons.medical_information_outlined,
-    'prescription': Icons.medication_outlined,
-    'discharge': Icons.local_hospital_outlined,
-    'vaccination': Icons.vaccines_outlined,
-    'other': Icons.description_outlined,
+    'lab': CupertinoIcons.lab_flask,
+    'imaging': CupertinoIcons.doc_text_search,
+    'prescription': CupertinoIcons.capsule,
+    'discharge': CupertinoIcons.building_2_fill,
+    'vaccination': CupertinoIcons.bandage,
+    'other': CupertinoIcons.doc_text,
   };
 
   @override
   Widget build(BuildContext context) {
     final color = _typeColors[record.recordType] ?? AppTheme.textSecondary;
-    final icon = _typeIcons[record.recordType] ?? Icons.description_outlined;
+    final icon = _typeIcons[record.recordType] ?? CupertinoIcons.doc_text;
 
     return DSPressable(
       onTap: onTap,
@@ -415,7 +415,7 @@ class _RecordCard extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.cloud_off_rounded,
+                              Icon(CupertinoIcons.cloud,
                                   size: 10, color: AppTheme.warningColor),
                               const SizedBox(width: 3),
                               Text('On device',
@@ -444,7 +444,7 @@ class _RecordCard extends StatelessWidget {
               ),
             ),
             PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert_rounded,
+              icon: Icon(CupertinoIcons.ellipsis,
                   color: AppTheme.textTertiary, size: 20),
               onSelected: (v) {
                 if (v == 'delete') onDelete();
@@ -476,7 +476,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.folder_open_rounded,
+          Icon(CupertinoIcons.folder_open,
               size: 64, color: AppTheme.textTertiary),
           const SizedBox(height: AppTheme.lg),
           Text(message,

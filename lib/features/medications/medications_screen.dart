@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,8 @@ import '../../models/patient_models.dart';
 import '../../services/firebase/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/ios_dropdown.dart';
+import '../../theme/ios_pickers.dart';
 import '../../theme/ios18_components.dart';
 
 class MedicationsScreen extends StatefulWidget {
@@ -17,22 +20,9 @@ class MedicationsScreen extends StatefulWidget {
   State<MedicationsScreen> createState() => _MedicationsScreenState();
 }
 
-class _MedicationsScreenState extends State<MedicationsScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
+class _MedicationsScreenState extends State<MedicationsScreen> {
   final _db = FirestoreService();
-
-  @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
+  int _segment = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -41,27 +31,15 @@ class _MedicationsScreenState extends State<MedicationsScreen>
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        titleSpacing: DS.gutter,
-        title: Text('Medications',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.6,
-              color: AppTheme.textPrimary,
-            )),
-        toolbarHeight: 64,
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: const [
-            Tab(text: 'Active'),
-            Tab(text: 'Past'),
-          ],
-          labelColor: AppTheme.primaryColor,
-          unselectedLabelColor: AppTheme.textSecondary,
-          indicatorColor: AppTheme.primaryColor,
-          indicatorSize: TabBarIndicatorSize.label,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-        ),
+        title: const Text('Medications'),
+        actions: [
+          // iOS puts "add" in the navigation bar, not a floating button.
+          IconButton(
+            tooltip: 'Add medication',
+            icon: const Icon(CupertinoIcons.add, size: 24),
+            onPressed: () => _showAddSheet(context, uid ?? ''),
+          ),
+        ],
       ),
       body: uid == null
           ? const Center(child: Text('Please sign in'))
@@ -69,42 +47,55 @@ class _MedicationsScreenState extends State<MedicationsScreen>
               stream: _db.watchMedications(uid),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: CupertinoActivityIndicator());
                 }
                 final all = snap.data ?? [];
                 final active = all.where((m) => m.isActive).toList();
                 final past = all.where((m) => !m.isActive).toList();
 
-                return TabBarView(
-                  controller: _tabs,
+                return Column(
                   children: [
-                    _MedList(
-                      meds: active,
-                      emptyLabel: 'No active medications',
-                      emptyIcon: Icons.medication_outlined,
-                      onDelete: (m) => _delete(uid, m),
-                      onToggle: (m) => _toggle(uid, m),
-                      onEdit: (m) => _showAddSheet(context, uid, existing: m),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(DS.gutter, 8, DS.gutter, 4),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: CupertinoSlidingSegmentedControl<int>(
+                          groupValue: _segment,
+                          onValueChanged: (v) => setState(() => _segment = v ?? 0),
+                          children: {
+                            0: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: Text('Active (${active.length})')),
+                            1: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: Text('Past (${past.length})')),
+                          },
+                        ),
+                      ),
                     ),
-                    _MedList(
-                      meds: past,
-                      emptyLabel: 'No past medications',
-                      emptyIcon: Icons.history_rounded,
-                      onDelete: (m) => _delete(uid, m),
-                      onToggle: (m) => _toggle(uid, m),
-                      onEdit: (m) => _showAddSheet(context, uid, existing: m),
+                    Expanded(
+                      child: _segment == 0
+                          ? _MedList(
+                              meds: active,
+                              emptyLabel: 'No active medications',
+                              emptyIcon: CupertinoIcons.capsule,
+                              onDelete: (m) => _delete(uid, m),
+                              onToggle: (m) => _toggle(uid, m),
+                              onEdit: (m) => _showAddSheet(context, uid, existing: m),
+                            )
+                          : _MedList(
+                              meds: past,
+                              emptyLabel: 'No past medications',
+                              emptyIcon: CupertinoIcons.clock,
+                              onDelete: (m) => _delete(uid, m),
+                              onToggle: (m) => _toggle(uid, m),
+                              onEdit: (m) => _showAddSheet(context, uid, existing: m),
+                            ),
                     ),
                   ],
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddSheet(context, uid ?? ''),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-      ),
     );
   }
 
@@ -239,7 +230,7 @@ class _MedCard extends StatelessWidget {
                   color: AppTheme.successColor.withValues(alpha: 0.12),
                   borderRadius: DS.squircle(12),
                 ),
-                child: const Icon(Icons.medication_rounded,
+                child: const Icon(CupertinoIcons.capsule_fill,
                     color: AppTheme.successColor, size: 22),
               ),
               const SizedBox(width: AppTheme.md),
@@ -256,7 +247,7 @@ class _MedCard extends StatelessWidget {
                 ),
               ),
               PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert_rounded,
+                icon: Icon(CupertinoIcons.ellipsis,
                     color: AppTheme.textTertiary),
                 onSelected: (v) {
                   if (v == 'edit') onEdit();
@@ -294,7 +285,7 @@ class _MedCard extends StatelessWidget {
           Row(
             children: [
               if (med.startDate.isNotEmpty) ...[
-                Icon(Icons.calendar_today_rounded,
+                Icon(CupertinoIcons.calendar,
                     size: 12, color: AppTheme.textTertiary),
                 const SizedBox(width: 4),
                 Text('Started: ${med.startDate}',
@@ -302,7 +293,7 @@ class _MedCard extends StatelessWidget {
               ],
               if (med.endDate.isNotEmpty) ...[
                 const SizedBox(width: 12),
-                Icon(Icons.event_available_rounded,
+                Icon(CupertinoIcons.calendar_badge_plus,
                     size: 12, color: AppTheme.textTertiary),
                 const SizedBox(width: 4),
                 Text('Until: ${med.endDate}',
@@ -388,7 +379,7 @@ class _AddMedSheetState extends State<_AddMedSheet> {
   }
 
   Future<void> _pickDate(bool isStart) async {
-    final d = await showDatePicker(
+    final d = await showIosDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime(2000),
@@ -406,7 +397,7 @@ class _AddMedSheetState extends State<_AddMedSheet> {
   }
 
   Future<void> _addReminderTime() async {
-    final t = await showTimePicker(
+    final t = await showIosTimePicker(
         context: context, initialTime: const TimeOfDay(hour: 8, minute: 0));
     if (t == null) return;
     final hhmm =
@@ -535,7 +526,7 @@ class _AddMedSheetState extends State<_AddMedSheet> {
                 ),
               ),
               const SizedBox(height: AppTheme.md),
-              DropdownButtonFormField<String>(
+              IosDropdownFormField<String>(
                 initialValue: _frequency,
                 decoration:
                     const InputDecoration(labelText: 'Frequency'),
@@ -613,12 +604,12 @@ class _AddMedSheetState extends State<_AddMedSheet> {
                   for (final t in _reminderTimes)
                     InputChip(
                       label: Text(_prettyTime(t)),
-                      avatar: const Icon(Icons.alarm_rounded, size: 16),
+                      avatar: const Icon(CupertinoIcons.alarm_fill, size: 16),
                       onDeleted: () =>
                           setState(() => _reminderTimes.remove(t)),
                     ),
                   ActionChip(
-                    avatar: const Icon(Icons.add_rounded,
+                    avatar: const Icon(CupertinoIcons.add,
                         size: 16, color: AppTheme.primaryColor),
                     label: const Text('Add time',
                         style: TextStyle(color: AppTheme.primaryColor)),
@@ -673,7 +664,7 @@ class _DatePicker extends StatelessWidget {
             labelText: label,
             hintText: 'Select date',
             suffixIcon:
-                const Icon(Icons.calendar_today_rounded, size: 16),
+                const Icon(CupertinoIcons.calendar, size: 16),
           ),
           controller: TextEditingController(
               text: date != null
