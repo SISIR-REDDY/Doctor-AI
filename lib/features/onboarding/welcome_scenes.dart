@@ -81,6 +81,12 @@ class SceneFrame extends StatelessWidget {
       child: child,
     );
 
+    // While being swiped the card tilts a few degrees toward the direction
+    // of travel and sinks slightly, like a physical card being dragged —
+    // then springs back flat when the page settles.
+    final tilt = (offset * -0.06).clamp(-0.08, 0.08);
+    final sink = 1 - (offset.abs().clamp(0.0, 1.0) * 0.06);
+
     return LayoutBuilder(builder: (context, c) {
       // FittedBox gives its child unbounded width, so pin the card to the
       // slot's width first; only the height is then free to scale down.
@@ -93,8 +99,13 @@ class SceneFrame extends StatelessWidget {
         fit: BoxFit.scaleDown,
         child: SizedBox(
           width: width.toDouble(),
-          child: Transform.translate(
-            offset: Offset(parallax, 0),
+          child: Transform(
+            alignment: Alignment.bottomCenter,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.0012) // perspective
+              ..translateByDouble(parallax, 0, 0, 1)
+              ..rotateY(tilt)
+              ..scaleByDouble(sink, sink, 1, 1),
             child: Opacity(opacity: fade, child: card),
           ),
         ),

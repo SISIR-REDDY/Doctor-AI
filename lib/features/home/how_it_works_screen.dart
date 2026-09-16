@@ -1,9 +1,15 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Colors, Divider;
 
+import 'package:provider/provider.dart';
+
+import '../../core/config/insurance_regions.dart';
+import '../../core/providers/health_data_provider.dart';
 import '../../services/analytics_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/glass.dart';
 import '../../theme/ios18_components.dart';
+import '../../theme/motion.dart';
 import '../scan/document_scan_screen.dart';
 
 /// Exactly what happens to a document after you scan it — for the two
@@ -42,13 +48,18 @@ class _HowItWorksScreenState extends State<HowItWorksScreen> {
               groupValue: _tab,
               onValueChanged: (v) => setState(() => _tab = v ?? 0),
               children: const {
-                0: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Bills & claims')),
-                1: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Lab reports')),
+                0: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Bills')),
+                1: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Reports')),
+                2: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Your country')),
               },
             ),
           ),
         ),
-        if (_tab == 0) const _ClaimsPipeline() else const _ReportsPipeline(),
+        switch (_tab) {
+          0 => const _ClaimsPipeline(),
+          1 => const _ReportsPipeline(),
+          _ => const _CountryGuide(),
+        },
         const SizedBox(height: 120),
       ],
     );
@@ -222,6 +233,182 @@ class _ReportsPipeline extends StatelessWidget {
         ),
         _Cta(label: 'Scan a report', onTap: () => DocumentScanScreen.open(context, trigger: 'how_it_works_reports')),
       ],
+    );
+  }
+}
+
+// ── Your country ──────────────────────────────────────────────────────────────
+
+/// How a denied claim is escalated where the user lives: the documents, the
+/// regulator, the ombudsman, the appeal stages with their deadlines, and the
+/// rights the letters cite. All of it comes from the region engine that the
+/// audit, deadlines and letters already run on — this just shows it.
+class _CountryGuide extends StatefulWidget {
+  const _CountryGuide();
+
+  @override
+  State<_CountryGuide> createState() => _CountryGuideState();
+}
+
+class _CountryGuideState extends State<_CountryGuide> {
+  String? _code;
+
+  @override
+  Widget build(BuildContext context) {
+    final profileCountry = context.watch<HealthDataProvider>().profile?.country;
+    final region = regionByCode(_code ?? profileCountry);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _Intro(
+          'Insurance disputes follow a different path in every country. Clinix sets deadlines, reminders and letter wording from the rules below.',
+        ),
+        // Country chooser — a horizontal row of flag chips.
+        SizedBox(
+          height: 44,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            children: [
+              for (final r in kInsuranceRegions) ...[
+                _CountryChip(
+                  region: r,
+                  selected: r.code == region.code,
+                  onTap: () => setState(() => _code = r.code),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        _RegionFacts(region: region),
+        const SizedBox(height: 22),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Text('Appeal path in ${region.name}',
+              style: TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.4,
+                  color: AppTheme.textPrimary)),
+        ),
+        for (var i = 0; i < region.appealStages.length; i++)
+          _Step(
+            n: i + 1,
+            icon: i == region.appealStages.length - 1
+                ? CupertinoIcons.checkmark_seal_fill
+                : CupertinoIcons.arrow_right_circle_fill,
+            color: i == 0 ? AppTheme.primaryColor : AppTheme.secondaryColor,
+            title: region.appealStages[i].stage,
+            body: region.appealStages[i].deadline,
+            detail: [
+              if (region.appealStages[i].daysFromDenial > 0)
+                'Clinix reminds you ${region.appealStages[i].daysFromDenial} days after the denial',
+              if (region.appealStages[i].notes.isNotEmpty) region.appealStages[i].notes,
+            ],
+            last: i == region.appealStages.length - 1,
+          ),
+        if (region.keyRights.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _SourceCard(
+            title: 'Rights the letters cite',
+            body: region.keyRights,
+            icon: CupertinoIcons.doc_on_clipboard_fill,
+          ),
+        ],
+        _Boundary(
+          'Escalating to ${region.ombudsman} is free. Clinix prepares the file; you submit it.',
+        ),
+        _Cta(label: 'Scan a denial letter', onTap: () => DocumentScanScreen.open(context, trigger: 'how_it_works_country')),
+      ],
+    );
+  }
+}
+
+class _CountryChip extends StatelessWidget {
+  final InsuranceRegion region;
+  final bool selected;
+  final VoidCallback onTap;
+  const _CountryChip({required this.region, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return DSPressable(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: Motion.fast,
+        curve: Motion.enter,
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.primaryColor : AppTheme.surfaceMuted,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(region.flag, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 7),
+            Text(region.name,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : AppTheme.textPrimary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Four facts that differ per country, as an iOS grouped list.
+class _RegionFacts extends StatelessWidget {
+  final InsuranceRegion region;
+  const _RegionFacts({required this.region});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <(IconData, String, String)>[
+      (CupertinoIcons.doc_text_fill, 'What you receive', region.billingNote),
+      (CupertinoIcons.building_2_fill, 'Regulator', region.regulator),
+      (CupertinoIcons.person_2_fill, 'Free dispute body', region.ombudsman),
+      (CupertinoIcons.money_dollar_circle_fill, 'Currency', '${region.currencyCode} (${region.currencySymbol})'),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: InsetCard(
+        padding: EdgeInsets.zero,
+        child: Column(
+          children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) Divider(height: 1, indent: 54, color: AppTheme.dividerColor),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(rows[i].$1, size: 18, color: AppTheme.primaryColor),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(rows[i].$2,
+                              style: TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.2, color: AppTheme.textSecondary)),
+                          const SizedBox(height: 2),
+                          Text(rows[i].$3,
+                              style: TextStyle(fontSize: 14, height: 1.35, color: AppTheme.textPrimary)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

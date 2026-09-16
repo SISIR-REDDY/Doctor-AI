@@ -82,7 +82,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       eyebrow: 'Under 1% of denials are ever appealed',
       title: 'Denied?\nThat’s not the end.',
       body:
-          'Roughly half of appeals succeed — most people just never file one. Snap the letter and Clinix explains the real reason, finds your rights, and drafts the appeal.',
+          'Roughly half of appeals succeed — most people just never file one. Snap the letter and Clinix explains the reason, drafts the appeal, and sets the deadlines for your country — ACA external review in the US, the Ombudsman in the UK and Australia, OLHI in Canada.',
     ),
     _SlideCopy(
       eyebrow: 'Results now arrive before your doctor calls',
@@ -497,7 +497,15 @@ class _SlideState extends State<_Slide>
                   // floating mid-region with a void beneath it.
                   child: Align(
                     alignment: Alignment.bottomCenter,
-                    child: widget.scene(offset, widget.active),
+                    // The card itself arrives with weight — a heavy spring
+                    // from 94% — before its contents start their story.
+                    child: FadeSlide(
+                      animation: scene,
+                      interval: const Interval(0.0, 0.55, curve: Motion.springHeavy),
+                      dy: 26,
+                      from: 0.94,
+                      child: widget.scene(offset, widget.active),
+                    ),
                   ),
                 ),
                 SizedBox(height: gap),
