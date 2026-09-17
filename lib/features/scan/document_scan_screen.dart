@@ -205,7 +205,7 @@ class _DocumentScanScreenState extends State<DocumentScanScreen> {
       );
       if (go == true && mounted) {
         Analytics.paywallShown('quota_${e.op}');
-        Navigator.pushNamed(context, AppRouter.paywall);
+        Navigator.pushNamed(context, AppRouter.paywall, arguments: e.op);
       }
     } catch (e) {
       Analytics.scanCompleted(widget.docType, success: false, pages: _pages.length);

@@ -50,7 +50,7 @@ class AppRouter {
         return PageRouteBuilder<void>(
           settings: settings,
           fullscreenDialog: true,
-          pageBuilder: (_, __, ___) => const PaywallScreen(),
+          pageBuilder: (_, __, ___) => PaywallScreen(reason: settings.arguments as String?),
           transitionsBuilder: (_, animation, __, child) => SlideTransition(
             position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
                 .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),

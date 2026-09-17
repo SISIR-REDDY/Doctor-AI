@@ -26,7 +26,7 @@ Future<void> showAiError(BuildContext context, Object error, {required String tr
     );
     if (go == true && context.mounted) {
       Analytics.paywallShown('quota_$trigger');
-      Navigator.pushNamed(context, AppRouter.paywall);
+      Navigator.pushNamed(context, AppRouter.paywall, arguments: error.op);
     }
     return;
   }

@@ -238,7 +238,7 @@ class _HomeTabState extends State<_HomeTab> {
                     SliverToBoxAdapter(
                       child: SlideUpAnimation(
                         delay: const Duration(milliseconds: 290),
-                        child: _ProCard(),
+                        child: _ProCard(claims: claims, currency: region.currencyCode),
                       ),
                     ),
                     const SliverToBoxAdapter(child: SizedBox(height: 120)),
@@ -1073,40 +1073,69 @@ class _CareToday extends StatelessWidget {
 
 // ── Pro upsell ────────────────────────────────────────────────────────────────
 
+/// Pro card on Home. When the user has disputable findings it leads with
+/// their own number — the one argument that is both true and theirs; with no
+/// data it states the free allowance honestly instead of a vague upsell.
 class _ProCard extends StatelessWidget {
+  final List<InsuranceClaim> claims;
+  final String currency;
+  const _ProCard({required this.claims, required this.currency});
+
   @override
   Widget build(BuildContext context) {
     final ent = context.watch<EntitlementService>();
     if (ent.isPro) return const SizedBox.shrink();
+    final open = claims.where((c) => !c.isClosed);
+    final disputable = open.fold<double>(0, (n, c) => n + c.potentialSaving);
+    final hasMoney = disputable > 0;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
       child: InsetCard(
         onTap: () {
-          Analytics.paywallShown('home_card');
+          Analytics.paywallShown(hasMoney ? 'home_card_money' : 'home_card');
           Navigator.pushNamed(context, AppRouter.paywall);
         },
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1C1C2E), Color(0xFF2B2140)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
         child: Row(
           children: [
-            const IconBadge(CupertinoIcons.sparkles, color: Color(0xFFFFD60A), size: 42, filled: true),
+            IconBadge(
+              hasMoney ? CupertinoIcons.money_dollar_circle_fill : CupertinoIcons.sparkles,
+              color: hasMoney ? AppTheme.successColor : AppTheme.primaryColor,
+              size: 42,
+            ),
             const SizedBox(width: 14),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Clinix Pro',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
-                  SizedBox(height: 2),
-                  Text('Unlimited audits, appeals & deadline tracking.',
-                      style: TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.3)),
+                  Text(
+                    hasMoney
+                        ? '${formatMoney(disputable, currency)} not yet disputed'
+                        : 'Clinix Pro',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.3),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hasMoney
+                        ? 'Pro drafts the dispute letter for every finding.'
+                        : 'Unlimited audits, letters, reports and family cases.',
+                    maxLines: 2,
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12.5, height: 1.3),
+                  ),
                 ],
               ),
             ),
-            const Icon(CupertinoIcons.chevron_right, color: Colors.white54, size: 16),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(16)),
+              child: const Text('Go Pro',
+                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
           ],
         ),
       ),
